@@ -2,10 +2,6 @@
 
 November 4, 2026. Windows 11 25H2, build 26200.9711, Python 3.12.10.
 
-## Automated checks
-
-`python -m unittest discover -s tests -v` passed 70 tests. Controlled timestamps cover the debounce boundary, resumed speech, unfinished clauses, continuations, distinct questions, and duplicate or delayed transcript events. The one-slot mailbox test reproduces eviction of utterance 0 after its partial reaches the buffer and verifies that the next complete question is checked. Controller tests cover cancellation after a success event was queued, late tokens, and provider errors. Windows output switching and headset disconnect use fake endpoints. The subprocess fixture verifies hidden auth and model processes on Windows.
-
 ## Windows checks
 
 | Check | Method | Observed result |

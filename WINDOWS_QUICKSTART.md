@@ -28,10 +28,9 @@ Anthropic also offers its native PowerShell installer and documents Windows PATH
 
 ## 2. Install this app's dependencies
 
-1. Extract the complete ZIP into a normal writable folder.
-2. Open the extracted `personal_copilot` folder.
-3. Double-click **setup_windows.bat**. The first run downloads its Python dependencies into `.venv` beside the app. Keep the complete extracted folder together.
-4. Once setup succeeds, double-click **start_windows.vbs** for a console-free launch.
+1. Open the project folder containing `app.py`. If you downloaded a ZIP, extract it first.
+2. Double-click **setup_windows.bat**. The first run downloads the Python dependencies into `.venv` beside the app.
+3. Once setup succeeds, double-click **start_windows.vbs** for a console-free launch.
 
 If you prefer PowerShell commands, run these from the extracted folder:
 

@@ -208,10 +208,9 @@ The bridge's startup/API compatibility was tested with fake model providers. The
 
 ```sh
 python app.py --diagnostics
-python -m unittest discover -s tests -v
 ```
 
-See `VALIDATION.md` for exactly what was tested and the remaining hardware checks. See `REEL_BREAKDOWN.md` for the ad analysis, shot timing and an adapted script from your initial request.
+See [Windows setup](WINDOWS_QUICKSTART.md) to run the app and [validation](VALIDATION.md) for manual checks.
 
 If no transcript appears, confirm the selected endpoint, output routing, OS permission, packages and speech threshold. If transcription lags, try tiny.en and shorter utterances. If Claude is missing, start the app from a terminal where `claude auth status` succeeds so it inherits the same PATH.
 
