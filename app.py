@@ -62,6 +62,7 @@ class App:
         root.configure(bg=BG)
         self.events = queue.Queue()
         self.client = Providers()
+        self.claude_signing_in = False
         self.cancel = threading.Event()
         self.history = []
         self.audio_answers = LiveAnswerPlanner()
@@ -188,6 +189,8 @@ class App:
                                         values=MODEL_CHOICES[self.provider.get()], width=18)
         self.model_combo.pack(side="left")
         ttk.Button(controls, text="Check connection", command=self.check_model).pack(side="left", padx=10)
+        if sys.platform == "win32":
+            self.claude_signin_button = ttk.Button(controls, text="Sign in to Claude", command=self.sign_in_to_claude)
         self.change_provider(reset=False)
         self.notebook = ttk.Notebook(outer)
         self.notebook.pack(fill="both", expand=True)
@@ -299,6 +302,11 @@ class App:
 
     def change_provider(self, event=None, reset=True):
         provider = self.provider.get()
+        if sys.platform == "win32":
+            if provider == PROVIDERS[0]:
+                self.claude_signin_button.pack(side="left")
+            else:
+                self.claude_signin_button.pack_forget()
         self.model_combo.configure(values=MODEL_CHOICES[provider], state="readonly" if provider == PROVIDERS[2] else "normal")
         if reset:
             self.model.set(MODEL_CHOICES[provider][0])
@@ -405,6 +413,20 @@ class App:
                 self.events.put(("status", self.client.check(provider, model)))
             except Exception as exc:
                 self.events.put(("status", str(exc)))
+        threading.Thread(target=work, daemon=True).start()
+
+    def sign_in_to_claude(self):
+        if self.claude_signing_in:
+            return
+        self.claude_signing_in = True
+        self.claude_signin_button.configure(state="disabled")
+        self.status.set("Complete Claude sign-in in your browser and the sign-in window.")
+        def work():
+            try:
+                self.client.sign_in_to_claude()
+                self.events.put(("claude_signin", None))
+            except Exception as exc:
+                self.events.put(("claude_signin", str(exc)))
         threading.Thread(target=work, daemon=True).start()
 
     def save_context(self):
@@ -793,6 +815,14 @@ class App:
                     self.auto_timer = self.root.after(100, self.auto_generate)
             elif kind == "status":
                 self.status.set(data)
+            elif kind == "claude_signin":
+                self.claude_signing_in = False
+                self.claude_signin_button.configure(state="normal")
+                if self.provider.get() == PROVIDERS[0]:
+                    if data:
+                        self.status.set(data)
+                    else:
+                        self.check_model()
             elif kind == "error":
                 self.status.set(data)
             elif kind == "import":
@@ -864,9 +894,12 @@ def main():
         root.withdraw()
         root.tk.call("rename", "bell", "")
         root.tk.call("proc", "bell", "args", "")
-    App(root)
+    app = App(root)
     if sys.platform == "win32":
         root.deiconify()
+    if "--prepare" in sys.argv:
+        root.after_idle(app.load_speech)
+        root.after_idle(app.check_model)
     root.mainloop()
 
 

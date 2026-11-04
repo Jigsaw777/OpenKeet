@@ -95,6 +95,8 @@ class SubscriptionCLI:
         else:
             ready = result.returncode == 0 and "chatgpt" in (result.stdout + result.stderr).lower()
         if not ready:
+            if self.kind == "claude" and os.name == "nt":
+                raise CopilotError("Claude subscription login not confirmed. Click Sign in to Claude.")
             command = "claude auth login" if self.kind == "claude" else "codex login"
             raise CopilotError(f"Subscription login not confirmed. Run {command} and choose your subscription account.")
         self.checked_at = time.monotonic()
@@ -208,6 +210,16 @@ class Providers:
         if provider not in self.clients:
             raise CopilotError("Choose Claude Code, Codex CLI or Ollama.")
         return self.clients[provider].stream(model, messages, cancel, on_token)
+
+    def sign_in_to_claude(self):
+        client = self.clients[PROVIDERS[0]]
+        executable = client._executable()
+        with tempfile.TemporaryDirectory(prefix="personal-copilot-signin-") as directory:
+            result = subprocess.run([executable, "auth", "login", "--claudeai"], cwd=directory,
+                                    env=subscription_environment(), creationflags=subprocess.CREATE_NEW_CONSOLE)
+        if result.returncode:
+            raise CopilotError("Claude sign-in did not finish. Click Sign in to Claude to try again.")
+        client.checked_at = 0.0
 
     def check(self, provider, model):
         client = self.clients[provider]

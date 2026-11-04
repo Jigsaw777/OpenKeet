@@ -44,17 +44,7 @@ Use Python **3.11 or 3.12** with Tk support. The audio environment pins NumPy be
 
 ### Windows
 
-For the Windows walkthrough, see `WINDOWS_QUICKSTART.md`. Run `setup_windows.bat` once, then double-click `start_windows.vbs` for a console-free launch.
-
-Extract this folder, open PowerShell inside it, and run:
-
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe app.py
-```
-
-After setup, `start_windows.vbs` uses the virtual environment automatically. If you installed Python 3.11, substitute `-3.11` in the first command.
+Open the **Personal Interview Assistant** desktop shortcut. On a new checkout, open `start_windows.vbs` once to create it. The launcher prepares the Python environment, opens the app, and loads the default speech model. See [Windows setup](WINDOWS_QUICKSTART.md).
 
 ### macOS / Linux
 
@@ -76,7 +66,7 @@ Typed questions and TXT/MD/DOCX imports can run with just Python/Tk; the require
 2. Open **Your context**. Paste/import your real resume, the target job description, and any preferences. Choose the relevant practice focus.
 3. **Save context** is optional. It writes a local unencrypted profile. Unsaved edits also apply to answers.
 4. Try a typed question first: “Explain structured concurrency and coroutine cancellation in Kotlin.” Press **Suggest answer** or Ctrl+Enter / Command+Enter.
-5. Open **Audio**, select `tiny.en`, and click **Load speech model**. The first load downloads its weights; later loads use the local cache.
+5. Open **Audio**. The Windows shortcut loads `tiny.en` automatically. For a direct Python launch, select it and click **Load speech model**.
 6. Select the correct system-output route, then **Start listening**. **Automatically answer speech** and **Draft answers while the question is still being asked** are initially enabled. Set **Question pause (seconds)** to adjust the final-answer debounce; it starts at 1.2 seconds.
 7. Return to **Assistant** to see the answer stream in. Stop listening when finished.
 
