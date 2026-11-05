@@ -45,8 +45,10 @@ except ImportError:
 
 from audio import DEFAULT_SPEECH_MODEL, SPEECH_MODELS, SpeechListener, input_devices, loopback_devices
 from capture_privacy import set_capture_exclusion
-from live import LiveAnswerPlanner, QuestionBuffer, SemanticResponseDecoder, commit_checked_answer
+from live import (DEFAULT_QUESTION_PAUSE, MAX_QUESTION_PAUSE, MIN_QUESTION_PAUSE,
+                  LiveAnswerPlanner, QuestionBuffer, SemanticResponseDecoder, commit_checked_answer)
 from providers import Providers
+from window_shortcut import ShowShortcut
 
 BG, PANEL, FG, MUTED, ACCENT = "#111827", "#1b2538", "#edf3ff", "#b0bfd4", "#78e8ba"
 
@@ -58,7 +60,7 @@ class App:
         width = min(960, root.winfo_screenwidth() - 40)
         height = min(840, root.winfo_screenheight() - 80)
         root.geometry(f"{width}x{height}")
-        root.minsize(700, 600)
+        root.minsize(700, 420)
         root.configure(bg=BG)
         self.events = queue.Queue()
         self.client = Providers()
@@ -107,7 +109,9 @@ class App:
         self.capture_exclusion = tk.BooleanVar(value=sys.platform == "win32")
         self.privacy_status = tk.StringVar(value="Capture exclusion is unavailable on this platform.")
         self.capture_windows = {}
+        self.shortcut = None
         if sys.platform == "win32":
+            self.shortcut_status = tk.StringVar(value=f"Show: {ShowShortcut.LABEL}")
             self.capture_recheck = root.register(self.recheck_capture)
             self.capture_destroy = root.register(self.forget_capture)
             # Tk may recreate a combobox wrapper after postcommand, just before deiconify.
@@ -120,11 +124,12 @@ class App:
         self.device = tk.StringVar(value=self.default_route)
         self.speech_model = tk.StringVar(value=DEFAULT_SPEECH_MODEL)
         self.threshold = tk.DoubleVar(value=0.012)
-        self.question_pause = tk.DoubleVar(value=1.2)
+        self.question_pause = tk.DoubleVar(value=DEFAULT_QUESTION_PAUSE)
         self._styles()
         self._layout()
         if sys.platform == "win32":
             self.protect_window(str(root))
+            self.shortcut = ShowShortcut(lambda kind, data: self.events.put((kind, data)))
         if initial_error:
             self.status.set(initial_error)
         root.bind("<Control-Return>", lambda e: self.generate())
@@ -169,6 +174,8 @@ class App:
         ttk.Label(header, text=APP_NAME, style="Title.TLabel").pack(side="left")
         ttk.Checkbutton(header, text="Keep on top", variable=self.pin,
                         command=lambda: self.root.attributes("-topmost", self.pin.get())).pack(side="right")
+        if sys.platform == "win32":
+            ttk.Label(header, textvariable=self.shortcut_status, style="Muted.TLabel").pack(side="right", padx=8)
         self.provider_note = ttk.Label(outer, style="Muted.TLabel", wraplength=850)
         self.provider_note.pack(anchor="w", pady=(0, 10))
         if sys.platform == "win32":
@@ -194,14 +201,40 @@ class App:
         self.change_provider(reset=False)
         self.notebook = ttk.Notebook(outer)
         self.notebook.pack(fill="both", expand=True)
-        assistant, context, audio = (ttk.Frame(self.notebook, padding=12) for _ in range(3))
-        for frame, label in ((assistant, "Assistant"), (context, "Your context"), (audio, "Audio")):
-            self.notebook.add(frame, text=label)
-        self._assistant_tab(assistant)
-        self._context_tab(context)
-        self._audio_tab(audio)
+        self.tab_canvases = {}
+        for label, build in (("Assistant", self._assistant_tab), ("Your context", self._context_tab),
+                             ("Audio", self._audio_tab)):
+            build(self._scroll_tab(label))
+        for event in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.root.bind(event, self._scroll_tab_wheel, add="+")
         ttk.Label(outer, textvariable=self.status, style="Muted.TLabel", wraplength=850).pack(
             fill="x", pady=(12, 0))
+
+    def _scroll_tab(self, label):
+        pane = ttk.Frame(self.notebook)
+        self.notebook.add(pane, text=label)
+        canvas = tk.Canvas(pane, height=1, width=1, background=BG, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(pane, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        content = ttk.Frame(canvas, padding=12)
+        item = canvas.create_window(0, 0, window=content, anchor="nw")
+        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(item, width=event.width))
+        content.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox(item)))
+        self.tab_canvases[str(pane)] = canvas
+        return content
+
+    def _scroll_tab_wheel(self, event):
+        canvas = self.tab_canvases.get(self.notebook.select())
+        widget = event.widget
+        if (canvas is None or not isinstance(widget, tk.Misc)
+                or isinstance(widget, (tk.Text, ttk.Combobox, ttk.Spinbox))):
+            return
+        if widget is canvas or str(widget).startswith(str(canvas) + "."):
+            direction = -1 if event.num == 4 or event.delta > 0 else 1
+            canvas.yview_scroll(3 * direction, "units")
+            return "break"
 
     def _assistant_tab(self, parent):
         ttk.Label(parent, text="Question or follow-up").pack(anchor="w")
@@ -275,7 +308,7 @@ class App:
         pause_row = ttk.Frame(parent)
         pause_row.pack(fill="x", pady=(0, 8))
         ttk.Label(pause_row, text="Question pause (seconds)").pack(side="left", padx=(0, 8))
-        ttk.Spinbox(pause_row, from_=0.6, to=3.0, increment=0.2,
+        ttk.Spinbox(pause_row, from_=MIN_QUESTION_PAUSE, to=MAX_QUESTION_PAUSE, increment=0.2,
                     textvariable=self.question_pause, width=5).pack(side="left")
         ttk.Label(pause_row, text="Continuations can extend the same question.",
                   style="Muted.TLabel").pack(side="left", padx=12)
@@ -704,9 +737,10 @@ class App:
         if not self.auto.get() or not self.audio_active:
             return
         try:
-            self.questions.pause_seconds = min(3.0, max(0.6, float(self.question_pause.get())))
+            self.questions.pause_seconds = min(MAX_QUESTION_PAUSE,
+                                               max(MIN_QUESTION_PAUSE, self.question_pause.get()))
         except (ValueError, tk.TclError):
-            self.questions.pause_seconds = 1.2
+            self.questions.pause_seconds = DEFAULT_QUESTION_PAUSE
         for request in self.questions.poll_ready(time.monotonic()):
             if not self.audio_answers.offer_final(request.utterance_id, request.text, request.speech_at,
                                                   request.revision, request.segments):
@@ -729,9 +763,11 @@ class App:
 
     @staticmethod
     def _append(widget, text):
+        follow_end = widget.yview()[1] == 1.0
         widget.configure(state="normal")
         widget.insert("end", text)
-        widget.see("end")
+        if follow_end:
+            widget.see("end")
         widget.configure(state="disabled")
 
     def pump(self):
@@ -814,6 +850,13 @@ class App:
                     self.status.set("The model returned no answer. Try another question.")
                 if self.audio_answers.pending and self.auto.get() and self.audio_active and not error and (not cancelled or self.superseded):
                     self.auto_timer = self.root.after(100, self.auto_generate)
+            elif kind == "show_window":
+                if not self.root.winfo_viewable():
+                    self.root.deiconify()
+                self.root.lift()
+                self.root.focus_force()
+            elif kind == "shortcut_status":
+                self.shortcut_status.set(data)
             elif kind == "status":
                 self.status.set(data)
             elif kind == "claude_signin":
@@ -879,6 +922,8 @@ class App:
         self.root.after(60, self.pump)
 
     def close(self):
+        if self.shortcut is not None:
+            self.shortcut.close()
         self.cancel.set()
         self.listener.stop_event.set()
         threading.Thread(target=self.listener.stop, daemon=True).start()

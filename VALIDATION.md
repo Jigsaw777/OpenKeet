@@ -21,6 +21,12 @@ November 4, 2026. Windows 11 25H2, build 26200.9711, Python 3.12.10.
 - On five synthetic technical questions totaling 28.29 seconds, `small.en` made 1 word error out of 68. `base.en` and `tiny.en` each made 7. Decode times were 12.32, 3.50, and 1.84 seconds, respectively, on this PC.
 - The default `small.en` produced a rolling partial before the end of a 6.48-second WASAPI playback clip and correctly transcribed “idempotency keys” in its final. The faster models misspelled that term on the same samples. A separate loopback clip still produced “codelink” for “Kotlin.” The probe restored the endpoint's initial mute state.
 
+## Window recall and pause checks
+
+- Pressing **Ctrl+Alt+I** from a separate foreground app restored and focused the hidden assistant. The visible window still had the tool-window style and capture affinity `0x11`.
+- In a compact window, the Assistant and Audio tabs scrolled. The answer and transcript held their reading positions during streaming and followed new text when already at the end.
+- With `small.en`, a synthetic question containing 0.60- and 1.60-second pauses yielded one checked question with the follow-up constraint intact. Controlled timestamps also verified a 1.75-second pause, speech resuming before its transcript, and a distinct next question.
+
 ## Complete the remaining Windows checks
 
 1. Open the **Personal Interview Assistant** desktop shortcut and put synthetic text in the assistant. In a test meeting, share the full display to a second device. Compare the receiver's view with exclusion off and on. Repeat with window sharing if you use that mode.

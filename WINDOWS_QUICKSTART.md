@@ -19,7 +19,7 @@ Type a question and click **Suggest answer**. You can add résumé, job descript
 1. Open **Audio**.
 2. Wait for **small.en** to load. The shortcut starts this automatically. The first load downloads the model.
 3. Select **System output (default)**. If your meeting app uses a different playback device, click **Refresh inputs** and select its specific **System output** entry.
-4. Leave **Automatically answer speech** and **Draft answers while the question is still being asked** checked. Set **Question pause (seconds)** to tune the debounce; it starts at 1.2 seconds.
+4. Leave **Automatically answer speech** and **Draft answers while the question is still being asked** checked. **Question pause (seconds)** starts at 2.0 seconds. Raise it if the interviewer takes longer pauses.
 5. Click **Start listening**, then return to **Assistant** to see the answer.
 
 WASAPI loopback captures the selected speaker or headphone output. Match it to your meeting app's output and keep it unmuted. Play a short spoken clip and check the transcript. If the default output changes, restart listening. If an explicitly selected device disconnects, refresh inputs and select an output.
@@ -30,7 +30,9 @@ Rolling transcripts can trigger a provisional draft while the speaker continues.
 
 On **Windows 10 version 2004 or newer / Windows 11**, the app applies and reads back capture exclusion before showing its main window, dropdowns, and file-path prompts. The persistent status reports success, failure or disabled state. While exclusion is enabled, paste a document path into the app's import prompt. For exports, enter a new path.
 
-The assistant stays out of the taskbar and Alt+Tab. Select **Keep on top** to keep the window in view while you switch apps.
+The assistant stays out of the taskbar and Alt+Tab. Press **Ctrl+Alt+I** while it is running to bring it forward. Select **Keep on top** if you want it to stay in view.
+
+Use the right-edge scrollbar to scroll the current tab. When you scroll up inside an answer or transcript, new text preserves your reading position.
 
 Test from the **receiving side** in the exact Meet, Zoom, or Teams sharing mode you plan to use. Use synthetic text and compare the receiver's view with exclusion off and on. Record the meeting application, share mode, Windows build, and visible result.
 

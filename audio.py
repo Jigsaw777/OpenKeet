@@ -14,6 +14,7 @@ from live import AudioChunk, TranscriptionMailbox
 
 DEFAULT_SPEECH_MODEL = "small.en"
 SPEECH_MODELS = (DEFAULT_SPEECH_MODEL, "base.en", "tiny.en")
+SEGMENT_PAUSE_SECONDS = 0.75
 
 
 def input_devices() -> list[tuple[int, str]]:
@@ -42,7 +43,7 @@ class SpeechSegmenter:
     RATE = 16000
     BLOCK = 480
 
-    def __init__(self, threshold=0.012, silence_seconds=0.45):
+    def __init__(self, threshold=0.012, silence_seconds=SEGMENT_PAUSE_SECONDS):
         self.threshold = threshold
         self.silence_blocks = max(5, round(silence_seconds * self.RATE / self.BLOCK))
         self.pre_roll = deque(maxlen=10)
@@ -106,7 +107,7 @@ class SpeechListener:
         except Exception as exc:
             raise CopilotError("Speech model could not load. First use needs internet and model-cache space.") from exc
 
-    def start(self, route: tuple[str, object], threshold=0.012, silence_seconds=0.45,
+    def start(self, route: tuple[str, object], threshold=0.012, silence_seconds=SEGMENT_PAUSE_SECONDS,
               partial_interval=0.9):
         if self.model is None:
             raise CopilotError("Load the speech model first (one download, then local inference).")

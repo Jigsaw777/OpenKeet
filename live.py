@@ -7,6 +7,10 @@ import json
 import re
 import threading
 
+DEFAULT_QUESTION_PAUSE = 2.0
+MIN_QUESTION_PAUSE = 0.6
+MAX_QUESTION_PAUSE = 5.0
+
 
 @dataclass
 class AudioChunk:
@@ -200,7 +204,7 @@ class QuestionBuffer:
                   "to", "that", "which", "using", "where", "so", "versus", "in", "on",
                   "unless", "assuming", "suppose", "considering", "between"}
 
-    def __init__(self, pause_seconds=1.2):
+    def __init__(self, pause_seconds=DEFAULT_QUESTION_PAUSE):
         self.pause_seconds = pause_seconds
         self.clear()
 
