@@ -9,7 +9,7 @@ Use **app.py** for the full system-audio → transcription → Claude answer flo
 1. Select your provider and try a typed question with **Suggest answer**. Add optional résumé or job context under **Your context**.
 2. Open **Audio**, choose the output carrying the other person's voice, and click **Start listening**. On a direct Python launch, load `small.en` first. macOS needs the BlackHole route explained in the README.
 
-**Model:** Start with `haiku` to test speed; switch to `sonnet` to compare technical-answer quality. The provider/model controls also support Codex and local Ollama. The app shows measured first-text and full-answer times; zero delay is not guaranteed.
+**Model:** Claude starts with `sonnet`. The provider and model controls also support Haiku, Opus, Codex, and local Ollama.
 
 **Screen sharing:** Windows checks capture exclusion before showing the main window, dropdowns, and file-path prompts. Verify the receiving view in the exact meeting app and share mode.
 

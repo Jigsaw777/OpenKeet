@@ -13,7 +13,7 @@ import json
 import threading
 from urllib.parse import urlsplit
 
-from core import CopilotError, PROVIDERS, build_messages, load_profile
+from core import CopilotError, MODEL_CHOICES, PROVIDERS, build_messages, load_profile
 from providers import Providers
 
 
@@ -117,7 +117,7 @@ def main():
     parser.add_argument("--port", type=int, default=11435)
     args = parser.parse_args()
     provider = PROVIDERS[0] if args.provider == "claude" else PROVIDERS[1]
-    model = args.model or ("haiku" if args.provider == "claude" else "default")
+    model = args.model or MODEL_CHOICES[provider][0]
     handler = make_handler(provider, model, Providers(), threading.Lock())
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
     print(f"Text bridge ready at http://127.0.0.1:{args.port}. Provider: {provider}; model: {model}.")

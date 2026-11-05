@@ -16,11 +16,13 @@ import xml.etree.ElementTree as ET
 BASE_URL = "http://127.0.0.1:11434"
 MODELS = ("qwen3:4b", "qwen3:1.7b", "qwen3:8b")
 PROVIDERS = ("Claude Code (subscription)", "Codex CLI (subscription)", "Ollama (local)")
-MODEL_CHOICES = {PROVIDERS[0]: ("haiku", "sonnet", "opus"),
+MODEL_CHOICES = {PROVIDERS[0]: ("sonnet", "haiku", "opus"),
                  PROVIDERS[1]: ("default",), PROVIDERS[2]: MODELS}
 PROFILE_PATH = Path.home() / ".personal_copilot" / "profile.json"
 CONTEXT_LIMIT = 12000
 QUESTION_LIMIT = 4000
+TRANSCRIPT_QUESTION_LIMIT = 64000
+SPEECH_HINT_LIMIT = 300
 HISTORY_LIMIT = 6000
 MAX_DOCUMENT_BYTES = 15 * 1024 * 1024
 
@@ -57,7 +59,7 @@ class CopilotError(Exception):
 
 
 def clean_profile(data: dict) -> dict[str, str]:
-    limits = {"resume": CONTEXT_LIMIT, "job": CONTEXT_LIMIT, "notes": 3000,
+    limits = {"resume": CONTEXT_LIMIT, "job": CONTEXT_LIMIT, "notes": 3000, "speech_hints": SPEECH_HINT_LIMIT,
               "preset": 100, "provider": 100, "model": 100}
     result = {key: str(data.get(key, ""))[:limit] for key, limit in limits.items()}
     if result["preset"] not in PRESETS:
@@ -133,13 +135,17 @@ def read_document(path: Path) -> str:
 
 def build_messages(profile: dict, mode: str, question: str,
                    history: Iterable[dict] = (), *, draft: bool = False,
-                   speech_context: dict | None = None) -> list[dict[str, str]]:
+                   speech_context: dict | None = None, full_transcript: bool = False) -> list[dict[str, str]]:
     if mode not in MODES:
         raise CopilotError("Choose an answer mode.")
     question = question.strip()
     if not question:
         raise CopilotError("Type or transcribe a question first.")
-    if len(question) > QUESTION_LIMIT:
+    if full_transcript:
+        limit = CONTEXT_LIMIT if profile.get("provider") == PROVIDERS[2] else TRANSCRIPT_QUESTION_LIMIT
+        if len(question) > limit:
+            raise CopilotError(f"Edit the transcript in the question box to at most {limit:,} characters for this provider.")
+    elif len(question) > QUESTION_LIMIT:
         raise CopilotError(f"Keep the question below {QUESTION_LIMIT} characters.")
     for key, limit in (("resume", CONTEXT_LIMIT), ("job", CONTEXT_LIMIT), ("notes", 3000)):
         if len(str(profile.get(key, ""))) > limit:
@@ -162,6 +168,12 @@ def build_messages(profile: dict, mode: str, question: str,
             "Do not assume the rest of the question or any missing constraint. If no clear question or "
             "concept is identifiable yet, respond 'Listening for the question…'. A later request will "
             "provide the completed question. Avoid committing to a solution before its conditions are known."
+        )
+    if full_transcript:
+        system += (
+            "\nFULL TRANSCRIPT: The final user message contains chronological speech. Use all of it "
+            "as context for the latest clear request and its constraints or corrections. Treat "
+            "timestamps and transcription timings as metadata. Ask for clarification if the request is unclear."
         )
     if speech_context is not None:
         system += (
@@ -203,9 +215,10 @@ def build_messages(profile: dict, mode: str, question: str,
     if speech_context is None:
         user_content = question
     else:
+        previous_question = speech_context.get("previous_question", "")[-QUESTION_LIMIT:]
         user_content = json.dumps({"candidate_question": question,
                                    "speech_segments": speech_context.get("segments", [question]),
-                                   "previous_completed_question": speech_context.get("previous_question", "")},
+                                   "previous_completed_question": previous_question},
                                   ensure_ascii=False)
     result.append({"role": "user", "content": user_content})
     return result

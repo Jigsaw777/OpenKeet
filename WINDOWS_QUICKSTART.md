@@ -12,7 +12,7 @@ The first launch creates `.venv` and installs the app dependencies. It uses an e
 
 If the app asks you to sign in, click **Sign in to Claude**. Complete the official subscription sign-in in your browser. Keep the sign-in window open in case Claude asks you to paste a code there. The app checks the connection when sign-in finishes.
 
-Type a question and click **Suggest answer**. You can add résumé, job description, and preference text in **Your context**.
+Claude starts with **sonnet**. Type a question and click **Suggest answer**. You can add résumé, job description, and preference text in **Your context**.
 
 ## 3. Listen to the other participant through system audio
 
@@ -25,6 +25,8 @@ Type a question and click **Suggest answer**. You can add résumé, job descript
 WASAPI loopback captures the selected speaker or headphone output. Match it to your meeting app's output and keep it unmuted. Play a short spoken clip and check the transcript. If the default output changes, restart listening. If an explicitly selected device disconnects, refresh inputs and select an output.
 
 Rolling transcripts can trigger a provisional draft while the speaker continues. After the pause, the model checks the complete question and incorporates added constraints. If transcription lags, choose `base.en` or `tiny.en`.
+
+Enter names or uncommon terms in **Speech hints** before starting a listening session. Use commas to separate entries. **Use full transcript as question** loads the entire box into the Assistant tab and pauses automatic answers while you review it. **Clear transcript** empties the Audio box while listening continues.
 
 ## 4. Screen sharing
 

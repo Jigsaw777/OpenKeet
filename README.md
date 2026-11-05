@@ -9,7 +9,7 @@ This download contains source code and launch scripts, not a prebuilt installer.
 | Capability | Implementation |
 | --- | --- |
 | Claude connection | Your installed, unmodified Claude Code CLI, signed in through its official subscription flow |
-| Model choice | Haiku by default; Sonnet, Opus, or an available explicit Claude model ID |
+| Model choice | Sonnet by default, with Haiku, Opus, and supported custom Claude model IDs available |
 | Codex connection | Your installed Codex CLI, signed in with ChatGPT; model configurable |
 | Local alternative | Ollama with Qwen3 1.7B, 4B or 8B; no model-service subscription |
 | System output | Windows WASAPI loopback; Linux PulseAudio/compatible PipeWire monitor; selected output |
@@ -36,7 +36,7 @@ Choose your personal Claude account rather than Console/API-key billing. Your pl
 
 The app invokes the official binary, lets it manage its own credentials, and never reads or copies your login tokens. Subscription mode removes inherited API-key/provider variables from the child process and rejects API-key/Console authentication. There is no automatic API fallback. Requests still consume your plan allowance. Account-level extra-usage settings remain controlled by the provider; this app cannot enforce an account spending cap. This is your personal end-user setup, not a Claude login service for other users.
 
-Haiku is the initial speed-focused option. Switch to Sonnet when you want to compare answer quality on harder coding/system questions. Model access and performance depend on your account and the current service. The aliases follow Claude Code's model configuration; they are not hardcoded to an old version.
+Claude starts with the `sonnet` alias each time the app opens or you switch to Claude. You can choose another model for that session. Model access depends on your subscription. [Claude Code model aliases](https://code.claude.com/docs/en/model-config)
 
 ## 2. Install and run the app
 
@@ -97,7 +97,7 @@ Choosing “System output (default)” on macOS explains that a virtual input is
 
 Choose a system-output monitor through SoundCard. This requires PulseAudio or a compatible PipeWire PulseAudio service. If no monitors appear, confirm the sound server and the meeting's selected playback endpoint before retrying.
 
-There is no speaker diarization. System-output capture usually keeps your microphone out of the transcript, but sidetone, an app playing back your own voice, and other audio sources can still be captured. Short pauses and continuation phrases are buffered into candidate questions. The selected model then checks whether the completed speech is a continuation, a new question or still incomplete. This is a best-effort interpretation, not a perfect “interviewer only” or question-boundary detector. You can turn automatic answers off and submit selected transcript text manually.
+System-output capture can include your voice if a meeting app or sidetone plays it back. The app buffers short pauses and checks whether the speech is a continuation, a new question, or incomplete. In **Audio**, click **Use full transcript as question** to load the whole transcript and pause automatic answers while you review it. **Clear transcript** empties the Audio box while listening continues.
 
 ## 5. Screen-share visibility
 
@@ -127,7 +127,9 @@ Checked answers wait for the **Question pause** debounce, initially 2.0 seconds 
 
 Early predictions remain labeled provisional. Added wording marks an earlier answer outdated. When the revised question is ready, a stale in-flight answer is stopped and replaced. Drafts, obsolete answers and incomplete questions are excluded from saved conversation history. A continuation replaces the earlier question/answer pair. The app normally makes one early draft attempt; it permits one more after substantial new wording if the first correctly responded that the actual question was not yet clear. See `LIVE_QUESTION_LOGIC.md`.
 
-Use `small.en` for better transcription accuracy. If rolling transcripts lag on your computer, select `base.en` or `tiny.en`. Keep the speech model loaded, use concise mode and a short relevant resume/JD excerpt. The local Qwen model disables thinking output and stays warm for ten minutes after a request. Claude requests disable extended thinking and run without ordinary tools/customizations. Subscription-auth checks are cached for five minutes.
+Use `small.en` for better transcription accuracy. The local recognizer uses technical vocabulary hints and checks for speech on completed segments. Add names or uncommon terms in **Audio → Speech hints** before starting listening. Save them with **Your context → Save context on this computer**. If rolling transcripts lag, select `base.en` or `tiny.en`.
+
+Keep the speech model loaded, use concise mode and a short relevant résumé or job excerpt. The local Qwen model disables thinking output and stays warm for ten minutes after a request. Claude requests disable extended thinking and run without ordinary tools or customizations. Subscription-auth checks are cached for five minutes.
 
 Each CLI answer starts a new process, so CLI startup, server/network delay, transcription and model generation all add time. Codex JSON output may deliver a complete agent message rather than token-by-token text. This makes Claude the better initial interface to test for progressive display; it does not establish a benchmark win for any model.
 
@@ -167,7 +169,7 @@ The repository was reviewed at commit `712ddb3474af22886cd47786f7bb0f0a5bf526df`
 In the Personal Interview Assistant folder, run:
 
 ```sh
-python free_cluely_bridge.py --provider claude --model haiku
+python free_cluely_bridge.py --provider claude --model sonnet
 ```
 
 Use your virtual environment's Python executable if needed. Leave that terminal running. In the root of your separately downloaded [Prat011/free-cluely](https://github.com/Prat011/free-cluely) checkout, set these `.env` entries:
@@ -175,14 +177,14 @@ Use your virtual environment's Python executable if needed. Leave that terminal 
 ```dotenv
 USE_OLLAMA=true
 OLLAMA_URL=http://127.0.0.1:11435
-OLLAMA_MODEL=haiku
+OLLAMA_MODEL=sonnet
 ```
 
 Then start that repository according to its README. The reviewed source imports `dotenv` although its root package manifest does not list it directly; if the build reports it missing, install it in that checkout with `npm install dotenv`.
 
 **Scope of this integration:** it connects the upstream **text-chat path** to Claude. The UI will still call the transport “Ollama.” It does not turn that repository's image/audio Gemini calls into Claude calls, implement native loopback capture there, or make its existing non-streaming UI display tokens progressively. For continuous system audio → Claude → streamed answers, use the standalone `app.py` in this download. If you save a resume/JD in the standalone app, the text bridge can use that same local profile.
 
-To use Sonnet with the bridge, pass `--model sonnet` and set `OLLAMA_MODEL=sonnet`. To use Codex, pass `--provider codex --model default` and set `OLLAMA_MODEL=default`. Only one request is processed at a time. The server binds loopback only, rejects browser Origin headers, and has no permissive CORS policy. It is not a hosted or multi-user proxy.
+To use Codex with the bridge, pass `--provider codex --model default` and set `OLLAMA_MODEL=default`. The bridge processes one request at a time on loopback and rejects browser Origin headers.
 
 The bridge's startup/API compatibility was tested with fake model providers. The upstream Electron app was not installed or run in this environment.
 
@@ -192,7 +194,7 @@ The bridge's startup/API compatibility was tested with fake model providers. The
 - Audio samples stay in bounded in-memory queues. This app does not write WAV/MP3 recordings. Speech-model weights are cached by faster-whisper/Hugging Face.
 - Questions, transcripts and answers stay in session memory until cleared/closed, unless you explicitly export. Official CLI/provider diagnostics, account metadata and retention are governed by their settings and policies; disabling session persistence is not a promise about every provider log.
 - Cloud providers receive the selected text context. API keys and login tokens are not stored in this app's profile.
-- Keep resume/JD fields below 12,000 characters each, notes below 3,000 and questions below 4,000. Recent complete turns are bounded before being sent to the model.
+- Résumé and job description fields accept up to 12,000 characters each. Notes accept 3,000 and typed questions accept 4,000. The full transcript button copies all visible text. Submitting it accepts up to 64,000 characters for Claude and Codex, or 12,000 for Ollama.
 - No screenshots, screen OCR, native macOS process tap, speaker separation, cloud speech recognition, packaged installer, or bypass of meeting/proctoring software is included.
 - Use recording and AI assistance only in sessions where you have permission to use them.
 

@@ -27,6 +27,11 @@ November 4, 2026. Windows 11 25H2, build 26200.9711, Python 3.12.10.
 - In a compact window, the Assistant and Audio tabs scrolled. The answer and transcript held their reading positions during streaming and followed new text when already at the end.
 - With `small.en`, a synthetic question containing 0.60- and 1.60-second pauses yielded one checked question with the follow-up constraint intact. Controlled timestamps also verified a 1.75-second pause, speech resuming before its transcript, and a distinct next question.
 
+## Transcript accuracy and controls
+
+- On synthetic audio, the previous decoder wrote “LRU Cash” for a short fragment. With speech hints and the updated final decoder, `small.en` produced “LRU cache,” kept “cash” in a business question, and returned no completed transcript for a non-speech tone. A supplied local name hint preserved its spelling. The original interview audio was unavailable for comparison.
+- A Windows app check copied the full transcript despite an active selection and sent more than 4,000 characters through a test provider. Clearing while listening kept delayed results for earlier speech out of the cleared box. Sonnet was selected on startup and when switching back to Claude.
+
 ## Complete the remaining Windows checks
 
 1. Open the **Personal Interview Assistant** desktop shortcut and put synthetic text in the assistant. In a test meeting, share the full display to a second device. Compare the receiver's view with exclusion off and on. Repeat with window sharing if you use that mode.

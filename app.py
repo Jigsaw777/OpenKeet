@@ -82,6 +82,8 @@ class App:
         self.audio_active = False
         self.audio_stopping = False
         self.last_transcript = ""
+        self.transcript_cleared_at = float("-inf")
+        self.transcript_question = False
         self.last_speech_end = None
         self.current_speech_end = None
         self.first_token_seconds = None
@@ -101,6 +103,8 @@ class App:
             self.initial_profile, initial_error = clean_profile({}), str(exc)
         self.model = tk.StringVar(value=self.initial_profile["model"])
         self.provider = tk.StringVar(value=self.initial_profile["provider"])
+        if self.provider.get() == PROVIDERS[0]:
+            self.model.set(MODEL_CHOICES[PROVIDERS[0]][0])
         self.preset = tk.StringVar(value=self.initial_profile["preset"])
         self.mode = tk.StringVar(value=next(iter(MODES)))
         self.status = tk.StringVar(value="Add your context, check your provider connection, then ask or start listening.")
@@ -123,6 +127,7 @@ class App:
         self.default_route = "Default microphone" if sys.platform == "darwin" else "System output (default)"
         self.device = tk.StringVar(value=self.default_route)
         self.speech_model = tk.StringVar(value=DEFAULT_SPEECH_MODEL)
+        self.speech_hints = tk.StringVar(value=self.initial_profile["speech_hints"])
         self.threshold = tk.DoubleVar(value=0.012)
         self.question_pause = tk.DoubleVar(value=DEFAULT_QUESTION_PAUSE)
         self._styles()
@@ -299,6 +304,10 @@ class App:
         self.device_map = {"System output (default)": ("system", None), "Default microphone": ("input", None)}
         self.device_combo = self.combobox(parent, textvariable=self.device, values=list(self.device_map), state="readonly")
         self.device_combo.pack(fill="x", pady=(0, 10))
+        hints_row = ttk.Frame(parent)
+        hints_row.pack(fill="x", pady=(0, 10))
+        ttk.Label(hints_row, text="Speech hints (names or terms)").pack(side="left", padx=(0, 8))
+        ttk.Entry(hints_row, textvariable=self.speech_hints).pack(side="left", fill="x", expand=True)
         threshold_row = ttk.Frame(parent)
         threshold_row.pack(fill="x", pady=(0, 10))
         ttk.Label(threshold_row, text="Speech threshold").pack(side="left", padx=(0, 12))
@@ -316,7 +325,8 @@ class App:
         row.pack(fill="x", pady=(0, 10))
         self.listen_button = ttk.Button(row, text="Start listening", command=self.toggle_listening, state="disabled")
         self.listen_button.pack(side="left")
-        ttk.Button(row, text="Use latest speech as question", command=self.use_transcript).pack(side="left", padx=8)
+        ttk.Button(row, text="Use full transcript as question", command=self.use_transcript).pack(side="left", padx=8)
+        ttk.Button(row, text="Clear transcript", command=self.clear_transcript).pack(side="left")
         ttk.Checkbutton(parent, text="Automatically answer speech", variable=self.auto,
                         command=self.toggle_auto).pack(anchor="w")
         ttk.Checkbutton(parent, text="Draft answers while the question is still being asked", variable=self.live_drafts,
@@ -331,6 +341,7 @@ class App:
 
     def get_profile(self):
         return {"model": self.model.get(), "provider": self.provider.get(), "preset": self.preset.get(),
+                "speech_hints": self.speech_hints.get(),
                 **{k: box.get("1.0", "end-1c") for k, box in self.context_boxes.items()}}
 
     def change_provider(self, event=None, reset=True):
@@ -496,7 +507,7 @@ class App:
         question = self.question.get("1.0", "end-1c").strip()
         profile = self.get_profile()
         try:
-            signature = json.dumps({k: v for k, v in profile.items() if k != "model"}, sort_keys=True)
+            signature = json.dumps({k: v for k, v in profile.items() if k not in ("model", "speech_hints")}, sort_keys=True)
             history = self.history if signature == self.context_signature else []
             previous = self.last_final_question if signature == self.context_signature else None
             speech_context = None
@@ -504,7 +515,8 @@ class App:
                 speech_context = {"segments": list(audio_request.segments),
                                   "previous_question": previous["question"] if previous else ""}
             messages = build_messages(profile, self.mode.get(), question, history, draft=draft,
-                                      speech_context=speech_context)
+                                      speech_context=speech_context,
+                                      full_transcript=self.transcript_question and audio_request is None)
         except Exception as exc:
             self.status.set(str(exc))
             return
@@ -570,12 +582,11 @@ class App:
         self.audio_answers.clear()
         self.questions.clear()
         self.last_final_question = None
-        self.last_speech_end = None
-        self.last_answer = self.current_answer = self.last_transcript = self.pending_speech = ""
+        self.last_answer = self.current_answer = self.pending_speech = ""
+        self.transcript_question = False
         self.question.delete("1.0", "end")
         self._replace(self.answer, "")
-        self._replace(self.transcript, "")
-        self.live_question.set("Live transcript appears here while the speaker is talking.")
+        self.clear_transcript()
         self.answer_heading.set("Suggested answer")
         self.status.set("Session cleared. Your editable context is available for the next question.")
 
@@ -666,7 +677,7 @@ class App:
                 route = self.device_map.get(self.device.get())
                 if route is None:
                     raise CopilotError("Select a system output or microphone/virtual input before listening.")
-                self.listener.start(route, float(self.threshold.get()))
+                self.listener.start(route, float(self.threshold.get()), speech_hints=self.speech_hints.get())
                 self.audio_active = True
                 self.listen_button.configure(text="Stop listening")
                 self.load_audio_button.configure(state="disabled")
@@ -676,17 +687,27 @@ class App:
                 self.audio_status.set(str(exc))
 
     def use_transcript(self):
-        text = self.last_transcript
-        try:
-            text = self.transcript.get("sel.first", "sel.last")
-        except tk.TclError:
-            pass
-        if text:
-            self.question.delete("1.0", "end")
-            self.question.insert("1.0", text)
-            self.notebook.select(0)
-        else:
+        text = self.transcript.get("1.0", "end-1c")
+        if not text.strip():
             self.audio_status.set("No speech transcribed yet.")
+            return
+        self.auto.set(False)
+        self.toggle_auto()
+        if self.busy and self.current_audio_request is not None:
+            self.cancel.set()
+        self.transcript_question = True
+        self.question.delete("1.0", "end")
+        self.question.insert("1.0", text)
+        self.notebook.select(0)
+        self.status.set("Full transcript copied. Automatic answers paused. Review it, then click Suggest answer.")
+
+    def clear_transcript(self):
+        self.transcript_cleared_at = time.monotonic()
+        self._replace(self.transcript, "")
+        self.last_transcript = ""
+        self.last_speech_end = None
+        self.live_question.set("Live transcript appears here while the speaker is talking.")
+        self.audio_status.set("Transcript cleared. Listening continues." if self.audio_active else "Transcript cleared.")
 
     def auto_generate(self):
         self.auto_timer = None
@@ -706,6 +727,7 @@ class App:
                 if self.audio_answers.pending:
                     self.auto_timer = self.root.after(150, self.auto_generate)
                 return
+            self.transcript_question = False
             self.question.delete("1.0", "end")
             self.question.insert("1.0", request.text)
             self.generate(speech_end=request.speech_at, draft=request.draft, audio_request=request)
@@ -893,10 +915,12 @@ class App:
                 self.live_question.set("An earlier utterance was skipped. Listening for the next segment.")
                 self.audio_status.set("Transcription is behind; an utterance was skipped. Try tiny.en.")
             elif kind == "partial_transcript":
-                if self.update_audio_question(data, final=False) is not None:
+                if (self.update_audio_question(data, final=False) is not None
+                        and data["speech_end"] > self.transcript_cleared_at):
                     self.live_question.set("Live: " + data["text"][-240:])
             elif kind == "transcript":
-                if self.update_audio_question(data, final=True) is None:
+                if (self.update_audio_question(data, final=True) is None
+                        or data["speech_end"] <= self.transcript_cleared_at):
                     continue
                 self.last_transcript = text = data["text"]
                 self.last_speech_end = data["speech_end"]

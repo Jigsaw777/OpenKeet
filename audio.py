@@ -9,12 +9,15 @@ import threading
 import time
 from typing import Callable
 
-from core import CopilotError
+from core import CopilotError, SPEECH_HINT_LIMIT
 from live import AudioChunk, TranscriptionMailbox
 
 DEFAULT_SPEECH_MODEL = "small.en"
 SPEECH_MODELS = (DEFAULT_SPEECH_MODEL, "base.en", "tiny.en")
 SEGMENT_PAUSE_SECONDS = 0.75
+# Include common cash phrases so the coding vocabulary does not bias every homophone to "cache".
+DEFAULT_SPEECH_HINTS = ("Java, Kotlin, Python, LRU cache, LFU cache, Redis, PostgreSQL, idempotency, "
+                        "mutex, semaphore, cash, cash flow, cash on hand")
 
 
 def input_devices() -> list[tuple[int, str]]:
@@ -108,7 +111,7 @@ class SpeechListener:
             raise CopilotError("Speech model could not load. First use needs internet and model-cache space.") from exc
 
     def start(self, route: tuple[str, object], threshold=0.012, silence_seconds=SEGMENT_PAUSE_SECONDS,
-              partial_interval=0.9):
+              partial_interval=0.9, *, speech_hints=""):
         if self.model is None:
             raise CopilotError("Load the speech model first (one download, then local inference).")
         if any(t.is_alive() for t in self.threads):
@@ -130,6 +133,7 @@ class SpeechListener:
         self.frames = queue.Queue(maxsize=400)
         self.utterances = TranscriptionMailbox()
         segmenter = SpeechSegmenter(threshold, silence_seconds)
+        hotwords = ", ".join(filter(None, (speech_hints[:SPEECH_HINT_LIMIT].strip(), DEFAULT_SPEECH_HINTS)))
 
         def put_frame(samples):
             try:
@@ -244,8 +248,11 @@ class SpeechListener:
                     if value is None:
                         break
                     started = time.monotonic()
-                    segments, _ = self.model.transcribe(value.samples, language="en", beam_size=1,
-                                                        condition_on_previous_text=False)
+                    segments, _ = self.model.transcribe(
+                        value.samples, language="en", beam_size=3 if value.final else 1,
+                        temperature=0.0, condition_on_previous_text=False,
+                        hotwords=hotwords, vad_filter=value.final,
+                    )
                     text = " ".join(item.text.strip() for item in segments).strip()
                     if text:
                         self.emit("transcript" if value.final else "partial_transcript",
