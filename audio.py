@@ -12,7 +12,8 @@ from typing import Callable
 from core import CopilotError
 from live import AudioChunk, TranscriptionMailbox
 
-SPEECH_MODELS = ("tiny.en", "base.en", "small.en")
+DEFAULT_SPEECH_MODEL = "small.en"
+SPEECH_MODELS = (DEFAULT_SPEECH_MODEL, "base.en", "tiny.en")
 
 
 def input_devices() -> list[tuple[int, str]]:
@@ -90,7 +91,7 @@ class SpeechListener:
         self.threads = []
         self.worker_error = None
 
-    def load_model(self, name="tiny.en"):
+    def load_model(self, name=DEFAULT_SPEECH_MODEL):
         if name not in SPEECH_MODELS:
             raise CopilotError("Select tiny.en, base.en or small.en.")
         if any(t.is_alive() for t in self.threads):

@@ -43,7 +43,7 @@ try:
 except ImportError:
     raise SystemExit("Tkinter is missing. Install a Python build with Tk support; see README.md.")
 
-from audio import SPEECH_MODELS, SpeechListener, input_devices, loopback_devices
+from audio import DEFAULT_SPEECH_MODEL, SPEECH_MODELS, SpeechListener, input_devices, loopback_devices
 from capture_privacy import set_capture_exclusion
 from live import LiveAnswerPlanner, QuestionBuffer, SemanticResponseDecoder, commit_checked_answer
 from providers import Providers
@@ -118,7 +118,7 @@ class App:
         self.answer_heading = tk.StringVar(value="Suggested answer")
         self.default_route = "Default microphone" if sys.platform == "darwin" else "System output (default)"
         self.device = tk.StringVar(value=self.default_route)
-        self.speech_model = tk.StringVar(value="tiny.en")
+        self.speech_model = tk.StringVar(value=DEFAULT_SPEECH_MODEL)
         self.threshold = tk.DoubleVar(value=0.012)
         self.question_pause = tk.DoubleVar(value=1.2)
         self._styles()
@@ -371,6 +371,7 @@ class App:
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
         dialog.transient(self.root)
+        dialog.attributes("-toolwindow", True)
         dialog.title(title)
         value = tk.StringVar(dialog, value=initial)
         result = None
@@ -892,6 +893,7 @@ def main():
     if sys.platform == "win32":
         # Apply capture affinity before the main assistant window is shown.
         root.withdraw()
+        root.attributes("-toolwindow", True)
         root.tk.call("rename", "bell", "")
         root.tk.call("proc", "bell", "args", "")
     app = App(root)

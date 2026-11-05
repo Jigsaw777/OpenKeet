@@ -14,7 +14,7 @@ This download contains source code and launch scripts, not a prebuilt installer.
 | Local alternative | Ollama with Qwen3 1.7B, 4B or 8B; no model-service subscription |
 | System output | Windows WASAPI loopback; Linux PulseAudio/compatible PipeWire monitor; selected output |
 | macOS audio | BlackHole or another virtual input route; explicit setup below |
-| Transcription | Local faster-whisper, preloaded before listening; tiny.en / base.en / small.en |
+| Transcription | Local faster-whisper with `small.en` by default and faster `base.en` and `tiny.en` options |
 | Automatic responses | Rolling partial transcript → provisional draft; pause debounce → semantic question check → checked answer/revision |
 | Personal context | Resume, job description and notes; TXT/MD/DOCX/text PDF imports |
 | Window | Movable, resizable, optional always-on-top, with persistent Windows capture-exclusion status |
@@ -66,7 +66,7 @@ Typed questions and TXT/MD/DOCX imports can run with just Python/Tk; the require
 2. Open **Your context**. Paste/import your real resume, the target job description, and any preferences. Choose the relevant practice focus.
 3. **Save context** is optional. It writes a local unencrypted profile. Unsaved edits also apply to answers.
 4. Try a typed question first: “Explain structured concurrency and coroutine cancellation in Kotlin.” Press **Suggest answer** or Ctrl+Enter / Command+Enter.
-5. Open **Audio**. The Windows shortcut loads `tiny.en` automatically. For a direct Python launch, select it and click **Load speech model**.
+5. Open **Audio**. The Windows shortcut loads `small.en` automatically. For a direct Python launch, click **Load speech model**.
 6. Select the correct system-output route, then **Start listening**. **Automatically answer speech** and **Draft answers while the question is still being asked** are initially enabled. Set **Question pause (seconds)** to adjust the final-answer debounce; it starts at 1.2 seconds.
 7. Return to **Assistant** to see the answer stream in. Stop listening when finished.
 
@@ -111,6 +111,8 @@ There is no speaker diarization. System-output capture usually keeps your microp
 
 On Windows the app checks the native handle before showing a window, then checks it again on map and configuration events. A persistent status reports success, failure or disabled state. With exclusion enabled, use the app's protected path prompt to import or export files. Exports through that prompt require a new file path. Verify the receiving view in your meeting app and share mode.
 
+The Windows assistant uses a tool window so it stays out of Alt+Tab and the taskbar. Use **Keep on top** if you want it to stay in front of other windows.
+
 Microsoft describes display affinity as protection through a particular set of capture APIs, not a comprehensive guarantee. Electron likewise documents that newer macOS apps using ScreenCaptureKit can capture a protected Electron window. The GitHub reference's `setContentProtection(true)` should therefore not be treated as a universal invisibility feature.
 
 ## 6. Response speed
@@ -125,7 +127,7 @@ Checked answers wait for the **Question pause** debounce, initially 1.2 seconds 
 
 Early predictions remain labeled provisional. Added wording marks an earlier answer outdated. When the revised question is ready, a stale in-flight answer is stopped and replaced. Drafts, obsolete answers and incomplete questions are excluded from saved conversation history. A continuation replaces the earlier question/answer pair. The app normally makes one early draft attempt; it permits one more after substantial new wording if the first correctly responded that the actual question was not yet clear. See `LIVE_QUESTION_LOGIC.md`.
 
-Use `tiny.en` for the first speed test; try `base.en` if technical words or accents are transcribed poorly. Keep the speech model loaded, use concise mode and a short relevant resume/JD excerpt. The local Qwen model disables thinking output and stays warm for ten minutes after a request. Claude requests disable extended thinking and run without ordinary tools/customizations. Subscription-auth checks are cached for five minutes.
+Use `small.en` for better transcription accuracy. If rolling transcripts lag on your computer, select `base.en` or `tiny.en`. Keep the speech model loaded, use concise mode and a short relevant resume/JD excerpt. The local Qwen model disables thinking output and stays warm for ten minutes after a request. Claude requests disable extended thinking and run without ordinary tools/customizations. Subscription-auth checks are cached for five minutes.
 
 Each CLI answer starts a new process, so CLI startup, server/network delay, transcription and model generation all add time. Codex JSON output may deliver a complete agent message rather than token-by-token text. This makes Claude the better initial interface to test for progressive display; it does not establish a benchmark win for any model.
 

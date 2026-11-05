@@ -7,7 +7,7 @@ Use **app.py** for the full system-audio → transcription → Claude answer flo
 **macOS and Linux:** follow the Python environment steps in [README](README.md), then launch `app.py`.
 
 1. Select your provider and try a typed question with **Suggest answer**. Add optional résumé or job context under **Your context**.
-2. Open **Audio**, choose the output carrying the other person's voice, and click **Start listening**. On a direct Python launch, load `tiny.en` first. macOS needs the BlackHole route explained in the README.
+2. Open **Audio**, choose the output carrying the other person's voice, and click **Start listening**. On a direct Python launch, load `small.en` first. macOS needs the BlackHole route explained in the README.
 
 **Model:** Start with `haiku` to test speed; switch to `sonnet` to compare technical-answer quality. The provider/model controls also support Codex and local Ollama. The app shows measured first-text and full-answer times; zero delay is not guaranteed.
 

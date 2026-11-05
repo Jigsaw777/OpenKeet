@@ -15,6 +15,12 @@ November 4, 2026. Windows 11 25H2, build 26200.9711, Python 3.12.10.
 | Other receiving views | Second device, Meet, Teams, or Zoom | Unverified. The Chrome test used two local tabs. |
 | Headset and physical endpoint changes | Headset and a second playback endpoint | Unverified. Windows exposed one playback endpoint. Signed-in provider behavior also remains unverified. |
 
+## November 5 update
+
+- The visible assistant window and file-path prompt had the native Windows tool-window flag, with the taskbar-forcing flag cleared and capture affinity at `0x11`. Direct inspection of the taskbar and Alt+Tab views remains pending.
+- On five synthetic technical questions totaling 28.29 seconds, `small.en` made 1 word error out of 68. `base.en` and `tiny.en` each made 7. Decode times were 12.32, 3.50, and 1.84 seconds, respectively, on this PC.
+- The default `small.en` produced a rolling partial before the end of a 6.48-second WASAPI playback clip and correctly transcribed “idempotency keys” in its final. The faster models misspelled that term on the same samples. A separate loopback clip still produced “codelink” for “Kotlin.” The probe restored the endpoint's initial mute state.
+
 ## Complete the remaining Windows checks
 
 1. Open the **Personal Interview Assistant** desktop shortcut and put synthetic text in the assistant. In a test meeting, share the full display to a second device. Compare the receiver's view with exclusion off and on. Repeat with window sharing if you use that mode.
