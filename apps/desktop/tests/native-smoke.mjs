@@ -18,7 +18,7 @@ await once(server, "listening");
 const { port } = server.address();
 await new Promise(resolve => server.close(resolve));
 const child = spawn(executable, [], {
-  env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`, WEBVIEW2_USER_DATA_FOLDER: profile },
+  env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`, WEBVIEW2_USER_DATA_FOLDER: profile, COPILOT_DATA_DIR: join(profile, "application") },
   stdio: "ignore", windowsHide: true,
 });
 let spawnError;
@@ -99,9 +99,31 @@ try {
   await focus.getByRole("button", { name: "Unpin", exact: true }).click();
   await focus.getByRole("button", { name: "Open workspace" }).click();
 
+  await page.getByLabel("Session title").fill("SQL practice smoke");
+  await page.getByRole("button", { name: "Save to history" }).click();
+  await page.getByRole("heading", { name: "Saved sessions", exact: true }).waitFor();
+  await page.getByRole("searchbox", { name: "Search saved sessions" }).fill("coroutine");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await page.getByRole("button", { name: /^SQL practice smoke/ }).click();
+  await page.getByRole("region", { name: "Saved transcript" }).getByText(/without blocking the coroutine thread/).waitFor();
+  await page.getByLabel("Session notes").fill("Review coroutine cancellation.");
+  await page.getByRole("button", { name: "Save notes" }).click();
+  await page.getByRole("status").filter({ hasText: "Notes saved." }).waitFor();
+  await page.getByRole("button", { name: /^SQL practice smoke/ }).click();
+  await page.waitForFunction(() => {
+    const notes = document.querySelector("#saved-notes");
+    return !notes?.disabled && notes?.value === "Review coroutine cancellation.";
+  });
+  assert(await page.getByRole("button", { name: "Export JSON" }).isEnabled());
+  await page.screenshot({ path: join(output, "saved-sessions.png"), animations: "disabled" });
+  await page.getByRole("button", { name: "Delete saved session" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await page.getByRole("status").filter({ hasText: "Saved session deleted." }).waitFor();
+
   await page.getByRole("button", { name: "Audio setup", exact: true }).click();
   const select = page.getByLabel("Input route");
   await select.locator("option").nth(1).waitFor({ state: "attached" });
+  await page.screenshot({ path: join(output, "audio-setup.png"), animations: "disabled" });
   await select.selectOption({ index: 1 });
   await page.getByLabel("Speech model file").fill(join(output, "missing", "ggml-small.en.bin"));
   assert.equal(await page.getByRole("button", { name: "Start local capture" }).isEnabled(), false);

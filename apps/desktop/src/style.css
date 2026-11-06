@@ -215,3 +215,13 @@ meter::-webkit-meter-optimum-value { background: var(--focus); }
 }
 .audio-metrics { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
 .audio-metrics dd { margin: 0; font-variant-numeric: tabular-nums; }
+.library-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; }
+.library-card { display: grid; gap: var(--space-3); padding: var(--space-4); overflow-wrap: anywhere; }
+.library-item { display: grid; justify-items: start; text-align: left; gap: var(--space-1); width: 100%; }
+.library-item span { color: var(--muted); font-size: .82rem; font-weight: 400; }
+.library-item[aria-pressed="true"] { background: var(--soft); border-color: var(--focus); }
+.saved-transcript { display: grid; gap: var(--space-2); max-height: 45dvh; overflow: auto; }
+.saved-answer { padding-block: var(--space-2); border-top: 1px solid var(--rule); }
+.saved-answer p { white-space: pre-wrap; }
+.notes-editor { display: grid; justify-items: start; gap: var(--space-2); }
+@media (max-width: 980px) { .library-layout { grid-template-columns: minmax(0, 1fr); } }

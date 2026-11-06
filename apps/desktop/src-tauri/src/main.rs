@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod history;
 mod workspace;
 
 use std::{sync::Arc, thread, time::Duration};
@@ -128,6 +129,14 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            let directory = if let Some(local) =
+                std::env::var_os("COPILOT_DATA_DIR").filter(|path| !path.is_empty())
+            {
+                std::path::PathBuf::from(local)
+            } else {
+                app.path().app_local_data_dir()?
+            };
+            app.manage(history::HistoryStore::new(directory));
             let state = Desktop::shared();
             app.manage(Arc::clone(&state));
             let handle = app.handle().clone();
@@ -153,6 +162,12 @@ fn main() {
             ask,
             request_detected,
             cancel_answer,
+            history::save_session,
+            history::list_saved_sessions,
+            history::read_saved_session,
+            history::delete_saved_session,
+            history::save_session_notes,
+            history::export_saved_session,
             use_transcript,
             clear_session,
             open_focus,

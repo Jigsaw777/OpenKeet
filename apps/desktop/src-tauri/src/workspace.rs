@@ -79,6 +79,7 @@ pub struct View {
 
 pub struct Desktop {
     session: Session,
+    instance_id: uuid::Uuid,
     serial: u64,
     update: u64,
     clock: Instant,
@@ -95,6 +96,7 @@ impl Desktop {
     pub fn shared() -> Shared {
         Arc::new(Mutex::new(Self {
             session: Session::new(0, Source::TYPED, Policy::default()),
+            instance_id: uuid::Uuid::new_v4(),
             serial: 0,
             update: 0,
             clock: Instant::now(),
@@ -250,6 +252,14 @@ impl Desktop {
 
     pub fn full_transcript(&self) -> Result<String, String> {
         self.session.full_transcript().map_err(Into::into)
+    }
+
+    pub fn archive(&self) -> Result<(String, u64, Snapshot), String> {
+        if self.audio.is_some() || self.replay.is_some() || self.config.is_some() {
+            return Err("Stop the session before saving it to history.".into());
+        }
+        let key = format!("{}:{}", self.instance_id, self.serial);
+        Ok((key, self.update, self.session.snapshot()))
     }
 
     pub fn request_detected(&mut self) -> Result<(), String> {

@@ -4,6 +4,7 @@ import { Icon, Mark } from "./components";
 export const navigation = [
   { id: "overview", label: "Overview", icon: "home" },
   { id: "session", label: "Live workspace", icon: "wave" },
+  { id: "history", label: "Saved sessions", icon: "clock" },
   { id: "audio", label: "Audio setup", icon: "settings" },
 ] as const;
 

@@ -53,7 +53,10 @@ export function AudioSetup({ view, enabled, start, showError, zoom, setZoom }: {
       <section className="card setup-card" aria-labelledby="source-heading">
         <p className="eyebrow">01 / Capture</p><h2 id="source-heading">Select audio</h2>
         <label htmlFor="endpoint">Input route</label>
-        <div className="field-row"><select id="endpoint" value={selected} disabled={!enabled || busy || refreshing} onChange={event => setSelected(event.target.value)}>
+        <div className="field-row"><select id="endpoint" value={selected} disabled={!enabled || busy || refreshing} onChange={event => {
+          setSelected(event.target.value);
+          setConsent(false);
+        }}>
           <option value="">{refreshing ? "Finding audio devices…" : "Choose a device"}</option>
           {endpoints.map(device => <option key={device.id} value={device.id}>{sourceLabel(device.kind)} · {device.name}{device.is_default ? " (default)" : ""}</option>)}
         </select><button disabled={!enabled || busy || refreshing} onClick={() => void refresh()}>Refresh</button></div>
@@ -85,7 +88,9 @@ export function AudioSetup({ view, enabled, start, showError, zoom, setZoom }: {
         <label className="checkbox"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} /> I have permission to capture this source.</label>
         <label className="checkbox"><input type="checkbox" checked={autoAnswer} disabled={busy} onChange={event => setAutoAnswer(event.target.checked)} /> Automatically suggest practice answers</label>
         <button className="primary" disabled={!enabled || busy || !selectedDevice || !model.trim() || !consent} onClick={() => {
-          if (selectedDevice) void start({ source: { kind: selectedDevice.kind, endpoint_id: selectedDevice.id }, model_path: model.trim(), vocabulary: vocabulary.trim(), auto_answer: autoAnswer, consent });
+          if (selectedDevice) void start({ source: { kind: selectedDevice.kind, endpoint_id: selectedDevice.id }, model_path: model.trim(), vocabulary: vocabulary.trim(), auto_answer: autoAnswer, consent }).then(started => {
+            if (started) { setConsent(false); setAutoAnswer(false); }
+          });
         }}>Start local capture <Icon name="arrow" /></button>
       </section>
       <section className="card setup-card" aria-labelledby="local-heading">
