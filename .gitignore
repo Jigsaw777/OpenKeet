@@ -25,3 +25,7 @@ build/
 dist/
 *.zip
 /REEL_BREAKDOWN.md
+/target/
+node_modules/
+/benchmarks/output/
+/models/

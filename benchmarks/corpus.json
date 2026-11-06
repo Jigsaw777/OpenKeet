@@ -1,0 +1,14 @@
+[
+  {"id":"kotlin", "parts":["How would you debug a deadlock in a Kotlin coroutine on Android?"], "terms":["Kotlin", "coroutine", "Android"]},
+  {"id":"qnx", "parts":["How does QNX schedule real time threads?"], "terms":["QNX"]},
+  {"id":"wasapi-quiet", "parts":["How does WASAPI capture system audio on Windows?"], "terms":["WASAPI"], "peak":0.010},
+  {"id":"postgres-noise", "parts":["What causes latency in PostgreSQL joins and caching?"], "terms":["PostgreSQL"], "snr_db":10},
+  {"id":"cache", "parts":["When would you use an LRU cache in Java?"], "terms":["LRU cache", "Java"]},
+  {"id":"cash", "parts":["How do you estimate cash flow for the next quarter?"], "terms":["cash flow"]},
+  {"id":"pause", "parts":["How would you protect shared state", "without blocking the coroutine thread?"], "gap_ms":1600, "terms":["shared state", "coroutine"]},
+  {"id":"correction", "parts":["When should you use a semaphore?", "Actually I meant a mutex."], "gap_ms":3000, "terms":["semaphore", "mutex"], "rate":2},
+  {"id":"short", "parts":["Why?"], "rate":2},
+  {"id":"idempotency", "parts":["How do idempotency keys prevent duplicate requests?"], "terms":["idempotency keys"], "rate":-2},
+  {"id":"silence", "parts":[], "control":"silence"},
+  {"id":"tone", "parts":[], "control":"tone"}
+]
