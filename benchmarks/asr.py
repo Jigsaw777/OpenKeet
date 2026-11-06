@@ -24,6 +24,11 @@ from audio import SPEECH_MODELS, SpeechListener
 
 RATE = SpeechListener.RATE
 VOICES = ("Microsoft David Desktop", "Microsoft Hazel Desktop", "Microsoft Zira Desktop")
+STRESS_VOICES = {
+    "Microsoft David": "en-US", "Microsoft Mark": "en-US", "Microsoft Zira": "en-US",
+    "Microsoft George": "en-GB", "Microsoft Hazel": "en-GB", "Microsoft Susan": "en-GB",
+    "Microsoft Heera": "en-IN", "Microsoft Ravi": "en-IN",
+}
 
 
 def write_json(path, data):
@@ -41,34 +46,80 @@ def read_wav(path):
         return np.frombuffer(stream.readframes(stream.getnframes()), dtype="<i2").astype(np.float32) / 32768
 
 
-def generate(output):
+def normalize_audio(path):
+    import av
+
+    resampler = av.AudioResampler(format="s16", layout="mono", rate=RATE)
+    with av.open(str(path), mode="r") as container:
+        frames = [output.to_ndarray().ravel() for frame in container.decode(audio=0)
+                  for output in resampler.resample(frame)]
+    frames.extend(output.to_ndarray().ravel() for output in resampler.resample(None))
+    return np.concatenate(frames).astype(np.float32) / 32768
+
+
+def telephone_band(samples):
+    """Simulate a low-pass 8 kHz path with G.711-style companding."""
+    cutoff = 3_400 / RATE
+    kernel = 2 * cutoff * np.sinc(2 * cutoff * np.arange(-31, 32)) * np.hamming(63)
+    narrow = np.clip(np.convolve(samples, kernel / np.sum(kernel), mode="same")[::2], -1, 1)
+    encoded = np.sign(narrow) * np.log1p(255 * np.abs(narrow)) / np.log1p(255)
+    quantized = np.rint(127 * encoded) / 127
+    decoded = np.sign(quantized) * np.expm1(np.log1p(255) * np.abs(quantized)) / 255
+    return np.interp(np.arange(len(samples)), np.arange(0, len(samples), 2), decoded).astype(np.float32)
+
+
+def control_audio(control, rng):
+    samples = np.zeros(RATE * 3, dtype=np.float32)
+    if control == "tone":
+        samples[:RATE * 2] = 0.09 * np.sin(2 * np.pi * 440 * np.arange(RATE * 2) / RATE)
+    elif control == "keyboard":
+        for start in np.linspace(0.2, 2.3, 13):
+            offset = int(RATE * start)
+            samples[offset:offset + 400] = 0.45 * rng.uniform(-1, 1, 400) * np.exp(-np.arange(400) / 60)
+    elif control == "chords":
+        for index, frequencies in enumerate(((220, 277, 330), (196, 247, 294), (262, 330, 392))):
+            times = np.arange(RATE * 3 // 4) / RATE
+            chord = sum(np.sin(2 * np.pi * hz * times) for hz in frequencies)
+            start = index * len(times)
+            samples[start:start + len(times)] = 0.05 * np.sin(np.pi * times / 0.75) * chord
+    return samples
+
+
+def generate(output, *, stress=False):
     output.mkdir(parents=True, exist_ok=True)
     jobs, entries = [], []
     rng = np.random.default_rng(20261106)
-    for fixture in read_json(ROOT / "corpus.json"):
-        for voice_index, voice in enumerate(VOICES if fixture["parts"] else (None,)):
+    voices = STRESS_VOICES if stress else VOICES
+    corpus = "stress-corpus.json" if stress else "corpus.json"
+    for fixture in read_json(ROOT / corpus):
+        for voice_index, voice in enumerate(voices if fixture["parts"] else (None,)):
             name = f'{fixture["id"]}-{voice_index}' if voice else fixture["id"]
             parts = [f"{name}-part{index}.wav" for index in range(len(fixture["parts"]))]
-            jobs.extend({"voice": voice, "rate": fixture.get("rate", 0), "file": part, "text": phrase}
+            rate = fixture.get("speaking_rate", 1) if stress else fixture.get("rate", 0)
+            jobs.extend({"voice": voice, "rate": rate, "file": part, "text": phrase}
                         for part, phrase in zip(parts, fixture["parts"]))
             entries.append((fixture, name, voice, parts))
 
     write_json(output / "synthesis.json", jobs)
-    subprocess.run(["powershell.exe", "-NoProfile", "-File", str(ROOT / "synthesize.ps1"),
+    synth_script = "synthesize-onecore.ps1" if stress else "synthesize.ps1"
+    subprocess.run(["powershell.exe", "-NoProfile", "-File", str(ROOT / synth_script),
                     "-Jobs", str(output / "synthesis.json"), "-Output", str(output)], check=True)
     manifest = []
     for fixture, name, voice, parts in entries:
         if parts:
             chunks = [np.zeros(RATE // 4, dtype=np.float32)]
             for index, part in enumerate(parts):
-                samples = read_wav(output / part)
+                samples = normalize_audio(output / part) if stress else read_wav(output / part)
                 signal = np.flatnonzero(np.abs(samples) > 0.002)
-                samples = samples[signal[0]:signal[-1] + 1]
+                start = signal[0] + RATE * fixture.get("clip_start_ms", 0) // 1000
+                samples = samples[start:signal[-1] + 1]
                 if index:
                     chunks.append(np.zeros(RATE * fixture["gap_ms"] // 1000, dtype=np.float32))
                 chunks.append(samples)
             samples = np.concatenate(chunks)
             speech_end = len(samples) / RATE
+            if fixture.get("telephone"):
+                samples = telephone_band(samples)
             if "peak" in fixture:
                 samples *= fixture["peak"] / np.max(np.abs(samples))
             if "snr_db" in fixture:
@@ -77,9 +128,7 @@ def generate(output):
             samples = np.pad(samples, (0, RATE * 3 // 2))
         else:
             speech_end = None
-            samples = np.zeros(RATE * 3, dtype=np.float32)
-            if fixture["control"] == "tone":
-                samples[:RATE * 2] = 0.09 * np.sin(2 * np.pi * 440 * np.arange(RATE * 2) / RATE)
+            samples = control_audio(fixture["control"], rng)
         path = output / f"{name}.wav"
         with wave.open(str(path), "wb") as stream:
             stream.setparams((1, 2, RATE, 0, "NONE", "not compressed"))
@@ -88,6 +137,8 @@ def generate(output):
                          "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                          "reference": " ".join(fixture["parts"]), "terms": fixture.get("terms", []),
                          "duration_s": len(samples) / RATE, "speech_end_s": speech_end})
+        if stress:
+            manifest[-1].update(locale=STRESS_VOICES.get(voice), condition=fixture["condition"])
     write_json(output / "manifest.json", manifest)
     print(f"Generated {len(manifest)} clips ({sum(x['duration_s'] for x in manifest):.1f} s)", flush=True)
 
@@ -236,7 +287,7 @@ def legacy(output, names):
         print(f"{name} {json.dumps(summary)}", flush=True)
 
 
-def rust(output, cli, model, vocabulary):
+def rust(output, cli, model, vocabulary, *, profile=False):
     manifest = read_json(output / "manifest.json")
     clips = [output / entry["file"] for entry in manifest]
     for entry, path in zip(manifest, clips):
@@ -248,11 +299,18 @@ def rust(output, cli, model, vocabulary):
     if vocabulary:
         command.extend(["--vocabulary", vocabulary])
     command.extend(map(str, clips))
-    process = subprocess.run(command, capture_output=True, encoding="utf-8",
-                             timeout=sum(entry["duration_s"] for entry in manifest) * 4 + 180)
+    timeout = sum(entry["duration_s"] for entry in manifest) * 4 + 180
+    metrics = None
+    if profile:
+        from process_metrics import measure
+
+        process, metrics = measure(command, timeout)
+    else:
+        process = subprocess.run(command, capture_output=True, encoding="utf-8", timeout=timeout)
     if process.returncode:
         raise RuntimeError(f"Rust comparator exited with {process.returncode}: {process.stderr.strip()}")
     events, rows = [], []
+    speech_segments = 0
     load_s = None
     for line in process.stdout.splitlines():
         item = json.loads(line)
@@ -260,6 +318,9 @@ def rust(output, cli, model, vocabulary):
             load_s = item["load_ms"] / 1000
         elif item["event"] == "clip_start":
             events = []
+            speech_segments = 0
+        elif item["event"] == "speech":
+            speech_segments += 1
         elif item["event"] == "transcript":
             utterance = item["utterance"]
             kind = "transcript" if utterance["stability"] == "final" else "partial_transcript"
@@ -272,6 +333,8 @@ def rust(output, cli, model, vocabulary):
             finals = [(at, data) for kind, at, data in events if kind == "transcript" and data["text"]]
             actual = " ".join(value["text"] for _, value in finals)
             rows.append({**entry, **score(entry["reference"], actual, entry["terms"]), "actual": actual,
+                         "speech_segments": speech_segments,
+                         "empty_final_segments": sum(kind == "transcript" and not data["text"] for kind, _, data in events),
                          "stable_partial_s": stable_partial(events),
                          "final_latency_s": finals[-1][0] - entry["speech_end_s"]
                          if finals and entry["speech_end_s"] is not None else None,
@@ -283,24 +346,29 @@ def rust(output, cli, model, vocabulary):
     summary = {**summarize(rows), "load_s": load_s, "wall_s_with_load": round(time.monotonic() - started, 3),
                "max_decode_queue_s": max(row["max_decode_queue_s"] for row in rows)}
     label = f"rust-{model.stem}{'-hints' if vocabulary else ''}"
-    write_json(output / f"{label}.json", {"backend": label, "vocabulary": vocabulary, "summary": summary, "clips": rows})
+    report = {"backend": label, "vocabulary": vocabulary, "summary": summary, "clips": rows}
+    if metrics:
+        report["process"] = metrics
+    write_json(output / f"{label}.json", report)
     print(f"{label} {json.dumps(summary)}", flush=True)
+    return report
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "output")
+    parser.add_argument("--output", type=Path)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("generate")
+    commands.add_parser("generate").add_argument("--stress", action="store_true")
     commands.add_parser("legacy").add_argument("--models", choices=SPEECH_MODELS, nargs="+", default=SPEECH_MODELS)
     candidate = commands.add_parser("rust")
     candidate.add_argument("--cli", type=Path, required=True)
     candidate.add_argument("--model", type=Path, required=True)
     candidate.add_argument("--vocabulary", default="")
     args = parser.parse_args()
-    output = args.output.resolve()
+    stress = getattr(args, "stress", False)
+    output = (args.output or ROOT / "output" / ("stress" if stress else "")).resolve()
     if args.command == "generate":
-        generate(output)
+        generate(output, stress=stress)
     elif args.command == "legacy":
         legacy(output, args.models)
     else:

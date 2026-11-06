@@ -1,0 +1,20 @@
+[
+  {"id":"seashells", "condition":"normal_twister", "parts":["She sells seashells by the seashore. The shells she sells are seashells, I'm sure."]},
+  {"id":"seashells-fast", "condition":"fast_twister", "parts":["She sells seashells by the seashore. The shells she sells are seashells, I'm sure."], "speaking_rate":1.65},
+  {"id":"piper", "condition":"normal_twister", "parts":["Peter Piper picked a peck of pickled peppers."]},
+  {"id":"piper-fast", "condition":"fast_twister", "parts":["Peter Piper picked a peck of pickled peppers."], "speaking_rate":1.65},
+  {"id":"swans-fast", "condition":"fast_twister", "parts":["Six sleek swans swam swiftly southwards."], "speaking_rate":1.65},
+  {"id":"lorry-fast", "condition":"fast_twister", "parts":["Red lorry, yellow lorry, red lorry, yellow lorry."], "speaking_rate":1.65},
+  {"id":"wristwatch-fast", "condition":"fast_twister", "parts":["Irish wristwatch, Swiss wristwatch."], "speaking_rate":1.65},
+  {"id":"sixth-quiet", "condition":"quiet_twister", "parts":["The sixth sick sheikh's sixth sheep's sick."], "peak":0.008},
+  {"id":"right-write", "condition":"homophones", "parts":["Write to the right file in two minutes, too."], "terms":["write", "right", "two", "too"]},
+  {"id":"cash-cache-noise", "condition":"noise", "parts":["Compare the cache hit rate with cash flow for the same quarter."], "terms":["cache hit", "cash flow"], "snr_db":8},
+  {"id":"tech-telephone", "condition":"telephone", "parts":["Explain an Android coroutine deadlock, a QNX priority inversion, and a WASAPI buffer underrun."], "terms":["Android", "coroutine", "QNX", "WASAPI", "underrun"], "telephone":true},
+  {"id":"copper-clipped", "condition":"clipped_twister", "parts":["A proper copper coffee pot."], "clip_start_ms":80},
+  {"id":"why-fast", "condition":"one_word", "parts":["Why?"], "speaking_rate":1.4},
+  {"id":"correction-pause", "condition":"late_correction", "parts":["Should I use a semaphore?", "Actually, I meant a mutex."], "terms":["semaphore", "mutex"], "gap_ms":1600},
+  {"id":"silence", "condition":"control", "parts":[], "control":"silence"},
+  {"id":"tone", "condition":"control", "parts":[], "control":"tone"},
+  {"id":"keyboard", "condition":"control", "parts":[], "control":"keyboard"},
+  {"id":"chords", "condition":"control", "parts":[], "control":"chords"}
+]

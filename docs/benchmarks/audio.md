@@ -1,5 +1,7 @@
 # Windows audio comparator
 
+See the [interview stress and resource comparison](interview-stress.md) for tongue twisters, synthetic accents, and paired Python/Rust memory and CPU measurements.
+
 ## Reproduce
 
 From the repository root with the legacy dependencies and model caches already installed:
