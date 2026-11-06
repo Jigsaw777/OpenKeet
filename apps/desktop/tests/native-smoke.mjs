@@ -118,6 +118,7 @@ try {
     await select.selectOption(await output.getAttribute("value"));
     await page.getByLabel("Speech model file").fill(process.env.COPILOT_TEST_MODEL);
     await page.getByLabel("Optional vocabulary").fill("LRU cache, Java");
+    assert.equal(await page.getByRole("checkbox", { name: "Automatically suggest practice answers" }).isChecked(), false);
     await page.getByRole("checkbox", { name: "I have permission to capture this source." }).check();
     await page.getByRole("button", { name: "Start local capture" }).click();
     await page.getByRole("status").filter({ hasText: /^Listening$/ }).waitFor();
@@ -127,11 +128,18 @@ try {
     const [exit] = await once(playback, "exit");
     assert.equal(exit, 0, "Synthetic system playback must finish.");
     await page.getByRole("region", { name: "Transcript timeline" }).locator(".line.final").filter({ hasText: /cache.*java/i }).waitFor();
+    await wait(3_400);
+    assert.equal(await page.getByText("Checked", { exact: true }).count(), 0);
+    await page.getByRole("button", { name: "Suggest answer", exact: true }).click();
     await page.getByText("Checked", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: /^Paused$/ }).waitFor();
+    await page.getByRole("button", { name: "Resume", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: /^Listening$/ }).waitFor();
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await page.getByRole("status").filter({ hasText: /^Session ended$/ }).waitFor();
     await page.getByRole("button", { name: "Clear current session" }).click();
-    console.log("Installed app captured the synthetic WASAPI clip and checked its question.");
+    console.log("Desktop captured WASAPI playback, respected manual answer mode, and paused and resumed capture.");
   }
 
   await page.getByRole("button", { name: "Audio setup", exact: true }).click();

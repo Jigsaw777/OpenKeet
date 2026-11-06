@@ -3,7 +3,8 @@ use copilot_core::{
     Span, Stability, Utterance, rehearsal,
 };
 
-fn setup(policy: Policy) -> Session {
+fn setup(mut policy: Policy) -> Session {
+    policy.auto_answer = true;
     let mut session = Session::new(17, Source::REPLAY, policy);
     session.set_capture(CaptureState::Capturing, 0);
     session
@@ -33,6 +34,112 @@ fn final_text(session: &mut Session, id: u64, start: u64, end: u64, text: &str) 
     session
         .ingest(transcript(id, 1, start, end, Stability::Final, text))
         .unwrap();
+}
+
+#[test]
+fn default_policy_detects_without_asking_and_manual_request_keeps_the_same_revision() {
+    let mut session = Session::new(1, Source::REPLAY, Policy::default());
+    final_text(&mut session, 1, 100, 900, "Explain an inner join.");
+    assert!(session.next_request(8_000).is_none());
+    let original = session.snapshot().question.unwrap();
+    session.request_detected().unwrap();
+    let work = session.next_request(8_000).unwrap();
+    assert_eq!(work.request.key.question_id, original.id);
+    assert_eq!(work.request.key.revision, original.revision);
+    assert!(session.request_detected().is_err());
+    final_text(
+        &mut session,
+        2,
+        3_000,
+        3_900,
+        "but select only two columns.",
+    );
+    assert!(work.is_cancelled());
+    assert!(!session.complete(work.request.key, 8_100, Ok("obsolete".into())));
+    assert!(session.next_request(8_200).is_none());
+    session.request_detected().unwrap();
+    rehearsal::answer_available(&mut session, 8_300);
+    let history = session.snapshot().history;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].answer.key.revision, 2);
+    assert!(
+        history[0]
+            .question
+            .ends_with("but select only two columns.")
+    );
+}
+
+#[test]
+fn repeated_final_is_visible_in_transcript_without_another_answer() {
+    let mut session = setup(Policy::default());
+    final_text(
+        &mut session,
+        1,
+        100,
+        900,
+        "How does an API rate limiter work?",
+    );
+    rehearsal::answer_available(&mut session, 4_200);
+    final_text(
+        &mut session,
+        2,
+        4_300,
+        5_000,
+        "how does an API rate limiter work.",
+    );
+    rehearsal::answer_available(&mut session, 9_000);
+    let snapshot = session.snapshot();
+    assert_eq!(snapshot.transcript.len(), 2);
+    assert_eq!(snapshot.history.len(), 1);
+}
+
+#[test]
+fn manual_listening_continues_after_the_unanswered_question_window_fills() {
+    let mut session = Session::new(1, Source::REPLAY, Policy::default());
+    for n in 1..=40 {
+        final_text(
+            &mut session,
+            n,
+            n * 1_000,
+            n * 1_000 + 100,
+            &format!("Explain case {n}."),
+        );
+    }
+    assert_eq!(session.snapshot().transcript.len(), 40);
+    assert!(session.next_request(50_000).is_none());
+    session.request_detected().unwrap();
+    assert_eq!(
+        session.next_request(50_000).unwrap().request.question,
+        "Explain case 40."
+    );
+}
+
+#[test]
+fn short_live_question_settles_earlier_but_open_speech_blocks_it() {
+    let mut session = Session::new(
+        1,
+        Source {
+            kind: copilot_core::SourceKind::Microphone,
+            endpoint_id: Some("mic".into()),
+        },
+        Policy {
+            auto_answer: true,
+            ..Policy::default()
+        },
+    );
+    final_text(&mut session, 1, 100, 900, "What is a semaphore?");
+    assert!(session.next_request(3_699).is_none());
+    session.observe_speech(2, Span::at(3_400)).unwrap();
+    assert!(session.next_request(3_700).is_none());
+    final_text(
+        &mut session,
+        2,
+        3_400,
+        4_100,
+        "specifically in a kernel scheduler?",
+    );
+    assert!(session.next_request(6_899).is_none());
+    assert!(session.next_request(7_300).is_some());
 }
 
 #[test]

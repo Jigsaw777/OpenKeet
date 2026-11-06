@@ -19,6 +19,7 @@ export function AudioSetup({ view, enabled, start, showError, zoom, setZoom }: {
   const [vocabulary, setVocabulary] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [consent, setConsent] = useState(false);
+  const [autoAnswer, setAutoAnswer] = useState(false);
   const selectedDevice = endpoints.find(device => device.id === selected);
   const busy = view.loading || view.stopping || ["paused", "capturing"].includes(view.session.capture);
   const metrics = view.audio_metrics;
@@ -81,9 +82,10 @@ export function AudioSetup({ view, enabled, start, showError, zoom, setZoom }: {
       <section className="card setup-card" aria-labelledby="test-heading">
         <p className="eyebrow">03 / Test</p><h2 id="test-heading">Test your input</h2>
         <p>After starting, play a test clip on the selected output or speak into your chosen microphone. The workspace shows the meter and transcript.</p>
-        <label className="checkbox"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> I have permission to capture this source.</label>
+        <label className="checkbox"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} /> I have permission to capture this source.</label>
+        <label className="checkbox"><input type="checkbox" checked={autoAnswer} disabled={busy} onChange={event => setAutoAnswer(event.target.checked)} /> Automatically suggest practice answers</label>
         <button className="primary" disabled={!enabled || busy || !selectedDevice || !model.trim() || !consent} onClick={() => {
-          if (selectedDevice) void start({ source: { kind: selectedDevice.kind, endpoint_id: selectedDevice.id }, model_path: model.trim(), vocabulary: vocabulary.trim() });
+          if (selectedDevice) void start({ source: { kind: selectedDevice.kind, endpoint_id: selectedDevice.id }, model_path: model.trim(), vocabulary: vocabulary.trim(), auto_answer: autoAnswer, consent });
         }}>Start local capture <Icon name="arrow" /></button>
       </section>
       <section className="card setup-card" aria-labelledby="local-heading">

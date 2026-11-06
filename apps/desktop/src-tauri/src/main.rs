@@ -59,6 +59,19 @@ fn ask(app: AppHandle, state: State<'_, Shared>, question: String) -> Result<Vie
 }
 
 #[tauri::command]
+fn request_detected(app: AppHandle, state: State<'_, Shared>) -> Result<View, String> {
+    update(&app, &state, Desktop::request_detected)
+}
+
+#[tauri::command]
+fn cancel_answer(app: AppHandle, state: State<'_, Shared>) -> Result<View, String> {
+    update(&app, &state, |desktop| {
+        desktop.cancel_answer();
+        Ok(())
+    })
+}
+
+#[tauri::command]
 fn use_transcript(state: State<'_, Shared>) -> Result<String, String> {
     state
         .lock()
@@ -138,6 +151,8 @@ fn main() {
             pause_capture,
             stop_capture,
             ask,
+            request_detected,
+            cancel_answer,
             use_transcript,
             clear_session,
             open_focus,

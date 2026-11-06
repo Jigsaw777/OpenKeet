@@ -56,7 +56,7 @@ export type DesktopView = {
   stopping: boolean;
 };
 export type Endpoint = { id: string; name: string; kind: SourceKind; is_default: boolean };
-export type CaptureConfig = { source: Source; model_path: string; vocabulary: string };
+export type CaptureConfig = { source: Source; model_path: string; vocabulary: string; auto_answer: boolean; consent: boolean };
 
 export const emptyView: DesktopView = {
   update: -1,

@@ -29,6 +29,10 @@ pub struct CaptureConfig {
     source: Source,
     model_path: String,
     vocabulary: String,
+    #[serde(default)]
+    auto_answer: bool,
+    #[serde(default)]
+    consent: bool,
 }
 
 struct Replay {
@@ -144,6 +148,7 @@ impl Desktop {
         let steps: VecDeque<Step> = serde_json::from_str(rehearsal::DEMO_JSON)
             .map_err(|_| "Could not read the bundled sample.")?;
         let policy = Policy {
+            auto_answer: true,
             draft_after_ms: Some(600),
             ..Policy::default()
         };
@@ -162,6 +167,9 @@ impl Desktop {
 
     fn begin_audio(&mut self, config: Option<CaptureConfig>) -> Result<Job, String> {
         if let Some(config) = config {
+            if !config.consent {
+                return Err("Confirm that you have permission to capture this source.".into());
+            }
             if !matches!(
                 config.source.kind,
                 SourceKind::SystemOutput | SourceKind::Microphone
@@ -175,7 +183,11 @@ impl Desktop {
             {
                 return Err("Choose a Windows audio endpoint and a local speech model.".into());
             }
-            self.reset(Mode::Audio, config.source.clone(), Policy::default())?;
+            let policy = Policy {
+                auto_answer: config.auto_answer,
+                ..Policy::default()
+            };
+            self.reset(Mode::Audio, config.source.clone(), policy)?;
             self.config = Some(config);
         } else if self.audio.is_some() || self.session.snapshot().capture != CaptureState::Paused {
             return Err("Pause capture before resuming it.".into());
@@ -238,6 +250,14 @@ impl Desktop {
 
     pub fn full_transcript(&self) -> Result<String, String> {
         self.session.full_transcript().map_err(Into::into)
+    }
+
+    pub fn request_detected(&mut self) -> Result<(), String> {
+        self.session.request_detected().map_err(Into::into)
+    }
+
+    pub fn cancel_answer(&mut self) {
+        self.session.cancel_answer();
     }
 
     pub fn clear(&mut self) -> Result<(), String> {
@@ -461,6 +481,8 @@ mod tests {
                 },
                 model_path: "ggml-small.en.bin".into(),
                 vocabulary: String::new(),
+                auto_answer: false,
+                consent: true,
             }))
             .unwrap()
     }

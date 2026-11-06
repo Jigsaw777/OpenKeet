@@ -178,6 +178,17 @@ pub(crate) fn relation(
     ) {
         return Relation::Ignore;
     }
+    if [
+        "who knows",
+        "i'm thinking out loud",
+        "just thinking out loud",
+        "you know what i mean",
+    ]
+    .iter()
+    .any(|cue| starts_with(head, cue))
+    {
+        return Relation::Ignore;
+    }
     let ask = head
         .trim_start_matches("and ")
         .trim_start_matches("actually ");
@@ -215,6 +226,9 @@ pub(crate) fn relation(
     let follow_up = ask == "why" || FOLLOW_UPS.iter().any(|prefix| starts_with(ask, prefix));
     let scenario = scenario_prompt(&text);
     if let Some((prior, gap)) = previous {
+        if gap <= merge_ms && normalized(prior) == text {
+            return Relation::Ignore;
+        }
         if gap <= merge_ms.max(15_000) && CORRECTIONS.iter().any(|prefix| starts_with(head, prefix))
         {
             return Relation::Continue;
@@ -235,5 +249,171 @@ pub(crate) fn relation(
         Relation::New
     } else {
         Relation::Ignore
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn distinct_question_boundary_scenarios() {
+        use Relation::*;
+        let cases = [
+            (None, "What is a trie?", New),
+            (None, "How do you configure Gradle", New),
+            (None, "Explain priority inversion.", New),
+            (None, "Walk me through memory ordering.", New),
+            (None, "Could you explain the plan?", New),
+            (None, "Describe your cache policy.", New),
+            (None, "Compare two thread pools.", New),
+            (None, "Design a message broker.", New),
+            (None, "Tell me about CRDTs.", New),
+            (None, "Suppose a partition lasts an hour.", New),
+            (None, "Can a transaction see that row?", New),
+            (None, "Where are the checkpoints stored", New),
+            (None, "The deadline is next week.", Ignore),
+            (None, "Right, okay.", Ignore),
+            (None, "Uh-huh.", Ignore),
+            (None, "I'm thinking out loud, was that viable?", Ignore),
+            (None, "Who knows where the packet went?", Ignore),
+            (None, "I was implementing a database.", Ignore),
+            (None, "We deploy to staging on Fridays.", Ignore),
+            (None, "You know what I mean?", Ignore),
+            (None, "Just thinking out loud, why bother?", Ignore),
+            (None, "Yes.", Ignore),
+            (
+                Some(("What is the difference between", 2_000)),
+                "an index scan and a table scan?",
+                Continue,
+            ),
+            (
+                Some(("What is the behavior when", 3_500)),
+                "all workers are busy?",
+                Continue,
+            ),
+            (
+                Some(("Explain a reader lock", 2_100)),
+                "without starving writers.",
+                Continue,
+            ),
+            (
+                Some(("Show the command", 2_000)),
+                "with the transaction ID.",
+                Continue,
+            ),
+            (
+                Some(("How does the coordinator work?", 3_000)),
+                "but assume the leader fails.",
+                Continue,
+            ),
+            (
+                Some(("What is an LRU cache?", 2_400)),
+                "specifically under high contention.",
+                Continue,
+            ),
+            (
+                Some(("Can you compare SQL and Redis?", 4_000)),
+                "also consider eventual consistency.",
+                Continue,
+            ),
+            (
+                Some(("Explain a ring buffer.", 8_000)),
+                "Actually, I meant a bounded queue.",
+                Continue,
+            ),
+            (
+                Some(("Tell me about HTTPS.", 13_000)),
+                "Sorry, I meant HTTP/3.",
+                Continue,
+            ),
+            (
+                Some(("Imagine there are two writers.", 3_000)),
+                "How would they serialize changes?",
+                Continue,
+            ),
+            (Some(("Explain a mutex.", 5_100)), "Why?", FollowUp),
+            (
+                Some(("Compare queues.", 6_000)),
+                "What about a channel?",
+                FollowUp,
+            ),
+            (
+                Some(("Design a pipeline.", 8_000)),
+                "What if it stalls?",
+                FollowUp,
+            ),
+            (
+                Some(("What is a sort key?", 4_100)),
+                "How about compound indexes?",
+                FollowUp,
+            ),
+            (
+                Some(("Describe a latch.", 7_500)),
+                "How does that scale?",
+                FollowUp,
+            ),
+            (
+                Some(("Compare four providers.", 6_900)),
+                "Which one has lower latency?",
+                FollowUp,
+            ),
+            (
+                Some(("How do retries work?", 6_000)),
+                "Could you elaborate on jitter?",
+                FollowUp,
+            ),
+            (
+                Some(("Describe read locks.", 10_000)),
+                "Can you give an example?",
+                FollowUp,
+            ),
+            (
+                Some(("Why use SQLite?", 9_000)),
+                "Why did you choose SQLite?",
+                FollowUp,
+            ),
+            (
+                Some(("What is that isolation level?", 15_000)),
+                "Would that block readers?",
+                FollowUp,
+            ),
+            (
+                Some(("What is a mutex?", 1_000)),
+                "what is a MUTEX.",
+                Ignore,
+            ),
+            (
+                Some(("Explain an inner join.", 2_400)),
+                "Explain an inner join?",
+                Ignore,
+            ),
+            (Some(("Design a queue.", 3_000)), "DESIGN A QUEUE!", Ignore),
+            (
+                Some(("Tell me about Go.", 5_000)),
+                "Tell me about go?",
+                Ignore,
+            ),
+            (Some(("Explain a mutex.", 5_001)), "Explain a mutex.", New),
+            (
+                Some(("Compare two indexes.", 600)),
+                "Next question, what is a bitmap?",
+                New,
+            ),
+            (
+                Some(("Discuss latency.", 120_001)),
+                "What if the host fails?",
+                New,
+            ),
+            (
+                Some(("Explain an index.", 2_000)),
+                "Switching topics, explain TLS.",
+                New,
+            ),
+        ];
+        assert_eq!(cases.len(), 50);
+        for (previous, next, expected) in cases {
+            assert_eq!(relation(previous, next, 5_000, 120_000), expected, "{next}");
+        }
     }
 }

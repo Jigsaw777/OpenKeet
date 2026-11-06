@@ -21,6 +21,7 @@ fn replay(path: Option<String>) -> Result<(), Box<dyn Error>> {
     };
     let steps: Vec<Step> = serde_json::from_str(&script)?;
     let policy = Policy {
+        auto_answer: true,
         draft_after_ms: Some(600),
         ..Policy::default()
     };

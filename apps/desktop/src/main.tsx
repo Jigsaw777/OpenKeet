@@ -114,7 +114,7 @@ function App() {
       <div className="focus-status"><Status view={view} />
         <button aria-pressed={pinned} onClick={async () => { if (await command("pin_focus", { pinned: !pinned })) setPinned(!pinned); }}>{pinned ? "Unpin" : "Pin"}</button></div></header>
     <div className="focus-route"><p className="subtle">{sourceLabel(session.source.kind)} · Local practice</p><CaptureControls view={view} command={command} /></div>
-    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} compact
+    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} compact
       footer={<button onClick={() => void command("show_workspace")}>Open workspace <Icon name="arrow" /></button>} />
   </main>;
 
@@ -157,7 +157,7 @@ function App() {
             <button aria-pressed={layout === "answer"} onClick={() => setLayout("answer")}>Answer view</button>
           </div></div>
         <div className={`live-grid ${layout === "answer" ? "answer-view" : ""}`}><Transcript session={session} useTranscript={() => void useTranscript()} hidden={layout === "answer"} />
-          <AnswerPanel question={session.question} copy={text => void copy(text)} /></div>
+          <AnswerPanel question={session.question} copy={text => void copy(text)} command={command} /></div>
         <form className="card prompt" onSubmit={submit}><label htmlFor="manual-question">Ask a practice question</label>
           <div className="prompt-row"><textarea id="manual-question" ref={promptInput} rows={2} maxLength={64000} value={prompt} placeholder="Type or review a question…" onChange={event => setPrompt(event.target.value)} />
             <button className="primary" disabled={!desktop || !prompt.trim()} type="submit">Suggest <Icon name="arrow" /></button></div></form>

@@ -19,6 +19,7 @@ const MAX_EVENTS: usize = 128;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Policy {
+    pub auto_answer: bool,
     pub debounce_ms: u64,
     pub continuation_ms: u64,
     pub follow_up_ms: u64,
@@ -29,6 +30,7 @@ pub struct Policy {
 impl Default for Policy {
     fn default() -> Self {
         Self {
+            auto_answer: false,
             debounce_ms: 3_200,
             continuation_ms: 5_000,
             follow_up_ms: 120_000,
@@ -65,6 +67,7 @@ struct Question {
     view: QuestionView,
     closed: bool,
     drafted: bool,
+    requested: bool,
 }
 
 pub struct Session {
@@ -321,6 +324,29 @@ impl Session {
         Ok(())
     }
 
+    pub fn request_detected(&mut self) -> Result<(), &'static str> {
+        let q = self
+            .questions
+            .back_mut()
+            .ok_or("Wait for a detected question.")?;
+        if q.view.source.kind == SourceKind::Typed
+            || !matches!(
+                q.view.phase,
+                QuestionPhase::Candidate
+                    | QuestionPhase::Incomplete
+                    | QuestionPhase::Waiting
+                    | QuestionPhase::Cancelled
+                    | QuestionPhase::Error
+            )
+        {
+            return Err("This question already has an answer or is waiting for one.");
+        }
+        q.requested = true;
+        let id = q.view.id;
+        self.phase(id, QuestionPhase::Ready);
+        Ok(())
+    }
+
     pub fn next_request(&mut self, now_ms: u64) -> Option<Work> {
         self.settle();
         if let Some(pending) = &self.pending {
@@ -337,16 +363,17 @@ impl Session {
         }
 
         let eligible = |q: &Question| {
-            matches!(
-                q.view.phase,
-                QuestionPhase::Candidate | QuestionPhase::Waiting | QuestionPhase::Ready
-            )
+            (self.policy.auto_answer || q.requested)
+                && matches!(
+                    q.view.phase,
+                    QuestionPhase::Candidate | QuestionPhase::Waiting | QuestionPhase::Ready
+                )
         };
         let ready = self
             .questions
             .iter()
             .filter(|q| eligible(q) && self.ready(q.view.id, now_ms))
-            .min_by_key(|q| (q.view.source.kind != SourceKind::Typed, q.view.id));
+            .min_by_key(|q| (!q.requested, q.view.id));
         let (id, mode) = if let Some(q) = ready {
             (q.view.id, AnswerMode::Checked)
         } else {
@@ -521,6 +548,7 @@ impl Session {
                 q.view.text.push_str(&utterance.text);
                 q.view.span.end_ms = q.view.span.end_ms.max(utterance.span.end_ms);
                 q.view.revision += 1;
+                q.requested = false;
                 let revision = q.view.revision;
                 let phase = if boundary::incomplete(&q.view.text) {
                     QuestionPhase::Incomplete
@@ -546,13 +574,14 @@ impl Session {
     ) -> Result<u64, &'static str> {
         if self.questions.len() == MAX_QUESTIONS {
             let Some(index) = self.questions.iter().position(|q| {
-                matches!(
-                    q.view.phase,
-                    QuestionPhase::Checked
-                        | QuestionPhase::Incomplete
-                        | QuestionPhase::Cancelled
-                        | QuestionPhase::Error
-                )
+                (!self.policy.auto_answer && !q.requested && q.closed)
+                    || matches!(
+                        q.view.phase,
+                        QuestionPhase::Checked
+                            | QuestionPhase::Incomplete
+                            | QuestionPhase::Cancelled
+                            | QuestionPhase::Error
+                    )
             }) else {
                 return Err(
                     "Too many unanswered questions. Cancel the pending answer or wait for it to finish.",
@@ -572,6 +601,7 @@ impl Session {
         self.questions.push_back(Question {
             closed: manual,
             drafted: false,
+            requested: manual,
             view: QuestionView {
                 id,
                 revision: 1,
@@ -636,8 +666,19 @@ impl Session {
             .iter()
             .find(|q| q.view.id == id)
             .is_some_and(|q| {
+                let mut debounce = self.policy.debounce_ms;
+                if matches!(
+                    q.view.source.kind,
+                    SourceKind::SystemOutput | SourceKind::Microphone
+                ) && q.view.text.ends_with('?')
+                    && q.view.revision == 1
+                    && q.view.span.end_ms.saturating_sub(q.view.span.start_ms) <= 5_000
+                {
+                    // Explicit, short questions can settle sooner than corrected or lengthy speech.
+                    debounce -= debounce / 8;
+                }
                 q.closed
-                    || (now_ms.saturating_sub(q.view.span.end_ms) >= self.policy.debounce_ms
+                    || ((q.requested || now_ms.saturating_sub(q.view.span.end_ms) >= debounce)
                         && !self.speech_pending(q))
             })
     }

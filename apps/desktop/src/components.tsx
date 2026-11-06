@@ -80,10 +80,13 @@ const phases: Record<Question["phase"], string> = {
   error: "Needs attention",
 };
 
-export function AnswerPanel({ question, copy, compact = false, footer }: {
-  question: Question | null; copy: (text: string) => void; compact?: boolean; footer?: ReactNode;
+export function AnswerPanel({ question, copy, command, compact = false, footer }: {
+  question: Question | null; copy: (text: string) => void; command: Command; compact?: boolean; footer?: ReactNode;
 }) {
   const answer = question?.answer;
+  const canRequest = question && question.source.kind !== "typed" &&
+    ["candidate", "waiting", "incomplete", "cancelled", "error"].includes(question.phase);
+  const canCancel = question && ["answering", "drafting"].includes(question.phase);
   const scroll = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = 0; }, [question?.id, question?.revision]);
   const label = answer?.status === "checked" ? "Checked" : answer?.status === "provisional" ? "Draft" : answer?.status === "superseded" ? "Superseded" : "Awaiting question";
@@ -109,7 +112,9 @@ export function AnswerPanel({ question, copy, compact = false, footer }: {
         {answer.status === "superseded" && <p className="subtle">Updating for the latest question.</p>}</> :
         <Empty label="An outline when you need it" detail="The offline practice responder supplies example answers." />}
     </div>
-    <div className="card-foot"><button disabled={answer?.status !== "checked"} onClick={() => answer && copy(answer.text)}>Copy answer</button>{footer}</div>
+    <div className="card-foot">{canCancel ? <button onClick={() => void command("cancel_answer")}>Cancel answer</button>
+      : canRequest ? <button onClick={() => void command("request_detected")}>Suggest answer</button>
+      : <button disabled={answer?.status !== "checked"} onClick={() => answer && copy(answer.text)}>Copy answer</button>}{footer}</div>
   </section>;
 }
 
