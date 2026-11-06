@@ -6,26 +6,26 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AudioSetup } from "./audio-setup";
 import { AnswerPanel, CaptureControls, Empty, Icon, Mark, Status, Transcript } from "./components";
+import { Overview } from "./overview";
 import { acceptView, emptyView, sourceLabel } from "./protocol";
 import type { DesktopView, Session } from "./protocol";
+import { AppShell } from "./workspace-shell";
+import type { Page, Theme } from "./workspace-shell";
 import "./style.css";
 
 const focusWindow = new URLSearchParams(location.search).has("focus");
 const desktop = isTauri();
-type Page = "overview" | "session" | "audio";
-
-const navigation = [
-  { id: "overview", label: "Overview", icon: "home" },
-  { id: "session", label: "Live workspace", icon: "wave" },
-  { id: "audio", label: "Audio setup", icon: "settings" },
-] as const;
+function storedTheme(): Theme {
+  const theme = localStorage.getItem("copilot-theme");
+  return theme === "light" || theme === "system" ? theme : "dark";
+}
 
 function App() {
   const [view, setView] = useState(emptyView);
   const [page, setPage] = useState<Page>("overview");
   const [layout, setLayout] = useState<"split" | "answer">("split");
   const [audioOpened, setAudioOpened] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">(localStorage.getItem("copilot-theme") === "light" ? "light" : "dark");
+  const [theme, setTheme] = useState<Theme>(storedTheme);
   const [zoom, setZoom] = useState(localStorage.getItem("text-scale") || "100");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -58,10 +58,20 @@ function App() {
   }, [receive]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const system = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => { document.documentElement.dataset.theme = theme === "system" ? (system.matches ? "dark" : "light") : theme; };
+    apply();
     localStorage.setItem("copilot-theme", theme);
-    if (desktop) void getCurrentWindow().setTheme(theme).catch(problem => setError(String(problem)));
+    if (desktop) void getCurrentWindow().setTheme(theme === "system" ? null : theme).catch(problem => setError(String(problem)));
+    if (theme === "system") system.addEventListener("change", apply);
+    return () => system.removeEventListener("change", apply);
   }, [theme]);
+
+  useEffect(() => {
+    const syncTheme = (event: StorageEvent) => { if (event.key === "copilot-theme") setTheme(storedTheme()); };
+    window.addEventListener("storage", syncTheme);
+    return () => window.removeEventListener("storage", syncTheme);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.zoom = zoom;
@@ -118,33 +128,10 @@ function App() {
       footer={<button onClick={() => void command("show_workspace")}>Open workspace <Icon name="arrow" /></button>} />
   </main>;
 
-  return <div className="app-shell">
-    <a className="skip" href="#main-content">Skip to content</a>
-    <aside className="rail" aria-label="Workspace navigation">
-      <div className="brand"><Mark /><div><strong>Personal Copilot</strong><span>INTERVIEW STUDIO</span></div></div>
-      <nav aria-label="Workspace"><p className="eyebrow">Workspace</p>{navigation.map(item =>
-        <button key={item.id} aria-current={page === item.id ? "page" : undefined} onClick={() => setPage(item.id)}><Icon name={item.icon} />{item.label}</button>)}</nav>
-      <div className="rail-foot"><Icon name="lock" /><div><strong>Private workspace</strong><span>Local processing</span></div></div>
-    </aside>
-    <main id="main-content" tabIndex={-1} className="main">
-      <header className="topbar"><div><span className="subtle">Workspace</span><span className="crumb-divider">/</span><strong>{navigation.find(item => item.id === page)?.label}</strong></div>
-        <div className="top-actions"><span className="pill"><i />On this device</span><button className="icon-button" title="Toggle light or dark theme" aria-label="Toggle light or dark theme" aria-pressed={theme === "dark"} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}><Icon name="sun" /></button></div></header>
+  return <AppShell page={page} navigate={setPage} theme={theme} setTheme={setTheme}>
       {feedback}
       {!desktop && <p className="notice" role="status">Open the desktop app to run the Rust engine.</p>}
-      {page === "overview" && <div className="page-stack">
-        <section className="hero" aria-labelledby="hero-title">
-          <div className="hero-content"><p className="eyebrow">Your interview studio</p><h1 id="hero-title">Make room for<br /> <em>better answers.</em></h1>
-            <p>Rehearse a conversation, review the transcript, and build an answer at your own pace.</p>
-            <div className="hero-actions"><button className="hero-primary" disabled={!desktop || running} onClick={() => void sample()}>Run sample session <Icon name="arrow" /></button>
-              <button className="hero-secondary" onClick={() => setPage("audio")}>Set up audio</button></div></div>
-          <div className="hero-art" aria-hidden="true"><span className="ring ring-outer" /><span className="ring ring-inner" />
-            <svg viewBox="0 0 248 104" fill="none"><path d="M0 52h19l13-12 10 19 17-30 11 36 14-52 15 74 14-67 14 86 15-101 13 70 11-48 13 36 12-20 8 12h37" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg><span className="art-caption">LOCAL SIGNAL / 01</span></div>
-        </section>
-        <div className="overview-grid"><section className="card overview-card"><div className="card-symbol"><Icon name="wave" /></div>
-          <div><p className="eyebrow">Practice toolkit</p><h2>Capture readiness</h2><p>Pick a system output or microphone and test a local speech model.</p><button className="text-button" onClick={() => setPage("audio")}>Open audio setup <Icon name="arrow" /></button></div></section>
-          <section className="card overview-card"><div className="card-symbol"><Icon name="clock" /></div>
-            <div><p className="eyebrow">This workspace</p><h2>Session history</h2><p>{session.history.length ? `${session.history.length} checked ${session.history.length === 1 ? "answer" : "answers"} in this session.` : "Checked answers appear after a session starts."}</p><button className="text-button" onClick={() => setPage("session")}>Open live workspace <Icon name="arrow" /></button></div></section></div>
-      </div>}
+      {page === "overview" && <Overview view={view} navigate={setPage} sample={() => void sample()} canStart={desktop && !running} />}
       {page === "session" && <div className="page-stack live-page">
         <div className="page-title live-title"><div><p className="eyebrow">Practice session</p><h1>Live workspace</h1></div>
           <div className="live-controls"><Status view={view} /><CaptureControls view={view} command={command} />
@@ -168,8 +155,7 @@ function App() {
         <AudioSetup view={view} enabled={desktop} zoom={zoom} setZoom={setZoom} showError={setError}
           start={async config => { if (!await command("start_capture", { config })) return false; setPrompt(""); setPage("session"); return true; }} />
       </div>}
-    </main>
-  </div>;
+  </AppShell>;
 }
 
 function History({ session }: { session: Session }) {

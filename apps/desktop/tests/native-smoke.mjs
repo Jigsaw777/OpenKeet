@@ -40,7 +40,7 @@ try {
   const page = context.pages()[0] || await context.waitForEvent("page");
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
-  await page.getByRole("heading", { name: "Make room for better answers." }).waitFor();
+  await page.getByRole("heading", { name: "Session overview" }).waitFor();
   await page.locator('html[data-theme="dark"]').waitFor({ state: "attached" });
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
   await page.screenshot({ path: join(output, "first-run.png"), animations: "disabled" });
@@ -148,11 +148,25 @@ try {
   await page.setViewportSize({ width: 650, height: 780 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: join(output, "first-run-narrow-150.png"), animations: "disabled" });
-  const theme = page.getByRole("button", { name: "Toggle light or dark theme" });
-  await theme.click();
+  const theme = page.getByLabel("Appearance");
+  await theme.selectOption("light");
   await page.locator('html[data-theme="light"]').waitFor({ state: "attached" });
-  await theme.click();
+  await page.screenshot({ path: join(output, "overview-light.png"), animations: "disabled" });
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  await theme.selectOption("system");
   await page.locator('html[data-theme="dark"]').waitFor({ state: "attached" });
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await page.locator('html[data-theme="light"]').waitFor({ state: "attached" });
+  await theme.selectOption("dark");
+  await page.locator('html[data-theme="dark"]').waitFor({ state: "attached" });
+  for (const scale of ["100", "125", "150", "200"]) {
+    await page.getByRole("button", { name: "Audio setup", exact: true }).click();
+    await page.getByLabel("Text size").selectOption(scale);
+    for (const [width, height] of [[1366, 768], [1920, 1080], [2560, 1440], [3840, 2160]]) {
+      await page.setViewportSize({ width: Math.round(width * 100 / Number(scale)), height: Math.round(height * 100 / Number(scale)) });
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Audio setup overflow at ${width} × ${height}, ${scale}%.`);
+    }
+  }
   assert.deepEqual(errors, []);
   console.log("Native WebView2 smoke passed. Screenshots in target/ui-smoke.");
 } finally {
