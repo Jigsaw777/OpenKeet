@@ -1,0 +1,23 @@
+# Paired ASR process comparison
+
+One sequential run per engine, 25 clips. Manifest SHA-256 `45e8b4f60facb7ce49549f812c86995d36998478732eaf15eee754948cdb57b9`. WER/CER differences are percentage points. The table excludes desktop UI and LLM costs.
+
+| Metric | Unit | Python A | Current B | Optimized C | C − A | C − B |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Final latency p50 (16 common clips) | s | 4.92 | 1.546 | 1.557 | -3.363 | 0.011 |
+| Final latency p95 (16 common clips) | s | 6.308 | 2.224 | 2.232 | -4.076 | 0.008 |
+| Stable preview latency p50 (13 common clips) | s | 5.75 | 2.146 | 2.141 | -3.609 | -0.005 |
+| Stable preview latency p95 (13 common clips) | s | 9.0 | 4.943 | 4.942 | -4.058 | -0.001 |
+| Process CPU | s | 631.703 | 206.719 | 204.656 | -427.047 | -2.063 |
+| Process wall time | s | 197.844 | 143.719 | 143.391 | -54.453 | -0.328 |
+| Peak resident working set | MiB | 711.9 | 947.7 | 947.7 | 235.8 | 0.0 |
+| Median resident working set | MiB | 478.0 | 690.0 | 690.3 | 212.3 | 0.3 |
+| Peak private commit | MiB | 2907.3 | 1306.7 | 1306.8 | -1600.5 | 0.1 |
+| Model load | s | 1.765 | 0.829 | 0.601 | -1.164 | -0.228 |
+| Word error rate | % | 16.67 | 16.2 | 16.2 | -0.47 | 0.0 |
+| Character error rate | % | 12.84 | 5.0 | 5.0 | -7.84 | 0.0 |
+| Technical term matches | matches | 19 | 17 | 17 | -2 | 0 |
+| Missed speech clips | clips | 5 | 0 | 0 | -5 | 0 |
+| False transcripts in controls | clips | 0 | 1 | 1 | 1 | 0 |
+| Reported frame queue drops | events | 0 | 0 | 0 | 0 | 0 |
+| Reported final queue drops | events | 0 | 0 | 0 | 0 | 0 |

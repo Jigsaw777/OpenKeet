@@ -2,6 +2,8 @@
 
 Baseline B is `d2d806937b2b8ca31761fdf2d744d725927f1a7a` on Windows x64. `personal_copilot.7z` has SHA-256 `8eb036422e2517af731635626b51e57093df50d7465b4d273ca49f4ee944d508` and records the same main ref. The 79 tracked files extracted from the archive matched the checkout byte for byte. Extraction selected regular tracked files from the archive and omitted its Git metadata, user files, tools, model, and build output. The source is in `benchmarks/output/baseline-3.0/archive/personal_copilot` locally.
 
+Line references here and in the technical-debt audit refer to the baseline. Use `git show d2d8069:<file>` or the extracted copy for that source. [Current runtime architecture](../architecture/DESKTOP_3_0.md).
+
 | Boundary | Owner | Behavior |
 | --- | --- | --- |
 | Desktop presentation | [main.tsx](../../apps/desktop/src/main.tsx#L23), [components.tsx](../../apps/desktop/src/components.tsx#L29), [audio-setup.tsx](../../apps/desktop/src/audio-setup.tsx#L8) | React views, capture consent, manual input, focus companion, settings stored in WebView local storage. |

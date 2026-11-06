@@ -25,3 +25,11 @@
 4. Request the owner's approval for public visibility, public release artifacts, or any paid activation after the checks are available.
 
 Community local use can stay free under MIT. GitHub Sponsors can support maintenance after checking the founder's India eligibility, payout method, and any fiscal host requirements. Hosted speech or sync is a later opt-in service. For illustration, if a proposed managed plan nets ₹300/month per subscriber and costs ₹120 in metered service and variable support, its contribution is ₹180. At ₹18,000/month in fixed costs that needs 100 subscribers before taxes and acquisition costs. These are placeholders for a cost model. Provider approval, privacy review, usage caps, and observed demand gate any pilot. [GitHub Sponsors eligibility](https://docs.github.com/en/sponsors/getting-started-with-github-sponsors/about-github-sponsors)
+
+## 3.0 private Windows preview
+
+The local NSIS install, smoke and uninstall passed. The package is unsigned. The consent gate, local-only practice responder, and explicit SQLite save and delete paths are in use. Keep the per-user history and speech models outside the release package. [Validation](validation/DESKTOP_3_0.md), [data boundaries](architecture/DESKTOP_3_0.md)
+
+The dependency audits reported zero vulnerabilities. RustSec flagged unmaintained `proc-macro-error` 1.0.4 and an unsoundness advisory in `glib` 0.18.5 in the cross-platform lockfile. Both are outside the Windows dependency graph. Recheck before any cross-platform release. Collect the full third-party notices and SBOM before distribution. Keep Windows signing identity and timestamping in the authorized release workflow. [Dependency review](audit/DEPENDENCY_AND_LICENSE_AUDIT.md), [RustSec RUSTSEC-2024-0370](https://rustsec.org/advisories/RUSTSEC-2024-0370.html), [RustSec RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html)
+
+Provider authorization, retention controls, physical devices and the remaining feature parity gates are tracked in the audit. Publication remains subject to owner approval. [Provider authorization](audit/PROVIDER_AUTHORIZATION.md), [feature matrix](audit/FEATURE_PARITY_MATRIX.md)

@@ -1,8 +1,12 @@
 # Personal Interview Assistant
 
-## Personal Copilot 2.0 preview
+## Personal Copilot 3.0 Windows preview
 
-The Rust desktop preview runs on Windows 11 x64. Use the bundled sample for an offline rehearsal, or select a Windows audio endpoint and a verified local Whisper model. It includes the dashboard, live workspace, and focus window. See the [build and test guide](docs/desktop-slice.md) and [measured audio comparison](docs/benchmarks/audio.md).
+The Rust preview runs on Windows 11 x64. Start with **Run sample session** in the matte workspace. In **Audio setup**, choose one Windows source and a verified local Whisper model, then confirm capture permission. Automatic suggestions are off for live capture until you enable them. The bundled answer engine provides offline practice examples.
+
+Stop a session before saving its retained transcript and checked answers to the local SQLite library. **Saved sessions** supports transcript search, notes, Markdown/JSON/TXT export, and deletion.
+
+See the [build and test guide](docs/desktop-slice.md), [3.0 validation report](docs/validation/DESKTOP_3_0.md), [paired performance comparison](docs/performance/PERFORMANCE_COMPARISON.md), and [feature parity matrix](docs/audit/FEATURE_PARITY_MATRIX.md).
 
 ## Legacy Python app
 

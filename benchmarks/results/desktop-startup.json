@@ -1,0 +1,158 @@
+[
+    {
+        "build":  "B",
+        "condition":  "fresh-webview-profile",
+        "run":  1,
+        "sample":  {
+                       "window_ms":  73,
+                       "shutdown_ms":  53,
+                       "processes":  7,
+                       "summed_working_set_mib":  366.8,
+                       "summed_private_mib":  177.3
+                   },
+        "error":  null
+    },
+    {
+        "build":  "C",
+        "condition":  "fresh-webview-profile",
+        "run":  1,
+        "sample":  {
+                       "window_ms":  35,
+                       "shutdown_ms":  45,
+                       "processes":  7,
+                       "summed_working_set_mib":  360.4,
+                       "summed_private_mib":  171.1
+                   },
+        "error":  null
+    },
+    {
+        "build":  "C",
+        "condition":  "fresh-webview-profile",
+        "run":  2,
+        "sample":  {
+                       "window_ms":  47,
+                       "shutdown_ms":  51,
+                       "processes":  7,
+                       "summed_working_set_mib":  357.4,
+                       "summed_private_mib":  166.5
+                   },
+        "error":  null
+    },
+    {
+        "build":  "B",
+        "condition":  "fresh-webview-profile",
+        "run":  2,
+        "sample":  {
+                       "window_ms":  45,
+                       "shutdown_ms":  41,
+                       "processes":  7,
+                       "summed_working_set_mib":  361.1,
+                       "summed_private_mib":  174.9
+                   },
+        "error":  null
+    },
+    {
+        "build":  "B",
+        "condition":  "fresh-webview-profile",
+        "run":  3,
+        "sample":  {
+                       "window_ms":  41,
+                       "shutdown_ms":  46,
+                       "processes":  7,
+                       "summed_working_set_mib":  367.3,
+                       "summed_private_mib":  176
+                   },
+        "error":  null
+    },
+    {
+        "build":  "C",
+        "condition":  "fresh-webview-profile",
+        "run":  3,
+        "sample":  {
+                       "window_ms":  35,
+                       "shutdown_ms":  49,
+                       "processes":  7,
+                       "summed_working_set_mib":  357.3,
+                       "summed_private_mib":  166.8
+                   },
+        "error":  null
+    },
+    {
+        "build":  "B",
+        "condition":  "reused-webview-profile",
+        "run":  1,
+        "sample":  {
+                       "window_ms":  35,
+                       "shutdown_ms":  46,
+                       "processes":  7,
+                       "summed_working_set_mib":  362.9,
+                       "summed_private_mib":  172.7
+                   },
+        "error":  null
+    },
+    {
+        "build":  "C",
+        "condition":  "reused-webview-profile",
+        "run":  1,
+        "sample":  {
+                       "window_ms":  46,
+                       "shutdown_ms":  44,
+                       "processes":  7,
+                       "summed_working_set_mib":  354.8,
+                       "summed_private_mib":  165.9
+                   },
+        "error":  null
+    },
+    {
+        "build":  "C",
+        "condition":  "reused-webview-profile",
+        "run":  2,
+        "sample":  {
+                       "window_ms":  35,
+                       "shutdown_ms":  55,
+                       "processes":  7,
+                       "summed_working_set_mib":  352.8,
+                       "summed_private_mib":  162.8
+                   },
+        "error":  null
+    },
+    {
+        "build":  "B",
+        "condition":  "reused-webview-profile",
+        "run":  2,
+        "sample":  {
+                       "window_ms":  40,
+                       "shutdown_ms":  52,
+                       "processes":  7,
+                       "summed_working_set_mib":  363.4,
+                       "summed_private_mib":  175
+                   },
+        "error":  null
+    },
+    {
+        "build":  "B",
+        "condition":  "reused-webview-profile",
+        "run":  3,
+        "sample":  {
+                       "window_ms":  44,
+                       "shutdown_ms":  44,
+                       "processes":  7,
+                       "summed_working_set_mib":  360.5,
+                       "summed_private_mib":  171.8
+                   },
+        "error":  null
+    },
+    {
+        "build":  "C",
+        "condition":  "reused-webview-profile",
+        "run":  3,
+        "sample":  {
+                       "window_ms":  47,
+                       "shutdown_ms":  47,
+                       "processes":  7,
+                       "summed_working_set_mib":  352.1,
+                       "summed_private_mib":  162.8
+                   },
+        "error":  null
+    }
+]
