@@ -5,6 +5,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AudioSetup } from "./audio-setup";
+import { LiveMeter } from "./audio-meter";
 import { AnswerPanel, CaptureControls, Empty, Icon, Mark, Status, Transcript } from "./components";
 import { Overview } from "./overview";
 import { SaveSession, SavedSessions } from "./saved-sessions";
@@ -79,7 +80,7 @@ function App() {
     localStorage.setItem("text-scale", zoom);
   }, [zoom]);
 
-  useEffect(() => { setCopied(false); }, [view.session.session_id, view.session.question?.id, view.session.question?.revision]);
+  useEffect(() => { setCopied(false); }, [page, view.session.session_id, view.session.question?.id, view.session.question?.revision]);
   useEffect(() => { if (page === "audio") setAudioOpened(true); }, [page]);
 
   async function command(name: string, args?: Record<string, unknown>) {
@@ -139,7 +140,7 @@ function App() {
             {!running && <button onClick={() => setPage("audio")}>Set up audio</button>}
             <button disabled={!desktop} onClick={() => void command("open_focus")}><Icon name="focus" /> Focus window</button></div></div>
         <div className="session-meta"><span><Icon name="wave" />{sourceLabel(session.source.kind)}</span><span><Icon name="lock" />{view.mode === "audio" ? "Local Whisper" : "Offline practice responder"}</span>
-          {view.mode === "audio" && <label className="meter-compact" htmlFor="live-level">Input level <meter id="live-level" min={0} max={32768} value={view.meter} /></label>}
+          {view.mode === "audio" && <LiveMeter view={view} />}
           <div className="layout-switch" role="group" aria-label="Workspace layout">
             <button aria-pressed={layout === "split"} onClick={() => setLayout("split")}>Split view</button>
             <button aria-pressed={layout === "answer"} onClick={() => setLayout("answer")}>Answer view</button>
@@ -156,7 +157,7 @@ function App() {
       </div>}
       {page === "history" && <SavedSessions enabled={desktop} />}
       {(page === "audio" || audioOpened) && <div hidden={page !== "audio"}>
-        <AudioSetup view={view} enabled={desktop} zoom={zoom} setZoom={setZoom} showError={setError}
+        <AudioSetup view={view} enabled={desktop} visible={page === "audio"} zoom={zoom} setZoom={setZoom} showError={setError}
           start={async config => { if (!await command("start_capture", { config })) return false; setPrompt(""); setPage("session"); return true; }} />
       </div>}
   </AppShell>;
@@ -165,7 +166,7 @@ function App() {
 function History({ session }: { session: Session }) {
   return <details className="card history"><summary>Session history <span className="soft-label">{session.history.length}</span></summary>
     {session.history.length ? session.history.map(item => <article key={item.answer.key.question_id}>
-      <p className="eyebrow">Checked · Revision {item.answer.key.revision}{item.follow_up_to && ` · Follow-up to question ${item.follow_up_to}`}</p><strong>{item.question}</strong><p>{item.answer.text}</p>
+      <p className="eyebrow">{item.answer.status === "superseded" ? "Superseded" : "Checked"} · Revision {item.answer.key.revision}{item.follow_up_to && ` · Follow-up to question ${item.follow_up_to}`}</p><strong>{item.question}</strong><p>{item.answer.text}</p>
     </article>) : <Empty label="No checked answers yet" detail="Completed revisions appear here during this session." />}
   </details>;
 }

@@ -348,6 +348,7 @@ fn correction_revises_one_checked_entry_and_keeps_the_literal_transcript() {
         AnswerStatus::Superseded
     );
     assert_eq!(before.history[0].answer.key.revision, 1);
+    assert_eq!(before.history[0].answer.status, AnswerStatus::Superseded);
     rehearsal::answer_available(&mut session, 9_000);
     let after = session.snapshot();
     assert_eq!(after.history.len(), 1);

@@ -29,6 +29,7 @@ export function Icon({ name }: { name: "home" | "wave" | "settings" | "focus" | 
 export function CaptureControls({ view, command }: { view: DesktopView; command: Command }) {
   const { capture } = view.session;
   return <div className="controls">
+    {view.retryable && <button className="primary" onClick={() => void command("resume_capture")}>Retry same source</button>}
     {capture === "paused" && <button className="primary" disabled={view.loading || view.stopping} onClick={() => void command("resume_capture")}>Resume</button>}
     {capture === "capturing" && !view.stopping && <button onClick={() => void command("pause_capture")}>Pause</button>}
     {(capture === "capturing" || capture === "paused" || view.loading || view.stopping) &&
@@ -109,7 +110,7 @@ export function AnswerPanel({ question, copy, command, compact = false, footer }
       <span className={`soft-label answer-${answer?.status ?? "empty"}`}>{label}</span></div>
     <div ref={scroll} className="answer-content" role="region" aria-label="Practice answer text" tabIndex={0}>
       {answer ? <><div className={answer.status === "superseded" ? "answer-body superseded" : "answer-body"}><AnswerText text={answer.text} /></div>
-        {answer.status === "superseded" && <p className="subtle">Updating for the latest question.</p>}</> :
+        {answer.status === "superseded" && <p className="subtle">This answer is from an earlier revision.</p>}</> :
         <Empty label="An outline when you need it" detail="The offline practice responder supplies example answers." />}
     </div>
     <div className="card-foot">{canCancel ? <button onClick={() => void command("cancel_answer")}>Cancel answer</button>

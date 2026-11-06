@@ -54,8 +54,10 @@ export type DesktopView = {
   };
   loading: boolean;
   stopping: boolean;
+  retryable: boolean;
 };
 export type Endpoint = { id: string; name: string; kind: SourceKind; is_default: boolean };
+export type MeterUpdate = { update: number; session_id: number; peak: number; frames: number };
 export type CaptureConfig = { source: Source; model_path: string; vocabulary: string; auto_answer: boolean; consent: boolean };
 
 export const emptyView: DesktopView = {
@@ -65,6 +67,7 @@ export const emptyView: DesktopView = {
   audio_metrics: { frames: 0, ready_ms: null, decode_ms: null, queue_ms: null },
   loading: false,
   stopping: false,
+  retryable: false,
   session: {
     protocol_version: 1,
     sequence: 0,
@@ -86,6 +89,14 @@ export function acceptView(current: DesktopView, incoming: DesktopView): Desktop
     && incoming.session.session_id >= current.session.session_id
     && (incoming.session.session_id > current.session.session_id || incoming.session.sequence >= current.session.sequence)
     ? incoming : current;
+}
+
+export function meterForView(view: DesktopView, update: MeterUpdate | null): { peak: number; frames: number } {
+  if (view.mode === "audio" && view.session.capture === "capturing" && !view.stopping
+      && update?.session_id === view.session.session_id && update.update > view.update) {
+    return { peak: update.peak, frames: update.frames };
+  }
+  return { peak: view.meter, frames: view.audio_metrics.frames };
 }
 
 export function sourceLabel(kind: SourceKind): string {

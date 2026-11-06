@@ -58,6 +58,19 @@ struct AudioMetrics {
     queue_ms: Option<u64>,
 }
 
+#[derive(Clone, Serialize)]
+struct MeterView {
+    update: u64,
+    session_id: u64,
+    peak: u16,
+    frames: u64,
+}
+
+enum AudioUpdate {
+    Snapshot(Box<View>),
+    Meter(MeterView),
+}
+
 struct Job {
     config: CaptureConfig,
     clock: Instant,
@@ -75,6 +88,7 @@ pub struct View {
     audio_metrics: AudioMetrics,
     loading: bool,
     stopping: bool,
+    retryable: bool,
 }
 
 pub struct Desktop {
@@ -124,6 +138,9 @@ impl Desktop {
                 .audio
                 .as_ref()
                 .is_some_and(|audio| audio.stopping.is_some()),
+            retryable: self.audio.is_none()
+                && self.config.is_some()
+                && self.session.capture_state() == CaptureState::Recovery,
         }
     }
 
@@ -133,13 +150,17 @@ impl Desktop {
     }
 
     fn reset(&mut self, mode: Mode, source: Source, policy: Policy) -> Result<(), String> {
-        if self.audio.is_some() || self.replay.is_some() || self.config.is_some() {
+        if self.audio.is_some()
+            || self.replay.is_some()
+            || self.session.capture_state() == CaptureState::Paused
+        {
             return Err("Stop the current session first.".into());
         }
         self.serial += 1;
         self.clock = Instant::now();
         self.session = Session::new(self.serial, source, policy);
         self.mode = mode;
+        self.config = None;
         self.next_utterance = 1;
         self.meter = 0;
         self.audio_metrics = AudioMetrics::default();
@@ -191,8 +212,15 @@ impl Desktop {
             };
             self.reset(Mode::Audio, config.source.clone(), policy)?;
             self.config = Some(config);
-        } else if self.audio.is_some() || self.session.snapshot().capture != CaptureState::Paused {
-            return Err("Pause capture before resuming it.".into());
+        } else if self.audio.is_some()
+            || !matches!(
+                self.session.capture_state(),
+                CaptureState::Paused | CaptureState::Recovery
+            )
+        {
+            return Err(
+                "Pause capture or recover a disconnected device before restarting it.".into(),
+            );
         }
         let config = self.config.clone().ok_or("Choose an audio source first.")?;
         let stop = Stop::default();
@@ -255,7 +283,10 @@ impl Desktop {
     }
 
     pub fn archive(&self) -> Result<(String, u64, Snapshot), String> {
-        if self.audio.is_some() || self.replay.is_some() || self.config.is_some() {
+        if self.audio.is_some()
+            || self.replay.is_some()
+            || self.session.capture_state() == CaptureState::Paused
+        {
             return Err("Stop the session before saving it to history.".into());
         }
         let key = format!("{}:{}", self.instance_id, self.serial);
@@ -312,7 +343,7 @@ impl Desktop {
         (self.session.sequence() != before).then(|| self.changed())
     }
 
-    fn audio_event(&mut self, event: AudioEvent) -> Option<View> {
+    fn audio_event(&mut self, event: AudioEvent) -> Option<AudioUpdate> {
         let audio = self.audio.as_mut()?;
         if audio.failed {
             return None;
@@ -328,7 +359,7 @@ impl Desktop {
                 Ok(())
             }
             AudioEvent::Speech { utterance_id, span } => {
-                self.next_utterance = self.next_utterance.max(utterance_id + 1);
+                self.next_utterance = self.next_utterance.max(utterance_id.saturating_add(1));
                 self.session.observe_speech(utterance_id, span)
             }
             AudioEvent::Transcript {
@@ -337,17 +368,24 @@ impl Desktop {
                 queue_ms,
                 ..
             } => {
+                self.next_utterance = self.next_utterance.max(utterance.id.saturating_add(1));
                 self.audio_metrics.decode_ms = Some(decode_ms);
                 self.audio_metrics.queue_ms = Some(queue_ms);
                 self.session.ingest(utterance)
             }
             AudioEvent::Meter { peak, frames } => {
                 self.audio_metrics.frames = frames;
-                if peak == self.meter {
+                if audio.stopping.is_some() || (peak == self.meter && !frames.is_multiple_of(50)) {
                     return None;
                 }
                 self.meter = peak;
-                Ok(())
+                self.update += 1;
+                return Some(AudioUpdate::Meter(MeterView {
+                    update: self.update,
+                    session_id: self.serial,
+                    peak,
+                    frames,
+                }));
             }
             AudioEvent::Discontinuity { span, dropped_ms } => {
                 self.session.note_audio_gap(
@@ -363,7 +401,7 @@ impl Desktop {
             audio.stop.request();
             self.session.audio_gap(Span::at(now), 0, message);
         }
-        Some(self.changed())
+        Some(AudioUpdate::Snapshot(Box::new(self.changed())))
     }
 
     fn finish_audio(&mut self, result: Result<(), AudioError>) -> Option<View> {
@@ -371,7 +409,10 @@ impl Desktop {
         self.meter = 0;
         let now = elapsed_ms(self.clock);
         if let Err(error) = result {
-            self.config = None;
+            if self.audio_metrics.ready_ms.is_none() || run.stopping == Some(CaptureState::Stopped)
+            {
+                self.config = None;
+            }
             self.session
                 .audio_gap(Span::at(now), error.dropped_ms, error.message);
         } else if run.failed {
@@ -453,14 +494,18 @@ pub fn start_audio(
                     },
                     &job.stop,
                     |event| {
-                        let view = {
+                        let update = {
                             let mut desktop = state.lock().expect("desktop session lock");
                             (desktop.serial == job.session)
                                 .then(|| desktop.audio_event(event))
                                 .flatten()
                         };
-                        if let Some(view) = view {
-                            emit(&app, &view);
+                        match update {
+                            Some(AudioUpdate::Snapshot(view)) => emit(&app, &view),
+                            Some(AudioUpdate::Meter(meter)) => {
+                                let _ = app.emit("copilot-meter", meter);
+                            }
+                            None => {}
                         }
                     },
                 )
@@ -554,5 +599,77 @@ mod tests {
         assert_eq!(view.session.transcript[0].text, "How does a cache work?");
         assert_eq!(view.audio_metrics.decode_ms, Some(2));
         begin(&mut desktop);
+    }
+
+    #[test]
+    fn metering_payload_does_not_reserialize_the_transcript() {
+        let shared = Desktop::shared();
+        let mut desktop = shared.lock().unwrap();
+        let job = begin(&mut desktop);
+        desktop.audio_event(AudioEvent::Ready {
+            source: job.config.source,
+        });
+        for id in 1..=80 {
+            desktop
+                .session
+                .ingest(Utterance {
+                    id,
+                    revision: 1,
+                    span: Span::at(id * 1_000),
+                    stability: Stability::Final,
+                    text: "This stable transcript line is already present in the renderer.".into(),
+                })
+                .unwrap();
+        }
+        let Some(AudioUpdate::Meter(meter)) = desktop.audio_event(AudioEvent::Meter {
+            peak: 1_500,
+            frames: 200,
+        }) else {
+            panic!("expected a standalone meter event");
+        };
+        let meter_size = serde_json::to_vec(&meter).unwrap().len();
+        let view_size = serde_json::to_vec(&desktop.view()).unwrap().len();
+        println!("Meter JSON {meter_size} bytes, full snapshot JSON {view_size} bytes.");
+        assert_eq!(desktop.view().audio_metrics.frames, 200);
+        assert!(meter_size * 10 < view_size);
+    }
+
+    #[test]
+    fn retry_keeps_session_id_and_transcript_after_capture_failure() {
+        let shared = Desktop::shared();
+        let mut desktop = shared.lock().unwrap();
+        let job = begin(&mut desktop);
+        desktop.audio_event(AudioEvent::Ready {
+            source: job.config.source,
+        });
+        desktop.audio_event(AudioEvent::Transcript {
+            utterance: Utterance {
+                id: 1,
+                revision: 1,
+                span: Span::at(200),
+                stability: Stability::Final,
+                text: "Explain an index.".into(),
+            },
+            at_ms: 300,
+            decode_ms: 100,
+            queue_ms: 0,
+        });
+        let error = AudioError {
+            message: "Device disconnected".into(),
+            dropped_ms: 30,
+        };
+        assert!(desktop.finish_audio(Err(error)).unwrap().retryable);
+        assert_eq!(desktop.archive().unwrap().2.transcript.len(), 1);
+        let retry = desktop.begin_audio(None).unwrap();
+        assert_eq!(retry.session, job.session);
+        assert_eq!(retry.first_id, 2);
+        desktop.audio_event(AudioEvent::Ready {
+            source: retry.config.source,
+        });
+        let view = desktop.view();
+        assert_eq!(view.session.capture, CaptureState::Capturing);
+        assert!(view.session.notice.is_none());
+        assert_eq!(view.session.transcript[0].text, "Explain an index.");
+        assert_eq!(view.session.dropped_ms, 30);
     }
 }

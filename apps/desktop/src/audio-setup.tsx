@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useMeter } from "./audio-meter";
 import { Icon, Status } from "./components";
 import { sourceLabel } from "./protocol";
 import type { CaptureConfig, DesktopView, Endpoint } from "./protocol";
 
-export function AudioSetup({ view, enabled, start, showError, zoom, setZoom }: {
+export function AudioSetup({ view, enabled, visible, start, showError, zoom, setZoom }: {
   view: DesktopView;
   enabled: boolean;
+  visible: boolean;
   start: (config: CaptureConfig) => Promise<boolean>;
   showError: (message: string) => void;
   zoom: string;
@@ -23,6 +25,7 @@ export function AudioSetup({ view, enabled, start, showError, zoom, setZoom }: {
   const selectedDevice = endpoints.find(device => device.id === selected);
   const busy = view.loading || view.stopping || ["paused", "capturing"].includes(view.session.capture);
   const metrics = view.audio_metrics;
+  const { peak, frames } = useMeter(view, visible);
 
   async function refresh() {
     if (!enabled) return;
@@ -61,12 +64,12 @@ export function AudioSetup({ view, enabled, start, showError, zoom, setZoom }: {
           {endpoints.map(device => <option key={device.id} value={device.id}>{sourceLabel(device.kind)} · {device.name}{device.is_default ? " (default)" : ""}</option>)}
         </select><button disabled={!enabled || busy || refreshing} onClick={() => void refresh()}>Refresh</button></div>
         <p className="subtle">Select system output for what you hear. Select a microphone for your own voice.</p>
-        <div className="meter-row"><label htmlFor="input-meter">Input level</label><meter id="input-meter" min={0} max={32768} value={view.meter} /><Status view={view} /></div>
+        <div className="meter-row"><label htmlFor="input-meter">Input level</label><meter id="input-meter" min={0} max={32768} value={peak} /><Status view={view} /></div>
         {view.mode === "audio" && <details>
           <summary>Capture diagnostics</summary>
           <dl className="audio-metrics">
             <dt>Audio ready</dt><dd>{metrics.ready_ms === null ? "Waiting" : `${metrics.ready_ms} ms`}</dd>
-            <dt>PCM frames processed</dt><dd>{metrics.frames.toLocaleString()}</dd>
+            <dt>PCM frames processed</dt><dd>{frames.toLocaleString()}</dd>
             <dt>Last decode</dt><dd>{metrics.decode_ms === null ? "Waiting" : `${metrics.decode_ms} ms`}</dd>
             <dt>Last decoder queue wait</dt><dd>{metrics.queue_ms === null ? "Waiting" : `${metrics.queue_ms} ms`}</dd>
             <dt>Reported audio loss</dt><dd>{view.session.dropped_ms} ms</dd>

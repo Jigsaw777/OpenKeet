@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use copilot_core::{Snapshot, Stability};
+use copilot_core::{AnswerStatus, Snapshot, Stability};
 use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State, async_runtime::spawn_blocking};
@@ -152,6 +152,9 @@ impl HistoryStore {
         session
             .transcript
             .retain(|line| line.stability == Stability::Final);
+        session
+            .history
+            .retain(|item| item.answer.status == AnswerStatus::Checked);
         session.source.endpoint_id = None;
         session.question = None;
         session.notice = None;

@@ -137,6 +137,10 @@ impl Session {
         self.sequence
     }
 
+    pub fn capture_state(&self) -> CaptureState {
+        self.capture
+    }
+
     pub fn drain_events(&mut self) -> impl Iterator<Item = Event> + '_ {
         self.events.drain(..)
     }
@@ -558,6 +562,13 @@ impl Session {
                 if let Some(answer) = &mut q.view.answer {
                     answer.status = AnswerStatus::Superseded;
                 }
+                if let Some(item) = self
+                    .history
+                    .iter_mut()
+                    .find(|item| item.answer.key.question_id == id)
+                {
+                    item.answer.status = AnswerStatus::Superseded;
+                }
                 self.invalidate(id, phase);
                 Ok(Some((id, revision)))
             }
@@ -644,7 +655,9 @@ impl Session {
         }
         self.history
             .iter()
-            .find(|item| item.answer.key.question_id == id)
+            .find(|item| {
+                item.answer.key.question_id == id && item.answer.status == AnswerStatus::Checked
+            })
             .map(|item| FollowUpContext {
                 question_id: id,
                 revision: item.answer.key.revision,

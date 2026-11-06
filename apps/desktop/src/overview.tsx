@@ -10,7 +10,7 @@ export function Overview({ view, navigate, sample, canStart }: {
   canStart: boolean;
 }) {
   const { session } = view;
-  const latest = session.history.at(-1);
+  const latest = session.history.filter(item => item.answer.status === "checked").at(-1);
   return <div className="page-stack">
     <div className="page-title"><p className="eyebrow">Practice workspace</p><h1>Session overview</h1>
       <p>Test your audio, review a conversation, and build answers at your own pace.</p>

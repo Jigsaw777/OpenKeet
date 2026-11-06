@@ -24,6 +24,30 @@ const child = spawn(executable, [], {
 let spawnError;
 child.on("error", error => { spawnError = error; });
 
+async function checkContrast(page, theme) {
+  const pairs = await page.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    return [["--ink", "--surface", 4.5], ["--muted", "--surface", 4.5], ["--rail-muted", "--rail", 4.5],
+      ["--primary-ink", "--primary", 4.5], ["--field-border", "--surface", 3], ["--focus", "--canvas", 3]]
+      .map(([fg, bg, minimum]) => [style.getPropertyValue(fg).trim(), style.getPropertyValue(bg).trim(), minimum, fg]);
+  });
+  function luminance(hex) {
+    const raw = hex.slice(1);
+    const digits = raw.length === 3 ? [...raw].map(char => char.repeat(2)).join("") : raw;
+    return digits.match(/../g).reduce((value, digit, index) => {
+      const channel = parseInt(digit, 16) / 255;
+      const linear = channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      return value + linear * [0.2126, 0.7152, 0.0722][index];
+    }, 0);
+  }
+  for (const [fg, bg, minimum, token] of pairs) {
+    const colors = [luminance(fg), luminance(bg)];
+    const ratio = (Math.max(...colors) + 0.05) / (Math.min(...colors) + 0.05);
+    assert(ratio >= minimum, `${theme} ${token} contrast ${ratio.toFixed(2)} is below ${minimum}.`);
+  }
+  console.log(`Contrast checks passed for ${theme} text, field borders, and focus tokens.`);
+}
+
 let browser;
 try {
   const endpoint = `http://127.0.0.1:${port}`;
@@ -43,6 +67,7 @@ try {
   await page.getByRole("heading", { name: "Session overview" }).waitFor();
   await page.locator('html[data-theme="dark"]').waitFor({ state: "attached" });
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+  await checkContrast(page, "dark");
   await page.screenshot({ path: join(output, "first-run.png"), animations: "disabled" });
   await page.keyboard.press("Tab");
   assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "Skip to content");
@@ -115,7 +140,7 @@ try {
     return !notes?.disabled && notes?.value === "Review coroutine cancellation.";
   });
   assert(await page.getByRole("button", { name: "Export JSON" }).isEnabled());
-  await page.screenshot({ path: join(output, "saved-sessions.png"), animations: "disabled" });
+  await page.screenshot({ path: join(output, "saved-sessions.png"), animations: "disabled", fullPage: true });
   await page.getByRole("button", { name: "Delete saved session" }).click();
   await page.getByRole("button", { name: "Confirm delete" }).click();
   await page.getByRole("status").filter({ hasText: "Saved session deleted." }).waitFor();
@@ -173,6 +198,7 @@ try {
   const theme = page.getByLabel("Appearance");
   await theme.selectOption("light");
   await page.locator('html[data-theme="light"]').waitFor({ state: "attached" });
+  await checkContrast(page, "light");
   await page.screenshot({ path: join(output, "overview-light.png"), animations: "disabled" });
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await theme.selectOption("system");
