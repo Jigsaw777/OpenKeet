@@ -81,6 +81,11 @@ impl fmt::Display for AudioError {
 
 impl std::error::Error for AudioError {}
 
+/// Decodes one bounded 16 kHz PCM segment on the inference worker.
+pub trait SpeechRecognizer {
+    fn decode(&mut self, samples: &[i16], final_result: bool) -> Result<String, AudioError>;
+}
+
 #[derive(Clone, Default)]
 pub struct Stop(Arc<AtomicBool>);
 
@@ -111,7 +116,7 @@ pub fn endpoints() -> Result<Vec<Endpoint>, AudioError> {
 }
 
 pub fn capture(
-    model: &mut LocalWhisper,
+    model: &mut dyn SpeechRecognizer,
     source: Source,
     clock: Instant,
     options: StreamOptions,

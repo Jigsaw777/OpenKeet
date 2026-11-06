@@ -5,7 +5,7 @@ use whisper_rs::{
     FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
 };
 
-use crate::AudioError;
+use crate::{AudioError, SpeechRecognizer};
 
 #[derive(Clone, Copy)]
 pub struct Model {
@@ -79,12 +79,10 @@ impl LocalWhisper {
             vocabulary: vocabulary.to_owned(),
         })
     }
+}
 
-    pub(crate) fn decode(
-        &mut self,
-        samples: &[i16],
-        final_result: bool,
-    ) -> Result<String, AudioError> {
+impl SpeechRecognizer for LocalWhisper {
+    fn decode(&mut self, samples: &[i16], final_result: bool) -> Result<String, AudioError> {
         let peak = samples
             .iter()
             .map(|sample| sample.unsigned_abs())

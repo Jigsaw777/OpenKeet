@@ -10,7 +10,7 @@ use copilot_core::{Source, Span, Stability, Utterance};
 use webrtc_vad::{SampleRate, Vad, VadMode};
 
 use crate::{
-    AudioError, AudioEvent, FRAME_MS, LocalWhisper, SAMPLE_RATE, SAMPLES, Stop, elapsed_ms,
+    AudioError, AudioEvent, FRAME_MS, SAMPLE_RATE, SAMPLES, SpeechRecognizer, Stop, elapsed_ms,
 };
 
 const FRAME_QUEUE: usize = 64;
@@ -199,7 +199,7 @@ fn segment(
 }
 
 pub(crate) fn run(
-    model: &mut LocalWhisper,
+    model: &mut dyn SpeechRecognizer,
     clock: Instant,
     options: StreamOptions,
     stop: &Stop,
@@ -232,7 +232,7 @@ pub(crate) fn run(
 }
 
 fn decode(
-    model: &mut LocalWhisper,
+    model: &mut dyn SpeechRecognizer,
     jobs: Receiver<Job>,
     clock: Instant,
     report: &impl Fn(AudioEvent),
@@ -265,7 +265,7 @@ fn decode(
 }
 
 pub fn recognize_wav(
-    model: &mut LocalWhisper,
+    model: &mut dyn SpeechRecognizer,
     path: &Path,
     report: impl Fn(AudioEvent) + Sync,
 ) -> Result<(), AudioError> {
@@ -331,38 +331,58 @@ mod tests {
     }
 
     #[test]
-    fn closing_input_preserves_voice_already_in_the_frame_queue() {
-        let (frame_tx, frames) = mpsc::sync_channel(FRAME_QUEUE);
-        let producer = Producer(frame_tx);
-        for n in 0..12 {
-            let samples = std::array::from_fn(|i| {
-                let phase = (n as usize * SAMPLES + i) as f32 * 0.081;
-                (1_800.0 * (phase.sin() + 0.4 * (2.0 * phase).sin())) as i16
-            });
-            producer
-                .push(
-                    samples,
-                    Span {
-                        start_ms: n * FRAME_MS,
-                        end_ms: (n + 1) * FRAME_MS,
-                    },
-                    None,
-                )
-                .unwrap();
+    fn failed_input_drains_queued_speech_before_returning_the_error() {
+        struct Probe;
+        impl SpeechRecognizer for Probe {
+            fn decode(
+                &mut self,
+                samples: &[i16],
+                final_result: bool,
+            ) -> Result<String, AudioError> {
+                assert!(final_result);
+                assert_eq!(samples.len(), 12 * SAMPLES);
+                Ok("Tail preserved".into())
+            }
         }
-        drop(producer);
-        let (tx, jobs) = mpsc::sync_channel(DECODE_QUEUE);
-        segment(
-            frames,
-            tx,
+
+        let finals = std::sync::Mutex::new(Vec::new());
+        let error = run(
+            &mut Probe,
             Instant::now(),
             StreamOptions::default(),
-            &|_| {},
+            &Stop::default(),
+            &|event| {
+                if let AudioEvent::Transcript { utterance, .. } = event {
+                    finals.lock().unwrap().push(utterance);
+                }
+            },
+            |producer| {
+                for n in 0..12 {
+                    let samples = std::array::from_fn(|i| {
+                        let phase = (n as usize * SAMPLES + i) as f32 * 0.081;
+                        (1_800.0 * (phase.sin() + 0.4 * (2.0 * phase).sin())) as i16
+                    });
+                    producer.push(
+                        samples,
+                        Span {
+                            start_ms: n * FRAME_MS,
+                            end_ms: (n + 1) * FRAME_MS,
+                        },
+                        None,
+                    )?;
+                }
+                Err(AudioError {
+                    message: "Device disconnected".into(),
+                    dropped_ms: 30,
+                })
+            },
         )
-        .unwrap();
-        let job = jobs.try_recv().expect("queued speech tail");
-        assert!(job.final_result);
-        assert_eq!(job.span.end_ms, 12 * FRAME_MS);
-        assert!(jobs.try_recv().is_err());
+        .unwrap_err();
+        assert_eq!(error.dropped_ms, 30);
+        assert_eq!(error.message, "Device disconnected");
+        let finals = finals.into_inner().unwrap();
+        assert_eq!(finals.len(), 1);
+        assert_eq!(finals[0].text, "Tail preserved");
+        assert_eq!(finals[0].span.end_ms, 12 * FRAME_MS);
     }
 }
