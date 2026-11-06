@@ -1,0 +1,75 @@
+name: Verify desktop preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable
+      - run: rustup component add rustfmt clippy --toolchain stable
+      - run: cargo +stable fmt --all --check
+      - run: cargo +stable clippy --locked -p copilot-core -p copilot --all-targets -- -D warnings
+      - run: cargo +stable test --locked -p copilot-core -p copilot
+
+  windows-desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - run: rustup update stable
+      - run: rustup component add clippy --toolchain stable
+      - name: Verify CMake and libclang
+        shell: pwsh
+        run: |
+          cmake --version
+          $clang = (Get-Command clang.exe -ErrorAction Stop).Source | Split-Path -Parent
+          if (-not (Test-Path (Join-Path $clang 'libclang.dll'))) { throw 'libclang.dll is missing' }
+          "LIBCLANG_PATH=$clang" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - working-directory: apps/desktop
+        run: npm ci
+      - working-directory: apps/desktop
+        run: npm test
+      - working-directory: apps/desktop
+        run: npm run build
+      - run: cargo +stable clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo +stable test --workspace --all-features --locked
+      - working-directory: apps/desktop
+        run: npm run desktop -- build --ci -- --locked
+      - name: Checksum Windows installer
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem target/release/bundle/nsis -Filter '*.exe'
+          if (!$installers) { throw 'No installer built' }
+          foreach ($installer in $installers) {
+            $digest = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$digest  $($installer.Name)" | Set-Content -LiteralPath "$($installer.FullName).sha256" -Encoding ascii
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-preview
+          path: target/release/bundle/nsis/
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+      - working-directory: apps/desktop
+        run: npm audit --omit=dev

@@ -1,5 +1,11 @@
 # Personal Interview Assistant
 
+## Personal Copilot 2.0 preview
+
+The Rust desktop preview runs on Windows 11 x64. Use the bundled sample for an offline rehearsal, or select a Windows audio endpoint and a verified local Whisper model. It includes the dashboard, live workspace, and focus window. See the [build and test guide](docs/desktop-slice.md) and [measured audio comparison](docs/benchmarks/audio.md).
+
+## Legacy Python app
+
 Personal desktop interview/meeting assistant with system-audio transcription, configurable Claude/Codex/local answers, editable resume and job context, and streamed output.
 
 This download contains source code and launch scripts, not a prebuilt installer. Start with the standalone app for the complete audio-to-answer flow. An optional text bridge also connects the chat feature in the GitHub repository you supplied to Claude.

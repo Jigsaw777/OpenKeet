@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/copilot-core", "crates/copilot-audio", "apps/cli"]
+members = ["crates/copilot-core", "crates/copilot-audio", "apps/cli", "apps/desktop/src-tauri"]
 default-members = ["crates/copilot-core", "apps/cli"]
 resolver = "2"
 

@@ -29,3 +29,4 @@ dist/
 node_modules/
 /benchmarks/output/
 /models/
+/apps/desktop/src-tauri/gen/

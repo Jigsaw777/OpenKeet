@@ -1,6 +1,6 @@
 # Personal Copilot desktop wireframes
 
-Use a compact, ink-and-teal workspace with a light default canvas, warm surfaces, and a matching dark theme. Instrument labels and times use tabular numerals. Use a small set of reusable controls with visible focus rings, normal desktop windows, and explicit source and locality labels. A distinct timeline presents speech and answer revisions without moving the question box on every partial.
+Use matte charcoal with near-black navigation, gray borders, and a muted steel accent for active states. Dark is the default. The optional light palette uses neutral grays. Instrument labels and times use tabular numerals. Use reusable controls with visible focus rings, normal desktop windows, and explicit source and locality labels. A distinct timeline presents speech and answer revisions without moving the question box on every partial.
 
 Product references inform separate setup and live work, a compact session view, a persistent prompt, and accessible transcript/answer navigation. The design uses original type, layout, icons, and copy. [Cluely Live Insights](https://docs.cluely.com/feature/liveinsights), [ParakeetAI](https://www.parakeet-ai.com/)
 

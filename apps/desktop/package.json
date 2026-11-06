@@ -1,0 +1,27 @@
+{
+  "name": "personal-copilot-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "desktop": "tauri",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:native": "node tests/native-smoke.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "playwright": "^1.58.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.0"
+  }
+}

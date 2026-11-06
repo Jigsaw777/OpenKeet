@@ -6,6 +6,17 @@
 - `git log --all --format='' --name-only` showed source, docs, tests, and launcher files. `.venv`, local profiles, generated recordings, and private connection data are excluded by ignore rules. This is a pattern-based baseline check. Run it again on the release candidate and manually review source, artifacts, model rights, and history before publication.
 - The root license is MIT. Keep project notices and review third-party notices separately. The legacy direct inventory includes `faster-whisper` and CTranslate2 (MIT), `SoundCard` and NumPy (BSD-3-Clause), `sounddevice` (MIT), and `pypdf` (BSD-3-Clause). Binary wheels may ship extra notices, including NumPy's numeric libraries. Keep `.venv` out of distributed source and packages. [NumPy license](https://github.com/numpy/numpy/blob/main/LICENSE.txt), [sounddevice license](https://github.com/spatialaudio/python-sounddevice/blob/master/LICENSE), [pypdf license](https://github.com/py-pdf/pypdf/blob/main/LICENSE)
 
+## Preview dependencies and speech weights
+
+| Component | Initial license inventory |
+| --- | --- |
+| Rust domain and utilities | Project MIT. Serde, `serde_json`, `sha2` MIT or Apache-2.0. `hound` Apache-2.0. |
+| Windows capture | `wasapi` MIT and Microsoft `windows` MIT or Apache-2.0. Windows and WebView2 are installed runtime components with their own terms. |
+| Native VAD and inference | `webrtc-vad` MIT wrapper with libfvad/WebRTC BSD-3-Clause notices and patent terms. `whisper-rs` Unlicense wrapper over MIT whisper.cpp. [libfvad license](https://github.com/dpirch/libfvad/blob/master/LICENSE), [whisper-rs](https://crates.io/crates/whisper-rs) |
+| Desktop | Tauri core, CLI, and dialog plugin MIT or Apache-2.0. React and Vite MIT. TypeScript Apache-2.0. |
+| Whisper model files | OpenAI Whisper weights are MIT. `ggml-small.en.bin` is 487,614,201 bytes and `ggml-large-v3-turbo-q5_0.bin` is 574,041,195 bytes. Both are explicit local downloads. [OpenAI Whisper license](https://github.com/openai/whisper#license), [Pinned model artifacts](https://huggingface.co/ggerganov/whisper.cpp/tree/5359861c739e955e79d9a303bcbc70fb988958b1) |
+| Corpus | Repository-authored text recipe and locally generated SAPI audio. The package contains the text recipe only. Review attribution and redistribution independently before introducing third-party datasets or voice samples. |
+
 ## Release gates
 
 1. Validate install/uninstall on a clean Windows x64 user account with no Python setup. Record build inputs, license inventory, artifact checksum, and signing status.
