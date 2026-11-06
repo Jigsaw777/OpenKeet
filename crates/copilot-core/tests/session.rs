@@ -279,6 +279,23 @@ fn gap_cancels_uncertain_audio_work_and_allows_new_questions() {
 }
 
 #[test]
+fn a_reported_short_gap_keeps_capture_active() {
+    let mut session = setup(Policy::default());
+    session.note_audio_gap(
+        Span {
+            start_ms: 100,
+            end_ms: 102,
+        },
+        2,
+        "Short gap.",
+    );
+    let snapshot = session.snapshot();
+    assert_eq!(snapshot.capture, CaptureState::Capturing);
+    assert_eq!(snapshot.dropped_ms, 2);
+    assert_eq!(snapshot.notice.as_deref(), Some("Short gap."));
+}
+
+#[test]
 fn full_transcript_and_manual_question_support_legacy_length() {
     let mut session = setup(Policy::default());
     let body = "Practice context. ".repeat(200);

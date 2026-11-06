@@ -11,6 +11,9 @@ use copilot_core::{
     rehearsal::{self, Step},
 };
 
+#[cfg(feature = "audio")]
+mod audio;
+
 fn replay(path: Option<String>) -> Result<(), Box<dyn Error>> {
     let script = match path {
         Some(path) => fs::read_to_string(path)?,
@@ -52,12 +55,18 @@ fn replay(path: Option<String>) -> Result<(), Box<dyn Error>> {
 
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
+    #[cfg(feature = "audio")]
+    if let Some(result) = audio::run(&args) {
+        return result;
+    }
     match args.as_slice() {
         [] => replay(None),
         [cmd] if cmd == "replay" => replay(None),
         [cmd, path] if cmd == "replay" => replay(Some(path.clone())),
         [cmd] if cmd == "--help" || cmd == "-h" => {
             println!("Usage: copilot replay [fixture.json]");
+            #[cfg(feature = "audio")]
+            audio::help();
             Ok(())
         }
         _ => Err("Usage: copilot replay [fixture.json]".into()),

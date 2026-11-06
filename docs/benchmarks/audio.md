@@ -28,3 +28,34 @@ Windows 11 x64 build 26200, i5-1335U, Intel Iris Xe, 16 GiB RAM. Python 3.12.10,
 - All three models missed the same three below-threshold WASAPI questions and two short “Why?” clips. The WASAPI label here is the spoken term. This replay never opened a hardware endpoint. `small.en` recognized QNX in all three voices and corrupted “coroutine” once and “cash flow” once. The noisy and correction clips retain their independent scores in each JSON report.
 
 The data shows that changing model size alone cannot recover clips rejected before ASR. The new path needs to improve quiet and short speech while retaining term accuracy and silence rejection. This sample supports comparison under controlled inputs. Indian English, human speakers, physical headsets, and real meeting codecs remain open gates.
+
+## Rust and Windows checks
+
+Run the release CLI with the `audio` feature and compare the original manifest. The Rust runner opens each WAV on its own paced clock, uses the same bounded pipeline as Windows capture, and reuses the model across clips.
+
+```powershell
+cargo build --release --locked -p copilot --features audio
+.\.venv\Scripts\python.exe benchmarks/asr.py rust --cli target/release/copilot.exe --model models/ggml-small.en.bin
+.\.venv\Scripts\python.exe benchmarks/asr.py rust --cli target/release/copilot.exe --model models/ggml-large-v3-turbo-q5_0.bin
+```
+
+| Rust CPU path | WER | CER | Terms | Missed | False / 2 controls | Stable partial p50 / p95 | Final p50 / p95 | Reported decode RTF |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `small.en` | 19/252 (7.54%) | 1.85% | 35/42 | 0/30 | 0 | 2.537 / 2.624 s | 1.768 / 2.100 s | 0.427 |
+| `small.en` with hints | 15/252 (5.95%) | 1.77% | 38/42 | 0/30 | 1 | 2.968 / 17.776 s | 2.450 / 17.404 s | 0.997 |
+| `large-v3-turbo` Q5 | 73/252 (28.97%) | 18.94% | 34/42 | 0/30 | 1 | 5.038 / 9.529 s | 6.799 / 45.093 s | 2.924 |
+
+- Both use WebRTC VAD, one optional rolling preview per utterance, up to six CPU threads, no GPU, and an encoder context sized to the segment. The files, normalization, and reference counts match the Python rows. Each produced a stable partial on 26 clips and a final on 30 speech clips. The small model had a maximum 0.266 s decoder queue wait. Turbo reached 33.138 s. The desktop build overlapped part of the turbo run, so treat its latency figures as a development-host observation.
+- Keep `small.en` as the starting point on this PC. Compared with the Python `small.en` baseline, this run cut WER by 40.6% relative and median final latency by 3.45 s. The two implementations differ in VAD, preview scheduling, decoding and vocabulary, so the gain cannot be attributed to Rust alone. Both controls produced empty final text or no transcript with the Rust small model.
+- Rust `small.en` returned surrounding words in all three quiet clips but missed the name “WASAPI” in each. All three one-word “Why?” clips decoded as “Y.” It preserved “cash flow” on all three voices. Turbo repeated phrases in several clips and hallucinated a sentence on the tone control. A non-empty result does not imply a correct transcript.
+- The optional hints were `Java, Kotlin, Android, QNX, WASAPI, PostgreSQL, coroutine, idempotency keys, mutex, semaphore, LRU cache, cash flow`. They recovered three more term occurrences and kept cash/cache correct on the corresponding clips. WASAPI still failed as a term, and the tone produced “and.” The run overlapped packaging work and had one additional stable-partial clip. Leave hints opt-in and repeat latency measurements under controlled load before tuning them as a preset.
+
+The Windows hardware smoke uses only a generated clip. Stop unrelated audio first. It refuses to run if the default output has an active audio session. The test plays the fixture through the OS and verifies a nonzero meter and the words “cache” and “Java” in a final transcript for the default and explicitly selected endpoint.
+
+```powershell
+$env:COPILOT_TEST_MODEL = (Resolve-Path models/ggml-small.en.bin).Path
+$env:COPILOT_TEST_WAV = (Resolve-Path benchmarks/output/cache-0.wav).Path
+cargo test --release --locked -p copilot-audio --test wasapi -- --ignored --nocapture
+```
+
+Both routes passed on Speaker (Realtek(R) Audio) after the short-gap recovery change. The first probe reported a 2 ms driver discontinuity and stopped. Capture now reports and fills measurable gaps of up to 30 ms with silence. Larger or unmeasurable gaps require restart. The hardware smoke checks one clip. Use the file matrix to compare WER and latency across all 32 clips.

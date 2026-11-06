@@ -128,6 +128,10 @@ impl Session {
         }
     }
 
+    pub fn sequence(&self) -> u64 {
+        self.sequence
+    }
+
     pub fn drain_events(&mut self) -> impl Iterator<Item = Event> + '_ {
         self.events.drain(..)
     }
@@ -237,12 +241,7 @@ impl Session {
     }
 
     pub fn audio_gap(&mut self, span: Span, dropped_ms: u64, notice: impl Into<String>) {
-        self.last_final = self
-            .last_final
-            .max(self.open.keys().next_back().copied().unwrap_or(0));
-        self.open.clear();
-        self.dropped_ms = self.dropped_ms.saturating_add(dropped_ms);
-        self.notice = Some(notice.into());
+        self.discard_interim();
         for q in &mut self.questions {
             if q.view.source.kind != SourceKind::Typed {
                 q.closed = true;
@@ -263,13 +262,26 @@ impl Session {
         for id in affected {
             self.invalidate(id, QuestionPhase::Cancelled);
         }
+        self.note_audio_gap(span, dropped_ms, notice);
+        self.set_capture(CaptureState::Recovery, span.end_ms);
+    }
+
+    pub fn note_audio_gap(&mut self, span: Span, dropped_ms: u64, notice: impl Into<String>) {
+        self.dropped_ms = self.dropped_ms.saturating_add(dropped_ms);
+        self.notice = Some(notice.into());
         self.record(
             self.source.clone(),
             span,
             None,
             EventKind::AudioGap { dropped_ms },
         );
-        self.set_capture(CaptureState::Recovery, span.end_ms);
+    }
+
+    pub fn discard_interim(&mut self) {
+        self.last_final = self
+            .last_final
+            .max(self.open.keys().next_back().copied().unwrap_or(0));
+        self.open.clear();
     }
 
     pub fn full_transcript(&self) -> Result<String, &'static str> {

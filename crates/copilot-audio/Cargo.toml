@@ -1,0 +1,17 @@
+[package]
+name = "copilot-audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+copilot-core.workspace = true
+serde.workspace = true
+hound = "3.5.1"
+sha2 = "0.10"
+webrtc-vad = "0.4.0"
+whisper-rs = "0.16.0"
+
+[target.'cfg(windows)'.dependencies]
+wasapi = "0.26.0"
+windows = { version = "0.62.2", features = ["Win32_Media_Audio"] }

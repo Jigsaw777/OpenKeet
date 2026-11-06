@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+audio = ["dep:copilot-audio"]
+
 [dependencies]
 copilot-core.workspace = true
+copilot-audio = { workspace = true, optional = true }
 serde_json.workspace = true

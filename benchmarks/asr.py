@@ -236,18 +236,75 @@ def legacy(output, names):
         print(f"{name} {json.dumps(summary)}", flush=True)
 
 
+def rust(output, cli, model, vocabulary):
+    manifest = read_json(output / "manifest.json")
+    clips = [output / entry["file"] for entry in manifest]
+    for entry, path in zip(manifest, clips):
+        if hashlib.sha256(path.read_bytes()).hexdigest() != entry["sha256"]:
+            raise ValueError(f"Fixture checksum changed: {path.name}")
+    print(f"Running Rust {model.name} on {len(clips)} clips", flush=True)
+    started = time.monotonic()
+    command = [str(cli.resolve()), "transcribe", str(model.resolve())]
+    if vocabulary:
+        command.extend(["--vocabulary", vocabulary])
+    command.extend(map(str, clips))
+    process = subprocess.run(command, capture_output=True, encoding="utf-8",
+                             timeout=sum(entry["duration_s"] for entry in manifest) * 4 + 180)
+    if process.returncode:
+        raise RuntimeError(f"Rust comparator exited with {process.returncode}: {process.stderr.strip()}")
+    events, rows = [], []
+    load_s = None
+    for line in process.stdout.splitlines():
+        item = json.loads(line)
+        if item["event"] == "model_ready":
+            load_s = item["load_ms"] / 1000
+        elif item["event"] == "clip_start":
+            events = []
+        elif item["event"] == "transcript":
+            utterance = item["utterance"]
+            kind = "transcript" if utterance["stability"] == "final" else "partial_transcript"
+            events.append((kind, item["at_ms"] / 1000,
+                           {"text": utterance["text"], "utterance_id": utterance["id"],
+                            "transcription_seconds": item["decode_ms"] / 1000,
+                            "queue_seconds": item["queue_ms"] / 1000}))
+        elif item["event"] == "clip_end":
+            entry = manifest[item["index"]]
+            finals = [(at, data) for kind, at, data in events if kind == "transcript" and data["text"]]
+            actual = " ".join(value["text"] for _, value in finals)
+            rows.append({**entry, **score(entry["reference"], actual, entry["terms"]), "actual": actual,
+                         "stable_partial_s": stable_partial(events),
+                         "final_latency_s": finals[-1][0] - entry["speech_end_s"]
+                         if finals and entry["speech_end_s"] is not None else None,
+                         "reported_decode_s": sum(data["transcription_seconds"] for _, _, data in events if data["text"]),
+                         "max_decode_queue_s": max((data["queue_seconds"] for _, _, data in events), default=0),
+                         "dropped_finals": 0, "dropped_frames": 0, "discontinuities": 0})
+    if [row["id"] for row in rows] != [entry["id"] for entry in manifest]:
+        raise RuntimeError("Rust comparator did not finish every fixture in manifest order")
+    summary = {**summarize(rows), "load_s": load_s, "wall_s_with_load": round(time.monotonic() - started, 3),
+               "max_decode_queue_s": max(row["max_decode_queue_s"] for row in rows)}
+    label = f"rust-{model.stem}{'-hints' if vocabulary else ''}"
+    write_json(output / f"{label}.json", {"backend": label, "vocabulary": vocabulary, "summary": summary, "clips": rows})
+    print(f"{label} {json.dumps(summary)}", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "output")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("generate")
     commands.add_parser("legacy").add_argument("--models", choices=SPEECH_MODELS, nargs="+", default=SPEECH_MODELS)
+    candidate = commands.add_parser("rust")
+    candidate.add_argument("--cli", type=Path, required=True)
+    candidate.add_argument("--model", type=Path, required=True)
+    candidate.add_argument("--vocabulary", default="")
     args = parser.parse_args()
     output = args.output.resolve()
     if args.command == "generate":
         generate(output)
-    else:
+    elif args.command == "legacy":
         legacy(output, args.models)
+    else:
+        rust(output, args.cli, args.model, args.vocabulary)
 
 
 if __name__ == "__main__":
