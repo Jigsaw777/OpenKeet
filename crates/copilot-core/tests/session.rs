@@ -82,6 +82,145 @@ fn a_distinct_question_after_a_short_pause_gets_its_own_answer() {
         history[0].answer.key.question_id,
         history[1].answer.key.question_id
     );
+    assert!(history[1].follow_up_to.is_none());
+}
+
+#[test]
+fn scenario_and_acknowledgement_wait_for_the_actual_question() {
+    let mut session = setup(Policy::default());
+    final_text(
+        &mut session,
+        1,
+        100,
+        800,
+        "Let's say an API can block for a long time.",
+    );
+    final_text(&mut session, 2, 1_400, 1_650, "Right, okay.");
+    assert_eq!(
+        session.snapshot().question.unwrap().phase,
+        QuestionPhase::Incomplete
+    );
+    assert!(session.next_request(4_200).is_none());
+    final_text(
+        &mut session,
+        3,
+        5_000,
+        5_800,
+        "How would you keep the coroutine responsive?",
+    );
+    let work = session.next_request(9_100).unwrap();
+    assert_eq!(work.request.key.revision, 2);
+    assert!(work.request.question.contains("an API can block"));
+    assert!(
+        work.request
+            .question
+            .ends_with("keep the coroutine responsive?")
+    );
+    assert!(!work.request.question.contains("Right, okay"));
+}
+
+#[test]
+fn scenario_and_question_in_one_final_do_not_require_question_punctuation() {
+    let mut session = setup(Policy::default());
+    let text = "Suppose a request blocks. How would you keep the coroutine responsive";
+    final_text(&mut session, 1, 100, 1_400, text);
+    let work = session.next_request(4_600).unwrap();
+    assert_eq!(work.request.question, text);
+}
+
+#[test]
+fn follow_up_gets_a_new_id_and_the_prior_checked_answer_after_a_long_pause() {
+    let mut session = setup(Policy::default());
+    final_text(
+        &mut session,
+        1,
+        100,
+        800,
+        "How would you protect shared state in a coroutine?",
+    );
+    let initial = session.next_request(4_000).unwrap();
+    assert!(session.complete(
+        initial.request.key,
+        4_200,
+        Ok("Use a suspending mutex.".into())
+    ));
+    final_text(
+        &mut session,
+        2,
+        36_200,
+        37_100,
+        "Okay, and what if the API call blocks?",
+    );
+    let follow = session.next_request(40_300).unwrap();
+    let context = follow.request.follow_up.as_ref().unwrap();
+    assert_ne!(
+        follow.request.key.question_id,
+        initial.request.key.question_id
+    );
+    assert_eq!(context.question_id, initial.request.key.question_id);
+    assert_eq!(
+        context.checked_answer.as_deref(),
+        Some("Use a suspending mutex.")
+    );
+    let answer = rehearsal::practice_answer(&follow.request);
+    assert!(answer.contains("outside the mutex") && answer.contains("Dispatchers.IO"));
+    assert!(session.complete(follow.request.key, 40_400, Ok(answer)));
+    let history = session.snapshot().history;
+    assert_eq!(history.len(), 2);
+    assert_eq!(
+        history[1].follow_up_to,
+        Some(history[0].answer.key.question_id)
+    );
+    assert_eq!(history[0].answer.text, "Use a suspending mutex.");
+}
+
+#[test]
+fn immediate_follow_up_waits_for_its_parent_checked_revision() {
+    let mut session = setup(Policy {
+        draft_after_ms: Some(350),
+        ..Policy::default()
+    });
+    final_text(&mut session, 1, 100, 800, "Explain an inner join.");
+    let draft = session.next_request(1_150).unwrap();
+    final_text(
+        &mut session,
+        2,
+        1_300,
+        1_850,
+        "And what about rows with no match?",
+    );
+    let parent = session.next_request(1_900).unwrap();
+    assert!(draft.is_cancelled());
+    assert_eq!(
+        parent.request.key.question_id,
+        draft.request.key.question_id
+    );
+    assert!(!session.complete(draft.request.key, 1_950, Ok("Obsolete draft".into())));
+    session.complete(parent.request.key, 2_000, Ok("Only matching rows.".into()));
+    let follow = session.next_request(5_050).unwrap();
+    assert_eq!(
+        follow.request.follow_up.unwrap().checked_answer.as_deref(),
+        Some("Only matching rows.")
+    );
+}
+
+#[test]
+fn explicit_correction_revises_after_the_normal_continuation_window() {
+    let mut session = setup(Policy::default());
+    final_text(&mut session, 1, 100, 800, "When should I use a semaphore?");
+    rehearsal::answer_available(&mut session, 4_100);
+    final_text(
+        &mut session,
+        2,
+        11_000,
+        11_900,
+        "Actually, I meant a mutex.",
+    );
+    rehearsal::answer_available(&mut session, 15_200);
+    let history = session.snapshot().history;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].answer.key.revision, 2);
+    assert!(history[0].answer.text.contains("A mutex protects"));
 }
 
 #[test]

@@ -21,6 +21,7 @@ const MAX_EVENTS: usize = 128;
 pub struct Policy {
     pub debounce_ms: u64,
     pub continuation_ms: u64,
+    pub follow_up_ms: u64,
     pub draft_after_ms: Option<u64>,
     pub answer_timeout_ms: u64,
 }
@@ -30,6 +31,7 @@ impl Default for Policy {
         Self {
             debounce_ms: 3_200,
             continuation_ms: 5_000,
+            follow_up_ms: 120_000,
             draft_after_ms: None,
             answer_timeout_ms: 15_000,
         }
@@ -305,7 +307,17 @@ impl Session {
         if text.is_empty() || text.len() > MAX_QUESTION_BYTES {
             return Err("Enter a question within the length limit.");
         }
-        self.add_question(text, Source::TYPED, Span::at(now_ms), true)?;
+        let follow_up_to = self.questions.back().and_then(|prior| {
+            let gap = now_ms.saturating_sub(prior.view.span.end_ms);
+            (boundary::relation(
+                Some((&prior.view.text, gap)),
+                text,
+                self.policy.continuation_ms,
+                self.policy.follow_up_ms,
+            ) == Relation::FollowUp)
+                .then_some(prior.view.id)
+        });
+        self.add_question(text, Source::TYPED, Span::at(now_ms), true, follow_up_to)?;
         Ok(())
     }
 
@@ -349,10 +361,13 @@ impl Session {
             }
             (q.view.id, AnswerMode::Draft)
         };
-        let session_id = self.id;
-        let q = self.question_mut(id).expect("selected a retained question");
+        let q = self
+            .questions
+            .iter()
+            .find(|q| q.view.id == id)
+            .expect("selected a retained question");
         let key = AnswerKey {
-            session_id,
+            session_id: self.id,
             question_id: id,
             revision: q.view.revision,
             mode,
@@ -363,11 +378,17 @@ impl Session {
                 question: q.view.text.clone(),
                 source: q.view.source.clone(),
                 span: q.view.span,
+                follow_up: q
+                    .view
+                    .follow_up_to
+                    .and_then(|prior| self.follow_up_context(prior)),
             },
             cancelled: Arc::new(AtomicBool::new(false)),
         };
         if mode == AnswerMode::Draft {
-            q.drafted = true;
+            self.question_mut(id)
+                .expect("selected a retained question")
+                .drafted = true;
         }
         let phase = if mode == AnswerMode::Draft {
             QuestionPhase::Drafting
@@ -462,12 +483,24 @@ impl Session {
                 utterance.span.start_ms.saturating_sub(q.view.span.end_ms),
             )
         });
-        match boundary::relation(timing, &utterance.text, self.policy.continuation_ms) {
+        let relation = boundary::relation(
+            timing,
+            &utterance.text,
+            self.policy.continuation_ms,
+            self.policy.follow_up_ms,
+        );
+        match relation {
             Relation::Ignore => Ok(None),
-            Relation::New => {
+            Relation::New | Relation::FollowUp => {
                 let prior = previous.map(|q| q.view.id);
-                let id =
-                    self.add_question(&utterance.text, self.source.clone(), utterance.span, false)?;
+                let follow_up_to = prior.filter(|_| relation == Relation::FollowUp);
+                let id = self.add_question(
+                    &utterance.text,
+                    self.source.clone(),
+                    utterance.span,
+                    false,
+                    follow_up_to,
+                )?;
                 if let Some(q) = prior.and_then(|prior_id| self.question_mut(prior_id)) {
                     q.closed = true;
                 }
@@ -509,6 +542,7 @@ impl Session {
         source: Source,
         span: Span,
         manual: bool,
+        follow_up_to: Option<u64>,
     ) -> Result<u64, &'static str> {
         if self.questions.len() == MAX_QUESTIONS {
             let Some(index) = self.questions.iter().position(|q| {
@@ -545,6 +579,7 @@ impl Session {
                 span,
                 source,
                 text: text.to_owned(),
+                follow_up_to,
                 answer: None,
             },
         });
@@ -554,6 +589,38 @@ impl Session {
 
     fn question_mut(&mut self, id: u64) -> Option<&mut Question> {
         self.questions.iter_mut().find(|q| q.view.id == id)
+    }
+
+    fn follow_up_context(&self, id: u64) -> Option<FollowUpContext> {
+        if let Some(prior) = self
+            .questions
+            .iter()
+            .find(|q| q.view.id == id)
+            .map(|q| &q.view)
+        {
+            return Some(FollowUpContext {
+                question_id: id,
+                revision: prior.revision,
+                question: prior.text.clone(),
+                checked_answer: prior
+                    .answer
+                    .as_ref()
+                    .filter(|answer| {
+                        answer.status == AnswerStatus::Checked
+                            && answer.key.revision == prior.revision
+                    })
+                    .map(|answer| answer.text.clone()),
+            });
+        }
+        self.history
+            .iter()
+            .find(|item| item.answer.key.question_id == id)
+            .map(|item| FollowUpContext {
+                question_id: id,
+                revision: item.answer.key.revision,
+                question: item.question.clone(),
+                checked_answer: Some(item.answer.text.clone()),
+            })
     }
 
     fn speech_pending(&self, q: &Question) -> bool {
@@ -618,7 +685,11 @@ impl Session {
             QuestionPhase::Waiting
         } else {
             let question = q.view.text.clone();
-            let item = HistoryItem { question, answer };
+            let item = HistoryItem {
+                question,
+                answer,
+                follow_up_to: q.view.follow_up_to,
+            };
             if let Some(previous) = self
                 .history
                 .iter_mut()

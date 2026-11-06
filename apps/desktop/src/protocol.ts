@@ -24,6 +24,7 @@ export type Question = {
   span: Span;
   source: Source;
   text: string;
+  follow_up_to?: number;
   answer: Answer | null;
 };
 export type Session = {
@@ -36,7 +37,7 @@ export type Session = {
   transcript: Utterance[];
   transcript_truncated: boolean;
   question: Question | null;
-  history: { question: string; answer: Answer }[];
+  history: { question: string; answer: Answer; follow_up_to?: number }[];
   dropped_ms: number;
   notice: string | null;
 };

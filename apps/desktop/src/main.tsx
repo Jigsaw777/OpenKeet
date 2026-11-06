@@ -23,6 +23,7 @@ const navigation = [
 function App() {
   const [view, setView] = useState(emptyView);
   const [page, setPage] = useState<Page>("overview");
+  const [layout, setLayout] = useState<"split" | "answer">("split");
   const [audioOpened, setAudioOpened] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(localStorage.getItem("copilot-theme") === "light" ? "light" : "dark");
   const [zoom, setZoom] = useState(localStorage.getItem("text-scale") || "100");
@@ -109,12 +110,12 @@ function App() {
     {copied && <p className="toast" role="status">Answer copied</p>}</>;
 
   if (focusWindow) return <main className="focus-shell">
-    <header className="focus-top"><div className="brand"><Mark /><div><p className="eyebrow">Personal Copilot</p><h1>Focus</h1></div></div>
-      <button aria-pressed={pinned} onClick={async () => { if (await command("pin_focus", { pinned: !pinned })) setPinned(!pinned); }}>{pinned ? "Unpin" : "Pin"}</button></header>
-    <div className="focus-status"><Status view={view} /><CaptureControls view={view} command={command} /></div>
-    <p className="subtle">{sourceLabel(session.source.kind)} · Local practice</p>
-    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} compact />
-    <button onClick={() => void command("show_workspace")}>Open workspace <Icon name="arrow" /></button>
+    <header className="focus-top"><div className="brand"><Mark size={25} /><h1>Focus</h1></div>
+      <div className="focus-status"><Status view={view} />
+        <button aria-pressed={pinned} onClick={async () => { if (await command("pin_focus", { pinned: !pinned })) setPinned(!pinned); }}>{pinned ? "Unpin" : "Pin"}</button></div></header>
+    <div className="focus-route"><p className="subtle">{sourceLabel(session.source.kind)} · Local practice</p><CaptureControls view={view} command={command} /></div>
+    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} compact
+      footer={<button onClick={() => void command("show_workspace")}>Open workspace <Icon name="arrow" /></button>} />
   </main>;
 
   return <div className="app-shell">
@@ -150,8 +151,12 @@ function App() {
             {!running && <button onClick={() => setPage("audio")}>Set up audio</button>}
             <button disabled={!desktop} onClick={() => void command("open_focus")}><Icon name="focus" /> Focus window</button></div></div>
         <div className="session-meta"><span><Icon name="wave" />{sourceLabel(session.source.kind)}</span><span><Icon name="lock" />{view.mode === "audio" ? "Local Whisper" : "Offline practice responder"}</span>
-          {view.mode === "audio" && <label className="meter-compact" htmlFor="live-level">Input level <meter id="live-level" min={0} max={32768} value={view.meter} /></label>}</div>
-        <div className="live-grid"><Transcript session={session} useTranscript={() => void useTranscript()} />
+          {view.mode === "audio" && <label className="meter-compact" htmlFor="live-level">Input level <meter id="live-level" min={0} max={32768} value={view.meter} /></label>}
+          <div className="layout-switch" role="group" aria-label="Workspace layout">
+            <button aria-pressed={layout === "split"} onClick={() => setLayout("split")}>Split view</button>
+            <button aria-pressed={layout === "answer"} onClick={() => setLayout("answer")}>Answer view</button>
+          </div></div>
+        <div className={`live-grid ${layout === "answer" ? "answer-view" : ""}`}><Transcript session={session} useTranscript={() => void useTranscript()} hidden={layout === "answer"} />
           <AnswerPanel question={session.question} copy={text => void copy(text)} /></div>
         <form className="card prompt" onSubmit={submit}><label htmlFor="manual-question">Ask a practice question</label>
           <div className="prompt-row"><textarea id="manual-question" ref={promptInput} rows={2} maxLength={64000} value={prompt} placeholder="Type or review a question…" onChange={event => setPrompt(event.target.value)} />
@@ -170,7 +175,7 @@ function App() {
 function History({ session }: { session: Session }) {
   return <details className="card history"><summary>Session history <span className="soft-label">{session.history.length}</span></summary>
     {session.history.length ? session.history.map(item => <article key={item.answer.key.question_id}>
-      <p className="eyebrow">Checked · Revision {item.answer.key.revision}</p><strong>{item.question}</strong><p>{item.answer.text}</p>
+      <p className="eyebrow">Checked · Revision {item.answer.key.revision}{item.follow_up_to && ` · Follow-up to question ${item.follow_up_to}`}</p><strong>{item.question}</strong><p>{item.answer.text}</p>
     </article>) : <Empty label="No checked answers yet" detail="Completed revisions appear here during this session." />}
   </details>;
 }

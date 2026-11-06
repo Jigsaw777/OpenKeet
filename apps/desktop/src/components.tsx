@@ -40,14 +40,14 @@ export function Status({ view }: { view: DesktopView }) {
   return <span className={`pill capture-${view.session.capture}`} role="status"><i />{statusLabel(view)}</span>;
 }
 
-export function Transcript({ session, useTranscript }: { session: Session; useTranscript: () => void }) {
+export function Transcript({ session, useTranscript, hidden = false }: { session: Session; useTranscript: () => void; hidden?: boolean }) {
   const scroll = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   useLayoutEffect(() => { follow.current = true; }, [session.session_id]);
   useLayoutEffect(() => {
     if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
   }, [session.transcript]);
-  return <section className="card transcript" aria-labelledby="transcript-title">
+  return <section className="card transcript" aria-labelledby="transcript-title" hidden={hidden}>
     <div className="card-head"><div><p className="eyebrow">Audio timeline</p><h2 id="transcript-title">Transcript</h2></div>
       <span className="soft-label">{sourceLabel(session.source.kind)}</span></div>
     <div ref={scroll} tabIndex={0} role="region" aria-label="Transcript timeline" className="transcript-scroll"
@@ -69,7 +69,7 @@ function formatTime(ms: number) {
 }
 
 const phases: Record<Question["phase"], string> = {
-  candidate: "Listening for a follow-up",
+  candidate: "Waiting for the question to finish",
   waiting: "Checking for more context",
   incomplete: "Waiting for the rest of the question",
   ready: "Ready to answer",
@@ -80,24 +80,48 @@ const phases: Record<Question["phase"], string> = {
   error: "Needs attention",
 };
 
-export function AnswerPanel({ question, copy, compact = false }: { question: Question | null; copy: (text: string) => void; compact?: boolean }) {
+export function AnswerPanel({ question, copy, compact = false, footer }: {
+  question: Question | null; copy: (text: string) => void; compact?: boolean; footer?: ReactNode;
+}) {
   const answer = question?.answer;
+  const scroll = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = 0; }, [question?.id, question?.revision]);
   const label = answer?.status === "checked" ? "Checked" : answer?.status === "provisional" ? "Draft" : answer?.status === "superseded" ? "Superseded" : "Awaiting question";
+  const text = question?.text || "A question will appear here.";
+  const followUp = question?.follow_up_to && <p className="follow-up">Follow-up to question {question.follow_up_to}</p>;
+  const phase = question && question.phase !== "checked" && <p className="subtle">{phases[question.phase]}</p>;
   return <section className={`card answer-panel ${compact ? "compact-answer" : ""}`} aria-labelledby="answer-title">
-    <div className="question-block">
+    {compact ? <div className="compact-question">
+      {followUp}
+      <details key={question?.id}>
+        <summary aria-label="Show full current question"><span>{text}</span></summary>
+        <div className="compact-question-full"><p>{text}</p>{phase}</div>
+      </details>
+    </div> : <div className="question-block">
       <div className="meta-line"><p className="eyebrow">Current question</p>{question && <span className="soft-label">Revision {question.revision}</span>}</div>
-      <p className="question-text">{question?.text || "A question will appear here."}</p>
-      {question && question.phase !== "checked" && <p className="subtle">{phases[question.phase]}</p>}
-    </div>
-    <div className="card-head"><div><p className="eyebrow">Response</p><h2 id="answer-title">Practice answer</h2></div>
+      <p className="question-text">{text}</p>
+      {followUp}{phase}
+    </div>}
+    <div className="card-head"><div>{!compact && <p className="eyebrow">Response</p>}<h2 id="answer-title">Practice answer</h2></div>
       <span className={`soft-label answer-${answer?.status ?? "empty"}`}>{label}</span></div>
-    <div className="answer-content" role="region" aria-label="Practice answer text" tabIndex={0}>
-      {answer ? <><p className={answer.status === "superseded" ? "superseded" : ""}><InlineCode text={answer.text} /></p>
+    <div ref={scroll} className="answer-content" role="region" aria-label="Practice answer text" tabIndex={0}>
+      {answer ? <><div className={answer.status === "superseded" ? "answer-body superseded" : "answer-body"}><AnswerText text={answer.text} /></div>
         {answer.status === "superseded" && <p className="subtle">Updating for the latest question.</p>}</> :
         <Empty label="An outline when you need it" detail="The offline practice responder supplies example answers." />}
     </div>
-    <div className="card-foot"><button disabled={answer?.status !== "checked"} onClick={() => answer && copy(answer.text)}>Copy answer</button></div>
+    <div className="card-foot"><button disabled={answer?.status !== "checked"} onClick={() => answer && copy(answer.text)}>Copy answer</button>{footer}</div>
   </section>;
+}
+
+function AnswerText({ text }: { text: string }) {
+  return text.split(/\n\s*\n/).filter(Boolean).map((block, index) => {
+    const lines = block.split("\n");
+    const steps = lines.map(line => /^(\d+)\.\s+(.+)$/.exec(line));
+    if (steps.every(step => step !== null)) {
+      return <ol key={index} start={Number(steps[0][1])}>{steps.map((step, i) => <li key={i}><InlineCode text={step[2]} /></li>)}</ol>;
+    }
+    return <p key={index}><InlineCode text={block} /></p>;
+  });
 }
 
 function InlineCode({ text }: { text: string }) {

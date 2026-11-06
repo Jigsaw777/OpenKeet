@@ -43,6 +43,8 @@ First-run wizard steps are **Audio source → Play test → Choose local or conn
 
 Keep controls and prompt reachable with the keyboard. Interim text has an explicit label and separate row style. Late speech moves the answer through waiting, draft, or revised states with the revision ID visible. A final remains available in history when new work starts. Follow the transcript/answer tail only while already at the bottom. Below a narrow breakpoint, stack transcript and answer with the same heading and reading order.
 
+**Answer view** gives the reading pane the full workspace width. Split view keeps the transcript beside it. A separate follow-up identifies the prior question while retaining both checked answers in session history. Cluely documents a transcript toggle and movable card. ParakeetAI describes an on-screen prompt that can be read at a glance. [Cluely Live Insights](https://docs.cluely.com/feature/liveinsights), [ParakeetAI](https://www.parakeet-ai.com/)
+
 ## 3. Compact focus window
 
 ```text
@@ -59,7 +61,7 @@ Keep controls and prompt reachable with the keyboard. Interim text has an explic
 └───────────────────────────────────┘
 ```
 
-Use a resizable normal window with an explicit pin control when supported. It shares the active session state and capture controls. Screen sharing follows normal OS rules. No separate recording or generation task starts when opening it.
+Use a resizable normal window with an explicit pin control when supported. A one-line question preview expands on demand. The answer fills the remaining height, scrolls with the keyboard, and keeps copy and workspace controls visible. The window shares the active session state and capture controls. Screen sharing follows normal OS rules.
 
 ## 4. Settings and library
 

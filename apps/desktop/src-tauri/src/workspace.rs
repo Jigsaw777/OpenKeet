@@ -34,6 +34,7 @@ pub struct CaptureConfig {
 struct Replay {
     steps: VecDeque<Step>,
     elapsed: u64,
+    finish_at_ms: u64,
     tick: Instant,
     paused: bool,
 }
@@ -128,20 +129,19 @@ impl Desktop {
     }
 
     pub fn start_sample(&mut self) -> Result<(), String> {
-        let steps = serde_json::from_str(rehearsal::DEMO_JSON)
+        let steps: VecDeque<Step> = serde_json::from_str(rehearsal::DEMO_JSON)
             .map_err(|_| "Could not read the bundled sample.")?;
-        self.reset(
-            Mode::Sample,
-            Source::REPLAY,
-            Policy {
-                draft_after_ms: Some(600),
-                ..Policy::default()
-            },
-        )?;
+        let policy = Policy {
+            draft_after_ms: Some(600),
+            ..Policy::default()
+        };
+        let finish_at_ms = steps.back().map_or(0, |last| last.at_ms) + policy.debounce_ms + 200;
+        self.reset(Mode::Sample, Source::REPLAY, policy)?;
         self.session.set_capture(CaptureState::Capturing, 0);
         self.replay = Some(Replay {
             steps,
             elapsed: 0,
+            finish_at_ms,
             tick: Instant::now(),
             paused: false,
         });
@@ -255,7 +255,7 @@ impl Desktop {
                 }
             }
             let elapsed = replay.elapsed;
-            if replay.steps.is_empty() && elapsed >= 6_500 {
+            if replay.steps.is_empty() && elapsed >= replay.finish_at_ms {
                 self.session.set_capture(CaptureState::Stopped, elapsed);
                 self.replay = None;
             }

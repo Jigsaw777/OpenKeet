@@ -130,8 +130,13 @@ meter::-webkit-meter-optimum-value { background: var(--focus); }
 .session-meta { display: flex; flex-wrap: wrap; gap: .45rem 1.2rem; color: var(--muted); font-size: .81rem; }
 .session-meta > * { display: inline-flex; align-items: center; gap: .35rem; }
 .meter-compact meter { width: 4rem; }
-.live-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 1rem; }
+.layout-switch { margin-left: auto; gap: .25rem; }
+.layout-switch button { min-height: 1.9rem; padding: .24rem .6rem; font-size: .77rem; }
+.layout-switch button[aria-pressed="true"] { color: var(--primary-ink); background: var(--primary); border-color: var(--primary); }
+.live-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 1rem; }
+.live-grid.answer-view { grid-template-columns: minmax(0, 1fr); }
 .transcript, .answer-panel { display: flex; flex-direction: column; min-width: 0; }
+.transcript[hidden] { display: none; }
 .card-head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: .35rem; padding: .92rem 1.05rem .7rem; }
 .card-head h2, .setup-card h2 { margin-top: .2rem; }
 .card-foot { margin-top: auto; border-top: 1px solid var(--rule); padding: .65rem 1rem; }
@@ -139,12 +144,19 @@ meter::-webkit-meter-optimum-value { background: var(--focus); }
 .transcript-scroll, .answer-content { padding: .25rem 1.05rem .9rem; overflow-y: auto; scrollbar-gutter: stable; overflow-wrap: anywhere; }
 .transcript-scroll { min-height: 11rem; max-height: 20rem; }
 .answer-content { min-height: 7.5rem; max-height: 14rem; }
+.answer-view .answer-content { min-height: min(16rem, 30dvh); max-height: max(16rem, 55dvh); }
+.answer-body { display: grid; gap: .6rem; }
+.answer-body p { white-space: pre-wrap; }
+.answer-body ol { margin: 0; padding-inline-start: 1.45em; }
+.answer-body li + li { margin-top: .48em; }
 .line { position: relative; padding: .55rem 0 .68rem .65rem; border-left: 2px solid var(--rule); }
 .line.interim, .line.stable { border-left: 2px dashed var(--rule); color: var(--muted); }
 .line-meta, .meta-line { display: flex; justify-content: space-between; align-items: center; gap: .4rem; }
 .line-meta { color: var(--muted); font-size: .69rem; font-variant-numeric: tabular-nums; margin-bottom: .18rem; }
 .question-block { padding: .75rem 1.05rem; border-bottom: 1px solid var(--rule); background: var(--soft); border-radius: .85rem .85rem 0 0; }
 .question-text { font-weight: 650; margin-top: .32rem; overflow-wrap: anywhere; }
+.follow-up { color: var(--accent); font-size: .73rem; font-weight: 650; }
+.question-block .follow-up { margin-top: .26rem; }
 .superseded { color: var(--muted); }
 .empty { color: var(--muted); display: grid; align-content: center; justify-items: start; min-height: 5rem; gap: .2rem; padding: .6rem 0; }
 .empty strong { color: var(--ink); font-size: .9rem; }
@@ -167,10 +179,21 @@ meter::-webkit-meter-optimum-value { background: var(--focus); }
 .setup-card .checkbox { display: flex; align-items: flex-start; gap: .38rem; margin: .1rem 0 .4rem; }
 .notice, .toast { border: 1px solid var(--rule); border-radius: .65rem; padding: .52rem .75rem; margin-bottom: .65rem; background: var(--warning-bg); color: var(--warning); overflow-wrap: anywhere; }
 .toast { color: var(--accent); background: var(--soft); }
-.focus-shell { max-width: 40rem; margin: 0 auto; min-height: 100vh; padding: .9rem; display: grid; align-content: start; gap: .7rem; }
-.focus-top, .focus-status { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
-.focus-top h1 { font-size: 1.55rem; }
-.focus-shell > button { justify-self: start; }
+.focus-shell { max-width: 56rem; margin: 0 auto; height: 100dvh; padding: .55rem; display: flex; flex-direction: column; gap: .4rem; overflow: hidden; }
+.focus-top, .focus-status, .focus-route { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .38rem; }
+.focus-top h1 { font-size: 1rem; letter-spacing: -.02em; }
+.focus-route .subtle { font-size: .74rem; }
+.focus-shell button { min-height: 1.95rem; padding-block: .22rem; }
+.focus-shell .notice, .focus-shell .toast { margin: 0; max-height: 4.25rem; overflow: auto; }
+.compact-answer { flex: 1 1 0; min-height: 0; overflow: hidden; }
+.compact-question { flex: 0 0 auto; padding: .42rem .7rem; background: var(--soft); border-bottom: 1px solid var(--rule); }
+.compact-question summary { cursor: pointer; font-weight: 650; font-size: .83rem; }
+.compact-question summary span { display: inline-block; vertical-align: bottom; max-width: calc(100% - 1.2rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compact-question-full { max-height: min(6rem, 24dvh); overflow: auto; overflow-wrap: anywhere; padding: .35rem .05rem; font-size: .83rem; }
+.compact-answer .card-head { flex: 0 0 auto; padding: .45rem .7rem; align-items: center; }
+.compact-answer .card-head h2 { margin: 0; font-size: .98rem; }
+.compact-answer .answer-content { flex: 1 1 0; min-height: 0; max-height: none; padding: .18rem .72rem .55rem; font-size: 1.03rem; line-height: 1.5; }
+.compact-answer .card-foot { flex: 0 0 auto; padding: .38rem .65rem; display: flex; align-items: center; gap: .35rem; justify-content: space-between; flex-wrap: wrap; }
 
 @media (max-width: 900px) {
   .hero-art { opacity: .64; }

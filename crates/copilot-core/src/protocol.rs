@@ -137,6 +137,16 @@ pub struct AnswerRequest {
     pub question: String,
     pub source: Source,
     pub span: Span,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up: Option<FollowUpContext>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct FollowUpContext {
+    pub question_id: u64,
+    pub revision: u64,
+    pub question: String,
+    pub checked_answer: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -154,6 +164,8 @@ pub struct QuestionView {
     pub span: Span,
     pub source: Source,
     pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up_to: Option<u64>,
     pub answer: Option<Answer>,
 }
 
@@ -161,6 +173,8 @@ pub struct QuestionView {
 pub struct HistoryItem {
     pub question: String,
     pub answer: Answer,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up_to: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

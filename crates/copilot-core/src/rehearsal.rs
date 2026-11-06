@@ -37,7 +37,27 @@ impl Step {
 
 pub fn practice_answer(request: &AnswerRequest) -> String {
     let question = request.question.to_lowercase();
-    let answer = if question.contains("coroutine") {
+    let previous = request
+        .follow_up
+        .as_ref()
+        .map(|prior| prior.question.to_lowercase());
+    let answer = if previous
+        .as_deref()
+        .is_some_and(|prior| prior.contains("coroutine"))
+        && question.contains("block")
+    {
+        "Keep the API call outside the mutex. If the client exposes a suspending API, await it directly. If it only exposes a blocking API, run that call on `Dispatchers.IO`.\n\n\
+        1. Take a snapshot of the state and its version while holding the mutex, then release it.\n\
+        2. Make the API call with a client timeout. Use a cancellable client, or `runInterruptible` when the blocking API honors thread interruption. Moving the call to `Dispatchers.IO` alone does not make the call interruptible.\n\
+        3. Reacquire the mutex and recheck the version before applying the result. Decide whether to retry or discard a stale result.\n\n\
+        Test that a slow or cancelled request leaves other coroutines free to read and update the shared state."
+    } else if previous
+        .as_deref()
+        .is_some_and(|prior| prior.contains("join"))
+        && question.contains("no match")
+    {
+        "Use a left join when the left-side rows must survive. Unmatched right-side columns are `NULL`. Put filters on the optional right-side rows in the `ON` clause when unmatched left-side rows should remain. A right-side filter in `WHERE` can remove them."
+    } else if question.contains("coroutine") {
         "Use a suspending mutex around the smallest update to shared state. A waiting coroutine suspends, leaving the thread free to run other work. Keep I/O outside the lock, and release it with a scoped operation such as Kotlin’s `withLock`."
     } else if question.contains("join") {
         "Start with the join keys and which rows must survive. An inner join returns matching rows from both inputs. Use table aliases and explicitly select the requested columns. For performance, inspect the query plan and check indexes on the join and filter keys."
