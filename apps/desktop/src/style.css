@@ -219,3 +219,5 @@ meter::-webkit-meter-optimum-value { background: var(--focus); }
   .hero h1 { font-size: 2.35rem; }
   .prompt-row, .field-row { align-items: stretch; flex-direction: column; }
 }
+.audio-metrics { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
+.audio-metrics dd { margin: 0; font-variant-numeric: tabular-nums; }

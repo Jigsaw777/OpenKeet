@@ -46,6 +46,12 @@ export type DesktopView = {
   session: Session;
   mode: "idle" | "sample" | "audio";
   meter: number;
+  audio_metrics: {
+    frames: number;
+    ready_ms: number | null;
+    decode_ms: number | null;
+    queue_ms: number | null;
+  };
   loading: boolean;
   stopping: boolean;
 };
@@ -56,6 +62,7 @@ export const emptyView: DesktopView = {
   update: -1,
   mode: "idle",
   meter: 0,
+  audio_metrics: { frames: 0, ready_ms: null, decode_ms: null, queue_ms: null },
   loading: false,
   stopping: false,
   session: {

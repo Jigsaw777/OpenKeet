@@ -41,9 +41,17 @@ struct Replay {
 
 struct AudioRun {
     stop: Stop,
-    ready: bool,
+    started: Instant,
     stopping: Option<CaptureState>,
     failed: bool,
+}
+
+#[derive(Clone, Copy, Default, Serialize)]
+struct AudioMetrics {
+    frames: u64,
+    ready_ms: Option<u64>,
+    decode_ms: Option<u64>,
+    queue_ms: Option<u64>,
 }
 
 struct Job {
@@ -60,6 +68,7 @@ pub struct View {
     session: Snapshot,
     mode: Mode,
     meter: u16,
+    audio_metrics: AudioMetrics,
     loading: bool,
     stopping: bool,
 }
@@ -75,6 +84,7 @@ pub struct Desktop {
     config: Option<CaptureConfig>,
     next_utterance: u64,
     meter: u16,
+    audio_metrics: AudioMetrics,
 }
 
 impl Desktop {
@@ -90,6 +100,7 @@ impl Desktop {
             config: None,
             next_utterance: 1,
             meter: 0,
+            audio_metrics: AudioMetrics::default(),
         }))
     }
 
@@ -99,10 +110,10 @@ impl Desktop {
             session: self.session.snapshot(),
             mode: self.mode,
             meter: self.meter,
-            loading: self
-                .audio
-                .as_ref()
-                .is_some_and(|audio| !audio.ready && audio.stopping.is_none()),
+            audio_metrics: self.audio_metrics,
+            loading: self.audio.as_ref().is_some_and(|audio| {
+                self.audio_metrics.ready_ms.is_none() && audio.stopping.is_none()
+            }),
             stopping: self
                 .audio
                 .as_ref()
@@ -125,6 +136,7 @@ impl Desktop {
         self.mode = mode;
         self.next_utterance = 1;
         self.meter = 0;
+        self.audio_metrics = AudioMetrics::default();
         Ok(())
     }
 
@@ -170,9 +182,10 @@ impl Desktop {
         }
         let config = self.config.clone().ok_or("Choose an audio source first.")?;
         let stop = Stop::default();
+        self.audio_metrics = AudioMetrics::default();
         self.audio = Some(AudioRun {
             stop: stop.clone(),
-            ready: false,
+            started: Instant::now(),
             stopping: None,
             failed: false,
         });
@@ -187,11 +200,13 @@ impl Desktop {
 
     pub fn stop(&mut self, pause: bool) -> Result<(), String> {
         if let Some(audio) = &mut self.audio {
-            audio.stopping = Some(if pause {
-                CaptureState::Paused
-            } else {
-                CaptureState::Stopped
-            });
+            if !pause || audio.stopping.is_none() {
+                audio.stopping = Some(if pause {
+                    CaptureState::Paused
+                } else {
+                    CaptureState::Stopped
+                });
+            }
             audio.stop.request();
         } else if pause {
             let replay = self
@@ -275,7 +290,10 @@ impl Desktop {
         let now = elapsed_ms(self.clock);
         let result = match event {
             AudioEvent::Ready { .. } => {
-                audio.ready = true;
+                if audio.stopping.is_some() {
+                    return None;
+                }
+                self.audio_metrics.ready_ms = Some(elapsed_ms(audio.started));
                 self.session.set_capture(CaptureState::Capturing, now);
                 Ok(())
             }
@@ -283,8 +301,18 @@ impl Desktop {
                 self.next_utterance = self.next_utterance.max(utterance_id + 1);
                 self.session.observe_speech(utterance_id, span)
             }
-            AudioEvent::Transcript { utterance, .. } => self.session.ingest(utterance),
-            AudioEvent::Meter { peak, .. } => {
+            AudioEvent::Transcript {
+                utterance,
+                decode_ms,
+                queue_ms,
+                ..
+            } => {
+                self.audio_metrics.decode_ms = Some(decode_ms);
+                self.audio_metrics.queue_ms = Some(queue_ms);
+                self.session.ingest(utterance)
+            }
+            AudioEvent::Meter { peak, frames } => {
+                self.audio_metrics.frames = frames;
                 if peak == self.meter {
                     return None;
                 }
@@ -375,11 +403,16 @@ pub fn start_audio(
     };
     emit(&app, &view);
     thread::spawn(move || {
-        let result = LocalWhisper::load(Path::new(&job.config.model_path), &job.config.vocabulary)
-            .and_then(|mut model| {
-                if job.stop.requested() {
-                    return Ok(());
-                }
+        let result = (|| {
+            if job.stop.requested() {
+                return Ok(());
+            }
+            let model =
+                LocalWhisper::load(Path::new(&job.config.model_path), &job.config.vocabulary);
+            if job.stop.requested() {
+                return Ok(());
+            }
+            model.and_then(|mut model| {
                 copilot_audio::capture(
                     &mut model,
                     job.config.source,
@@ -401,7 +434,8 @@ pub fn start_audio(
                         }
                     },
                 )
-            });
+            })
+        })();
         let view = state
             .lock()
             .expect("desktop session lock")
@@ -411,4 +445,82 @@ pub fn start_audio(
         }
     });
     Ok(view)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use copilot_core::{Stability, Utterance};
+
+    fn begin(desktop: &mut Desktop) -> Job {
+        desktop
+            .begin_audio(Some(CaptureConfig {
+                source: Source {
+                    kind: SourceKind::SystemOutput,
+                    endpoint_id: Some("test-output".into()),
+                },
+                model_path: "ggml-small.en.bin".into(),
+                vocabulary: String::new(),
+            }))
+            .unwrap()
+    }
+
+    #[test]
+    fn stop_supersedes_pause_and_late_ready_cannot_reopen_capture() {
+        let shared = Desktop::shared();
+        let mut desktop = shared.lock().unwrap();
+        let job = begin(&mut desktop);
+        desktop.stop(true).unwrap();
+        desktop.stop(false).unwrap();
+        desktop.stop(true).unwrap();
+        assert!(job.stop.requested());
+        assert!(
+            desktop
+                .audio_event(AudioEvent::Ready {
+                    source: job.config.source
+                })
+                .is_none()
+        );
+        let view = desktop.finish_audio(Ok(())).unwrap();
+        assert_eq!(view.session.capture, CaptureState::Stopped);
+        assert!(!view.stopping);
+        assert!(desktop.begin_audio(None).is_err());
+    }
+
+    #[test]
+    fn late_transcript_drains_and_recovery_preserves_it() {
+        let shared = Desktop::shared();
+        let mut desktop = shared.lock().unwrap();
+        let job = begin(&mut desktop);
+        desktop.audio_event(AudioEvent::Ready {
+            source: job.config.source,
+        });
+        desktop.stop(false).unwrap();
+        desktop.audio_event(AudioEvent::Transcript {
+            utterance: Utterance {
+                id: 1,
+                revision: 1,
+                span: Span {
+                    start_ms: 0,
+                    end_ms: 1_000,
+                },
+                stability: Stability::Final,
+                text: "How does a cache work?".into(),
+            },
+            at_ms: 1_002,
+            decode_ms: 2,
+            queue_ms: 0,
+        });
+        let view = desktop
+            .finish_audio(Err(AudioError {
+                message: "Device disconnected".into(),
+                dropped_ms: 30,
+            }))
+            .unwrap();
+        assert_eq!(view.session.capture, CaptureState::Recovery);
+        assert_eq!(view.session.dropped_ms, 30);
+        assert_eq!(view.session.transcript[0].text, "How does a cache work?");
+        assert_eq!(view.audio_metrics.decode_ms, Some(2));
+        begin(&mut desktop);
+    }
 }

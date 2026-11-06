@@ -1,10 +1,7 @@
 use std::{
     collections::VecDeque,
     path::Path,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, SyncSender, TrySendError},
-    },
+    sync::mpsc::{self, Receiver, SyncSender, TrySendError},
     thread,
     time::{Duration, Instant},
 };
@@ -94,7 +91,6 @@ fn segment(
     jobs: SyncSender<Job>,
     clock: Instant,
     options: StreamOptions,
-    broken: &AtomicBool,
     report: &impl Fn(AudioEvent),
 ) -> Result<(), AudioError> {
     let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Quality);
@@ -189,9 +185,8 @@ fn segment(
             }
         }
     }
-    if !broken.load(Ordering::Acquire)
-        && let Some(ended) = active
-    {
+    // The producer closes at the first capture error. PCM already in the queue is usable.
+    if let Some(ended) = active {
         enqueue(&jobs, id, ended, clock)?;
     }
     if count % 5 != 0 {
@@ -213,20 +208,10 @@ pub(crate) fn run(
 ) -> Result<(), AudioError> {
     let (frame_tx, frame_rx) = mpsc::sync_channel(FRAME_QUEUE);
     let (job_tx, job_rx) = mpsc::sync_channel(DECODE_QUEUE);
-    let broken = AtomicBool::new(false);
     thread::scope(|scope| {
-        let capture_broken = &broken;
-        let capture = scope.spawn(move || {
-            let producer = Producer(frame_tx);
-            let result = feed(&producer);
-            if result.is_err() {
-                capture_broken.store(true, Ordering::Release);
-            }
-            result
-        });
-        let segment_broken = &broken;
+        let capture = scope.spawn(move || feed(&Producer(frame_tx)));
         let segment = scope.spawn(move || {
-            let result = segment(frame_rx, job_tx, clock, options, segment_broken, report);
+            let result = segment(frame_rx, job_tx, clock, options, report);
             if result.is_err() {
                 stop.request();
             }
@@ -343,5 +328,41 @@ mod tests {
         producer.push([0; SAMPLES], Span::at(0), None).unwrap();
         let error = producer.push([0; SAMPLES], Span::at(30), None).unwrap_err();
         assert_eq!(error.dropped_ms, 30);
+    }
+
+    #[test]
+    fn closing_input_preserves_voice_already_in_the_frame_queue() {
+        let (frame_tx, frames) = mpsc::sync_channel(FRAME_QUEUE);
+        let producer = Producer(frame_tx);
+        for n in 0..12 {
+            let samples = std::array::from_fn(|i| {
+                let phase = (n as usize * SAMPLES + i) as f32 * 0.081;
+                (1_800.0 * (phase.sin() + 0.4 * (2.0 * phase).sin())) as i16
+            });
+            producer
+                .push(
+                    samples,
+                    Span {
+                        start_ms: n * FRAME_MS,
+                        end_ms: (n + 1) * FRAME_MS,
+                    },
+                    None,
+                )
+                .unwrap();
+        }
+        drop(producer);
+        let (tx, jobs) = mpsc::sync_channel(DECODE_QUEUE);
+        segment(
+            frames,
+            tx,
+            Instant::now(),
+            StreamOptions::default(),
+            &|_| {},
+        )
+        .unwrap();
+        let job = jobs.try_recv().expect("queued speech tail");
+        assert!(job.final_result);
+        assert_eq!(job.span.end_ms, 12 * FRAME_MS);
+        assert!(jobs.try_recv().is_err());
     }
 }

@@ -21,6 +21,7 @@ export function AudioSetup({ view, enabled, start, showError, zoom, setZoom }: {
   const [consent, setConsent] = useState(false);
   const selectedDevice = endpoints.find(device => device.id === selected);
   const busy = view.loading || view.stopping || ["paused", "capturing"].includes(view.session.capture);
+  const metrics = view.audio_metrics;
 
   async function refresh() {
     if (!enabled) return;
@@ -57,6 +58,16 @@ export function AudioSetup({ view, enabled, start, showError, zoom, setZoom }: {
         </select><button disabled={!enabled || busy || refreshing} onClick={() => void refresh()}>Refresh</button></div>
         <p className="subtle">Select system output for what you hear. Select a microphone for your own voice.</p>
         <div className="meter-row"><label htmlFor="input-meter">Input level</label><meter id="input-meter" min={0} max={32768} value={view.meter} /><Status view={view} /></div>
+        {view.mode === "audio" && <details>
+          <summary>Capture diagnostics</summary>
+          <dl className="audio-metrics">
+            <dt>Audio ready</dt><dd>{metrics.ready_ms === null ? "Waiting" : `${metrics.ready_ms} ms`}</dd>
+            <dt>PCM frames processed</dt><dd>{metrics.frames.toLocaleString()}</dd>
+            <dt>Last decode</dt><dd>{metrics.decode_ms === null ? "Waiting" : `${metrics.decode_ms} ms`}</dd>
+            <dt>Last decoder queue wait</dt><dd>{metrics.queue_ms === null ? "Waiting" : `${metrics.queue_ms} ms`}</dd>
+            <dt>Reported audio loss</dt><dd>{view.session.dropped_ms} ms</dd>
+          </dl>
+        </details>}
       </section>
       <section className="card setup-card" aria-labelledby="model-heading">
         <p className="eyebrow">02 / Recognition</p><h2 id="model-heading">Load local Whisper</h2>
