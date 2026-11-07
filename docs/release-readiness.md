@@ -21,10 +21,12 @@
 
 ## Release gates
 
+These steps apply to packaged releases. See the [public release checklist](OPEN_SOURCE_RELEASE_CHECKLIST.md) for the source preview and announcement gates.
+
 1. Validate install/uninstall on a clean Windows x64 user account with no Python setup. Record build inputs, license inventory, artifact checksum, and signing status.
 2. Complete the headset/device-change, scaling, keyboard, storage/export/delete, and consent checks. Capture test artifacts using synthetic data.
 3. Produce the SBOM, run dependency advisories and license review against locked artifacts, repeat the redacted history scan, and inspect the packaged files.
-4. Request the owner's approval for public visibility, public release artifacts, or any paid activation after the checks are available.
+4. Request the owner's approval for publishing the installer or any paid activation after the checks are available.
 
 Community local use can stay free under MIT. GitHub Sponsors can support maintenance after checking the founder's India eligibility, payout method, and any fiscal host requirements. Hosted speech or sync is a later opt-in service. For illustration, if a proposed managed plan nets ₹300/month per subscriber and costs ₹120 in metered service and variable support, its contribution is ₹180. At ₹18,000/month in fixed costs that needs 100 subscribers before taxes and acquisition costs. These are placeholders for a cost model. Provider approval, privacy review, usage caps, and observed demand gate any pilot. [GitHub Sponsors eligibility](https://docs.github.com/en/sponsors/getting-started-with-github-sponsors/about-github-sponsors)
 

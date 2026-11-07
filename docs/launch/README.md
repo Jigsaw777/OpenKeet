@@ -4,7 +4,7 @@
 
 **Interview smarter. Answer better.**
 
-Use this library to prepare the private Windows preview for a controlled public launch. Check the [release gates](../OPEN_SOURCE_RELEASE_CHECKLIST.md) before sharing a draft. Start with the [migration report](repository-migration.md) and [90-day plan](90-day-growth-plan.md).
+Use this library to prepare the Windows source preview for a controlled launch. Check the [release gates](../OPEN_SOURCE_RELEASE_CHECKLIST.md) before posting a draft to a community. Start with the [migration report](repository-migration.md) and [90-day plan](90-day-growth-plan.md).
 
 | Work | Guide |
 | --- | --- |
