@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use copilot_audio::{AudioEvent, LocalWhisper, Stop, StreamOptions};
+use copilot_audio::{AudioEvent, Engine, Stop, StreamOptions};
 use copilot_core::{Source, SourceKind, Stability};
 use wasapi::{DeviceEnumerator, Direction, SessionState};
 use windows::{
@@ -54,7 +54,13 @@ fn default_and_explicit_loopback_transcribe_synthetic_playback() {
         duration.duration() < duration.spec().sample_rate * 10,
         "Use a short synthetic fixture."
     );
-    let mut model = LocalWhisper::load(&model, "LRU cache, Java").unwrap();
+    // A model folder selects Parakeet. A .bin file selects Whisper.
+    let engine = if model.is_dir() {
+        Engine::Parakeet
+    } else {
+        Engine::Whisper
+    };
+    let mut model = copilot_audio::load(engine, &model, "LRU cache, Java", false).unwrap();
     for explicit in [false, true] {
         let endpoint = quiet_default_output();
         let source = Source {
@@ -79,7 +85,7 @@ fn default_and_explicit_loopback_transcribe_synthetic_playback() {
                 played
             });
             let result = copilot_audio::capture(
-                &mut model,
+                model.as_mut(),
                 source,
                 Instant::now(),
                 StreamOptions::default(),
@@ -106,22 +112,28 @@ fn default_and_explicit_loopback_transcribe_synthetic_playback() {
         let finals: Vec<_> = events
             .iter()
             .filter_map(|event| match event {
-                AudioEvent::Transcript { utterance, .. }
-                    if utterance.stability == Stability::Final =>
-                {
-                    Some(utterance.text.to_lowercase())
-                }
+                AudioEvent::Transcript {
+                    utterance, at_ms, ..
+                } if utterance.stability == Stability::Final => Some((
+                    utterance.text.to_lowercase(),
+                    at_ms.saturating_sub(utterance.span.end_ms),
+                )),
                 _ => None,
             })
             .collect();
-        let final_text = finals.join(" ");
+        let final_text = finals
+            .iter()
+            .map(|(text, _)| text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
         assert!(
             final_text.contains("cache") && final_text.contains("java"),
             "Expected the fixture terms in a final transcript."
         );
         println!(
-            "{} system route: nonzero meter and both fixture terms recognized",
-            if explicit { "Explicit" } else { "Default" }
+            "{} system route ({engine:?}): nonzero meter and both fixture terms recognized in {final_text:?}, final {} ms after the last voiced frame",
+            if explicit { "Explicit" } else { "Default" },
+            finals.last().map_or(0, |(_, ms)| *ms)
         );
         thread::sleep(Duration::from_secs(1));
     }

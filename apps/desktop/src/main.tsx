@@ -121,7 +121,7 @@ function App() {
     setStarting(true);
     try {
       if (await command("start_capture", { config: {
-        source: { kind: selected.kind, endpoint_id: selected.id },
+        source: { kind: selected.kind, endpoint_id: selected.id }, engine: prefs.engine,
         model_path: prefs.model.trim(), vocabulary: prefs.vocabulary.trim(),
         short_followups: prefs.shortFollowups, auto_answer: prefs.autoAnswer && Boolean(view.provider),
         consent: true,

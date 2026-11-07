@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:net";
 import { join, sep } from "node:path";
@@ -252,6 +252,14 @@ try {
   await audioSettings();
   assert.equal(await page.getByRole("checkbox", { name: "Short follow-up mode" }).isChecked(), false);
   await page.screenshot({ path: join(output, "audio-setup.png"), animations: "disabled" });
+  const engine = page.getByLabel("Speech engine", { exact: true });
+  assert.equal(await engine.inputValue(), "whisper", "Whisper stays the default speech engine.");
+  await engine.selectOption("parakeet");
+  await page.getByLabel("Speech model folder", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Back to session" }).click();
+  await page.getByRole("button", { name: "Download Parakeet (670 MB)", exact: true }).waitFor();
+  await audioSettings();
+  await engine.selectOption("whisper");
   await page.getByLabel("Speech model file").fill(join(output, "missing", "ggml-small.en.bin"));
   await page.getByRole("button", { name: "Back to session" }).click();
   const select = page.getByLabel("Listen to", { exact: true });
@@ -266,7 +274,10 @@ try {
 
   if (process.env.COPILOT_TEST_MODEL && process.env.COPILOT_TEST_WAV) {
     await audioSettings();
-    await page.getByLabel("Speech model file").fill(process.env.COPILOT_TEST_MODEL);
+    // A model folder selects Parakeet. A .bin file keeps the default Whisper engine.
+    const parakeet = (await stat(process.env.COPILOT_TEST_MODEL)).isDirectory();
+    if (parakeet) await engine.selectOption("parakeet");
+    await page.getByLabel(parakeet ? "Speech model folder" : "Speech model file", { exact: true }).fill(process.env.COPILOT_TEST_MODEL);
     await page.getByLabel("Words to recognize").fill("LRU cache, Java");
     await page.getByRole("button", { name: "Back to session" }).click();
     await select.selectOption(await outputOption.getAttribute("value"));

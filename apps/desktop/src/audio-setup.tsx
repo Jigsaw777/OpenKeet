@@ -4,17 +4,18 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useMeter } from "./audio-meter";
 import { Icon } from "./components";
 import { providerLabel, sourceLabel } from "./protocol";
-import type { DesktopView, Endpoint } from "./protocol";
+import type { DesktopView, Endpoint, SpeechEngine } from "./protocol";
 import type { Theme } from "./workspace-shell";
 
 const audioKey = "copilot-audio-settings";
-const defaults = { endpoint: "", model: "", vocabulary: "", shortFollowups: false, autoAnswer: true };
+const defaults = { endpoint: "", engine: "whisper" as SpeechEngine, model: "", vocabulary: "", shortFollowups: false, autoAnswer: true };
 
 function storedAudio(): typeof defaults {
   try {
     const saved = JSON.parse(localStorage.getItem(audioKey) || "{}");
     return {
       endpoint: typeof saved.endpoint === "string" ? saved.endpoint : "",
+      engine: saved.engine === "parakeet" ? "parakeet" : "whisper",
       model: typeof saved.model === "string" ? saved.model : "",
       vocabulary: typeof saved.vocabulary === "string" ? saved.vocabulary : "",
       shortFollowups: saved.shortFollowups === true,
@@ -29,7 +30,7 @@ export function useAudioSetup(enabled: boolean) {
   const [prefs, setPrefs] = useState(storedAudio);
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [refreshing, setRefreshing] = useState(enabled);
-  const [checkedModel, setCheckedModel] = useState<{ path: string; available: boolean }>();
+  const [checkedModel, setCheckedModel] = useState<{ path: string; engine: SpeechEngine; available: boolean }>();
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   const change = useCallback((fields: Partial<typeof defaults>) => setPrefs(current => ({ ...current, ...fields })), []);
@@ -47,11 +48,11 @@ export function useAudioSetup(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     let current = true;
-    void invoke<string | null>("find_speech_model").then(path => {
+    void invoke<string | null>("find_speech_model", { engine: prefs.engine }).then(path => {
       if (current && path) setPrefs(old => old.model ? old : { ...old, model: path });
     }).catch(problem => { if (current) setError(String(problem)); });
     return () => { current = false; };
-  }, [enabled]);
+  }, [enabled, prefs.engine]);
   useEffect(() => {
     if (!enabled) return;
     localStorage.setItem(audioKey, JSON.stringify(prefs));
@@ -60,15 +61,18 @@ export function useAudioSetup(enabled: boolean) {
     if (!enabled || !prefs.model.trim()) return;
     let current = true;
     const path = prefs.model.trim();
-    void invoke<boolean>("check_speech_model", { path }).then(available => {
-      if (current) setCheckedModel({ path, available });
+    const engine = prefs.engine;
+    void invoke<boolean>("check_speech_model", { path, engine }).then(available => {
+      if (current) setCheckedModel({ path, engine, available });
     }).catch(problem => { if (current) setError(String(problem)); });
     return () => { current = false; };
-  }, [enabled, prefs.model]);
+  }, [enabled, prefs.model, prefs.engine]);
 
   async function chooseModel() {
     try {
-      const path = await open({ title: "Choose a speech model", multiple: false, filters: [{ name: "Whisper model", extensions: ["bin"] }] });
+      const path = prefs.engine === "parakeet"
+        ? await open({ title: "Choose the Parakeet model folder", directory: true, multiple: false })
+        : await open({ title: "Choose a speech model", multiple: false, filters: [{ name: "Whisper model", extensions: ["bin"] }] });
       if (typeof path === "string") { setError(""); change({ model: path }); }
     } catch (problem) { setError(String(problem)); }
   }
@@ -76,7 +80,7 @@ export function useAudioSetup(enabled: boolean) {
   async function download() {
     setError("");
     setDownloading(true);
-    try { change({ model: await invoke<string>("download_speech_model") }); }
+    try { change({ model: await invoke<string>("download_speech_model", { engine: prefs.engine }) }); }
     catch (problem) { setError(String(problem)); }
     finally { setDownloading(false); }
   }
@@ -86,8 +90,9 @@ export function useAudioSetup(enabled: boolean) {
     ?? endpoints.find(device => device.is_default && device.kind === "system_output")
     ?? endpoints.find(device => device.is_default) ?? endpoints[0];
   const path = prefs.model.trim();
-  const modelReady = checkedModel?.path === path && checkedModel.available;
-  const modelRejected = Boolean(path) && checkedModel?.path === path && !checkedModel.available;
+  const checked = checkedModel?.path === path && checkedModel.engine === prefs.engine;
+  const modelReady = checked && checkedModel.available;
+  const modelRejected = Boolean(path) && checked && !checkedModel.available;
   return { prefs, change, endpoints, selected, refreshing, refresh, modelReady, modelRejected, chooseModel, downloading, download, error };
 }
 
@@ -106,7 +111,8 @@ export function StartCard({ view, audio, enabled, starting, start, sample, conne
   const { prefs, selected, modelReady } = audio;
   const ready = Boolean(selected && modelReady);
   const disabled = !enabled || audio.downloading || starting;
-  const fileName = prefs.model.trim().split(/[\\/]/).at(-1);
+  const fileName = prefs.model.trim().split(/[\\/]/).filter(Boolean).at(-1);
+  const parakeet = prefs.engine === "parakeet";
   return <section className="card start-card" aria-labelledby="start-title">
     <h1 id="start-title">{ready ? "Ready to listen" : "Finish setup"}</h1>
     <ol className="checklist">
@@ -126,12 +132,14 @@ export function StartCard({ view, audio, enabled, starting, start, sample, conne
       </li>
       <li className={modelReady ? "done" : undefined}>
         <span className="step-label">Speech model</span>
-        {modelReady ? <p>{fileName} <span className="subtle">· runs on this PC</span></p> : <>
+        {modelReady ? <p>{parakeet ? "NVIDIA Parakeet v3" : fileName} <span className="subtle">· runs on this PC</span></p> : <>
           <div className="actions">
-            <button disabled={disabled} onClick={() => void audio.download()}>{audio.downloading ? "Downloading…" : "Download (488 MB)"}</button>
-            <button disabled={disabled} onClick={() => void audio.chooseModel()}>Choose file</button>
+            <button disabled={disabled} onClick={() => void audio.download()}>{audio.downloading ? "Downloading…" : parakeet ? "Download Parakeet (670 MB)" : "Download (488 MB)"}</button>
+            <button disabled={disabled} onClick={() => void audio.chooseModel()}>{parakeet ? "Choose folder" : "Choose file"}</button>
           </div>
-          {audio.modelRejected && <p className="notice" role="alert">Could not use {fileName}. Download the model, or choose a ggml-small.en.bin file.</p>}
+          {audio.modelRejected && <p className="notice" role="alert">{parakeet
+            ? `Could not use ${fileName}. Download the Parakeet model here; other exports are not accepted.`
+            : `Could not use ${fileName}. Download the model, or choose a ggml-small.en.bin file.`}</p>}
         </>}
       </li>
       <li className={view.provider ? "done" : "optional"}>
@@ -170,14 +178,22 @@ export function AudioSetup({ view, audio, enabled, done, zoom, setZoom, theme, s
   const { peak, frames } = useMeter(view);
   const { prefs } = audio;
   const disabled = !enabled || busy;
+  const parakeet = prefs.engine === "parakeet";
   return <section className="card settings-card" aria-labelledby="audio-settings-title">
     <h2 id="audio-settings-title">Audio and display</h2>
     <label htmlFor="vocabulary">Words to recognize</label>
     <input id="vocabulary" value={prefs.vocabulary} maxLength={300} placeholder="Kotlin, WASAPI, PostgreSQL" disabled={disabled}
       onChange={event => audio.change({ vocabulary: event.target.value })} />
     <label className="checkbox"><input type="checkbox" checked={prefs.shortFollowups} disabled={disabled} onChange={event => audio.change({ shortFollowups: event.target.checked })} /> Short follow-up mode</label>
-    <label htmlFor="model-path">Speech model file</label>
-    <input id="model-path" value={prefs.model} disabled={disabled} placeholder="Path to a supported .bin file" onChange={event => audio.change({ model: event.target.value })} />
+    <label htmlFor="speech-engine">Speech engine</label>
+    <select id="speech-engine" value={prefs.engine} disabled={disabled || audio.downloading}
+      onChange={event => audio.change({ engine: event.target.value as SpeechEngine, model: "" })}>
+      <option value="whisper">Whisper small.en (default)</option>
+      <option value="parakeet">NVIDIA Parakeet v3 (experimental)</option>
+    </select>
+    {parakeet && <p className="subtle">Runs on this PC. Words to recognize and short follow-up mode apply to Whisper only.</p>}
+    <label htmlFor="model-path">{parakeet ? "Speech model folder" : "Speech model file"}</label>
+    <input id="model-path" value={prefs.model} disabled={disabled} placeholder={parakeet ? "Path to the downloaded Parakeet folder" : "Path to a supported .bin file"} onChange={event => audio.change({ model: event.target.value })} />
     <label htmlFor="appearance">Appearance</label>
     <select id="appearance" value={theme} onChange={event => setTheme(event.target.value as Theme)}>
       <option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option>

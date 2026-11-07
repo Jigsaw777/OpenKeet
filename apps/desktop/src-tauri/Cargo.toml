@@ -26,6 +26,9 @@ tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "sync", "
 uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(windows)'.dependencies]
+# Direct `links` dependency: its build script fetches the DLLs that
+# tauri.windows.conf.json bundles before tauri-build checks they exist.
+sherpa-onnx-sys = { version = "=2.0.1", default-features = false }
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Security_Cryptography",

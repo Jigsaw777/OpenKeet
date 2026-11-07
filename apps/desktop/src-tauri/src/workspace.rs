@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use copilot_audio::{AudioError, AudioEvent, LocalWhisper, Stop, StreamOptions, elapsed_ms};
+use copilot_audio::{AudioError, AudioEvent, Engine, Stop, StreamOptions, elapsed_ms};
 use copilot_core::{
     AnswerFailure, AnswerKey, CaptureState, MAX_QUESTION_BYTES, Policy, Session, Snapshot, Source,
     SourceKind, Span, Work,
@@ -30,6 +30,8 @@ enum Mode {
 #[derive(Clone, Deserialize)]
 pub struct CaptureConfig {
     source: Source,
+    #[serde(default)]
+    engine: Engine,
     model_path: String,
     vocabulary: String,
     #[serde(default)]
@@ -630,17 +632,18 @@ pub fn start_audio(
             if job.stop.requested() {
                 return Ok(());
             }
-            let model =
-                LocalWhisper::load(Path::new(&job.config.model_path), &job.config.vocabulary);
+            let model = copilot_audio::load(
+                job.config.engine,
+                Path::new(&job.config.model_path),
+                &job.config.vocabulary,
+                job.config.short_followups,
+            );
             if job.stop.requested() {
                 return Ok(());
             }
             model.and_then(|mut model| {
-                if job.config.short_followups {
-                    model.enable_short_followups();
-                }
                 copilot_audio::capture(
-                    &mut model,
+                    model.as_mut(),
                     job.config.source,
                     job.clock,
                     StreamOptions {
@@ -689,6 +692,7 @@ mod tests {
                     kind: SourceKind::SystemOutput,
                     endpoint_id: Some("test-output".into()),
                 },
+                engine: Engine::Whisper,
                 model_path: "ggml-small.en.bin".into(),
                 vocabulary: String::new(),
                 auto_answer: false,

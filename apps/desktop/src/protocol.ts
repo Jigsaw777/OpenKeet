@@ -63,7 +63,8 @@ export type Endpoint = { id: string; name: string; kind: SourceKind; is_default:
 export type MeterUpdate = { update: number; session_id: number; peak: number; frames: number };
 export type ProviderKind = "chatgpt" | "claude" | "ollama";
 export type ProviderSelection = { kind: ProviderKind; model: string };
-export type CaptureConfig = { source: Source; model_path: string; vocabulary: string; auto_answer: boolean; short_followups: boolean; consent: boolean };
+export type SpeechEngine = "whisper" | "parakeet";
+export type CaptureConfig = { source: Source; engine: SpeechEngine; model_path: string; vocabulary: string; auto_answer: boolean; short_followups: boolean; consent: boolean };
 
 export const emptyView: DesktopView = {
   update: -1,

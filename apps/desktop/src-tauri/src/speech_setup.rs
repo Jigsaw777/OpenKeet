@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use copilot_audio::MODELS;
+use copilot_audio::{Engine, MODELS, Model, PARAKEET_FILES, PARAKEET_FOLDER, PARAKEET_REVISION};
 use sha2::{Digest, Sha256};
 use tauri::State;
 use tokio::{fs, io::AsyncWriteExt, sync::Mutex};
@@ -24,25 +24,39 @@ impl SpeechSetup {
     }
 }
 
-fn model_available(path: &Path) -> bool {
-    MODELS.iter().any(|model| {
-        path.file_name().is_some_and(|name| name == model.filename)
-            && path
-                .metadata()
-                .is_ok_and(|file| file.is_file() && file.len() == model.bytes)
-    })
+fn sized(path: &Path, model: &Model) -> bool {
+    path.metadata()
+        .is_ok_and(|file| file.is_file() && file.len() == model.bytes)
+}
+
+fn model_available(engine: Engine, path: &Path) -> bool {
+    match engine {
+        Engine::Whisper => MODELS.iter().any(|model| {
+            path.file_name().is_some_and(|name| name == model.filename) && sized(path, model)
+        }),
+        Engine::Parakeet => PARAKEET_FILES
+            .iter()
+            .all(|model| sized(&path.join(model.filename), model)),
+    }
 }
 
 #[tauri::command]
-pub async fn check_speech_model(path: String) -> Result<bool, String> {
-    tauri::async_runtime::spawn_blocking(move || model_available(Path::new(&path)))
+pub async fn check_speech_model(path: String, engine: Engine) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || model_available(engine, Path::new(&path)))
         .await
         .map_err(|_| "Could not check the speech model.".into())
 }
 
 #[tauri::command]
-pub async fn find_speech_model(setup: State<'_, SpeechSetup>) -> Result<Option<String>, String> {
+pub async fn find_speech_model(
+    setup: State<'_, SpeechSetup>,
+    engine: Engine,
+) -> Result<Option<String>, String> {
     let cache = setup.directory.clone();
+    let name = match engine {
+        Engine::Whisper => MODELS[0].filename,
+        Engine::Parakeet => PARAKEET_FOLDER,
+    };
     tauri::async_runtime::spawn_blocking(move || {
         let installed = std::env::current_exe()
             .ok()
@@ -51,38 +65,28 @@ pub async fn find_speech_model(setup: State<'_, SpeechSetup>) -> Result<Option<S
         [Some(cache), installed, project]
             .into_iter()
             .flatten()
-            .map(|folder| folder.join(MODELS[0].filename))
-            .find(|path| model_available(path))
+            .map(|folder| folder.join(name))
+            .find(|path| model_available(engine, path))
             .and_then(|path| path.into_os_string().into_string().ok())
     })
     .await
     .map_err(|_| "Could not find local speech models.".into())
 }
 
-#[tauri::command]
-pub async fn download_speech_model(setup: State<'_, SpeechSetup>) -> Result<String, String> {
-    let _download = setup
-        .downloading
-        .try_lock()
-        .map_err(|_| "A speech model download is already running.")?;
-    let model = MODELS[0];
-    let url = format!(
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/{MODEL_REVISION}/{}",
-        model.filename
-    );
-    let client = reqwest::Client::builder()
-        .https_only(true)
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(900))
-        .build()
-        .map_err(|_| "Could not prepare the model download.")?;
+/// Streams one file into `folder`, persisting it only after its size and SHA-256 match.
+async fn fetch(
+    client: &reqwest::Client,
+    url: &str,
+    model: &Model,
+    folder: &Path,
+) -> Result<(), String> {
     let mut response = client.get(url).send().await.and_then(reqwest::Response::error_for_status)
         .map_err(|_| "Could not download the speech model. Check the network or choose an existing file.")?;
-    fs::create_dir_all(&setup.directory)
+    fs::create_dir_all(folder)
         .await
         .map_err(|_| "Could not create the speech model folder.")?;
-    let staged = tempfile::NamedTempFile::new_in(&setup.directory)
-        .map_err(|_| "Could not stage the speech model.")?;
+    let staged =
+        tempfile::NamedTempFile::new_in(folder).map_err(|_| "Could not stage the speech model.")?;
     let mut file = fs::File::from_std(
         staged
             .reopen()
@@ -114,10 +118,54 @@ pub async fn download_speech_model(setup: State<'_, SpeechSetup>) -> Result<Stri
         .await
         .map_err(|_| "Could not finish writing the speech model.")?;
     drop(file);
-    let path = setup.directory.join(model.filename);
     staged
-        .persist(&path)
+        .persist(folder.join(model.filename))
         .map_err(|_| "Could not save the verified speech model.")?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn download_speech_model(
+    setup: State<'_, SpeechSetup>,
+    engine: Engine,
+) -> Result<String, String> {
+    let _download = setup
+        .downloading
+        .try_lock()
+        .map_err(|_| "A speech model download is already running.")?;
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(900))
+        .build()
+        .map_err(|_| "Could not prepare the model download.")?;
+    let (folder, files, base) = match engine {
+        Engine::Whisper => (
+            setup.directory.clone(),
+            &MODELS[..1],
+            format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/{MODEL_REVISION}"),
+        ),
+        Engine::Parakeet => (
+            setup.directory.join(PARAKEET_FOLDER),
+            PARAKEET_FILES,
+            format!(
+                "https://huggingface.co/csukuangfj/{PARAKEET_FOLDER}/resolve/{PARAKEET_REVISION}"
+            ),
+        ),
+    };
+    for model in files {
+        fetch(
+            &client,
+            &format!("{base}/{}", model.filename),
+            model,
+            &folder,
+        )
+        .await?;
+    }
+    let path = match engine {
+        Engine::Whisper => folder.join(MODELS[0].filename),
+        Engine::Parakeet => folder,
+    };
     path.into_os_string()
         .into_string()
         .map_err(|_| "The speech model path cannot be displayed.".into())

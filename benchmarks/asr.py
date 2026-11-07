@@ -347,7 +347,8 @@ def rust(output, cli, model, vocabulary, *, profile=False, short_followups=False
         raise RuntimeError("Rust comparator did not finish every fixture in manifest order")
     summary = {**summarize(rows), "load_s": load_s, "wall_s_with_load": round(time.monotonic() - started, 3),
                "max_decode_queue_s": max(row["max_decode_queue_s"] for row in rows)}
-    label = f"rust-{model.stem}{'-hints' if vocabulary else ''}{'-short-followups' if short_followups else ''}"
+    name = model.name if model.is_dir() else model.stem
+    label = f"rust-{name}{'-hints' if vocabulary else ''}{'-short-followups' if short_followups else ''}"
     report = {"backend": label, "vocabulary": vocabulary, "summary": summary, "clips": rows}
     if metrics:
         report["process"] = metrics
@@ -369,6 +370,7 @@ def main():
     candidate.add_argument("--model", type=Path, required=True)
     candidate.add_argument("--vocabulary", default="")
     candidate.add_argument("--short-followups", action="store_true")
+    candidate.add_argument("--profile", action="store_true", help="Record Windows process CPU and memory")
     args = parser.parse_args()
     stress = getattr(args, "stress", False)
     output = (args.output or ROOT / "output" / ("stress" if stress else "")).resolve()
@@ -377,7 +379,8 @@ def main():
     elif args.command == "legacy":
         legacy(output, args.models)
     else:
-        rust(output, args.cli, args.model, args.vocabulary, short_followups=args.short_followups)
+        rust(output, args.cli, args.model, args.vocabulary, profile=args.profile,
+             short_followups=args.short_followups)
 
 
 if __name__ == "__main__":

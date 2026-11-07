@@ -9,6 +9,8 @@ copilot-core.workspace = true
 serde.workspace = true
 hound = "3.5.1"
 sha2 = "0.10"
+# Shared DLLs: the static release libs need a newer MSVC STL than VS 17.9 provides.
+sherpa-onnx = { version = "=2.0.1", default-features = false, features = ["shared"] }
 webrtc-vad = "0.4.0"
 whisper-rs = "0.16.0"
 

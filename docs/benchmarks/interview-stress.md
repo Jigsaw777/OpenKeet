@@ -10,7 +10,7 @@ WER uses the same case-folded, punctuation-insensitive scorer as the earlier ben
 
 ## Transcription results
 
-The current desktop engine used Rust, WebRTC VAD, and whisper.cpp `small.en` on paced 30 ms frames. The alternative used NVIDIA Parakeet TDT v3 INT8 through sherpa-onnx 2.0.1 on the same WAVs with offline whole-clip decoding. Its decoder saw each complete file. Its result is an acoustic comparison and needs a live streaming test before it can be compared on latency or integrated. [NVIDIA model card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), [sherpa-onnx model guide](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/parakeet-tdt.html)
+The current desktop engine used Rust, WebRTC VAD, and whisper.cpp `small.en` on paced 30 ms frames. The alternative used NVIDIA Parakeet TDT v3 INT8 through sherpa-onnx 2.0.1 on the same WAVs with offline whole-clip decoding. Its decoder saw each complete file. Its result is an acoustic comparison. The [live pipeline comparison](#parakeet-in-the-live-pipeline) below measures latency and CPU. [NVIDIA model card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), [sherpa-onnx model guide](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/parakeet-tdt.html)
 
 | Condition | Rust Whisper WER | NVIDIA Parakeet offline WER |
 | --- | ---: | ---: |
@@ -30,6 +30,46 @@ The current desktop engine used Rust, WebRTC VAD, and whisper.cpp `small.en` on 
 - For the two paired normal/fast phrases, Rust went from 11/176 to 13/176 errors. The larger gap in the fast row also reflects the harder texts added at fast speed. On the 28 clips from the two Indian English synthetic voices, Rust scored 19.58% WER and the NVIDIA candidate scored 15.83%.
 - The NVIDIA candidate was exact on 52 speech clips and got seven of eight one-word prompts. Its technical-term recall was 61/104, versus 64/104 for Rust, and its telephone-band WER was worse. Keep the measured live default while testing the candidate with streaming and real microphones. On this run the candidate took 84.27 seconds to decode 537.23 seconds of files after a 2.16-second load.
 - Cluely and ParakeetAI are separate commercial services. ParakeetAI documents using Speechmatics for interview transcription. The NVIDIA model result establishes neither product's accuracy. A parity claim requires those products to run the same corpus under comparable settings. [ParakeetAI privacy policy](https://www.parakeet-ai.com/privacy-policy), [Cluely Live Insights](https://docs.cluely.com/feature/liveinsights)
+
+## Parakeet in the live pipeline
+
+The desktop app now offers NVIDIA Parakeet TDT 0.6B v3 INT8 as an optional engine under Settings → Audio and display. It runs through sherpa-onnx 2.0.1 on the CPU with six threads. Both engines below used the same release CLI, the same WebRTC VAD segmentation, 30 ms paced replay, one preview per utterance, and the 116 clips from the manifest above. The runs were sequential on 7 November 2026, Whisper from 3:54 pm IST and Parakeet from 4:21 pm IST, with no build running. The Parakeet files are the pinned export described under Reproduce. Process counters include model load. [Per-clip results for both engines](../../benchmarks/results/stress-engines.json)
+
+| Metric | Whisper `small.en` | Parakeet v3 INT8 |
+| --- | ---: | ---: |
+| WER | 173/960 · 18.02% | 128/960 · 13.33% |
+| CER | 354/4,576 · 7.74% | 209/4,576 · 4.57% |
+| Exact speech clips | 39/112 | 48/112 |
+| Technical-term matches | 64/104 | 62/104 |
+| Final latency p50 / p95, same 112 clips | 1.353 / 3.011 s | 1.090 / 1.582 s |
+| Stable preview p50 / p95 | 2.183 / 4.775 s on 86 clips | 1.900 / 2.008 s on 92 clips |
+| Reported decode time | 179.7 s | 81.3 s |
+| Process CPU time | 1,013.1 s | 289.8 s |
+| Model load, including SHA-256 checks | 0.683 s | 2.270 s |
+| Peak / median working set | 947.7 / 692.7 MiB | 800.3 / 792.5 MiB |
+| Peak private commit | 1,312.6 MiB | 831.6 MiB |
+| Largest decoder queue wait | 2.218 s | 0.001 s |
+| Non-speech false transcripts | 1/4 | 1/4 |
+
+| Condition | Whisper live | Parakeet live | Parakeet offline |
+| --- | ---: | ---: | ---: |
+| Normal tongue twisters | 11/176 · 6.25% | 5/176 · 2.84% | 5/176 · 2.84% |
+| Fast tongue twisters | 64/320 · 20.00% | 25/320 · 7.81% | 24/320 · 7.50% |
+| Quiet tongue twister | 25/56 · 44.64% | 16/56 · 28.57% | 20/56 · 35.71% |
+| Homophones | 13/72 · 18.06% | 11/72 · 15.28% | 12/72 · 16.67% |
+| Speech in noise | 12/96 · 12.50% | 11/96 · 11.46% | 11/96 · 11.46% |
+| Technical words over simulated telephone audio | 30/112 · 26.79% | 45/112 · 40.18% | 45/112 · 40.18% |
+| Clipped onset | 8/40 · 20.00% | 7/40 · 17.50% | 7/40 · 17.50% |
+| One-word follow-up | 8/8 · 100% | 1/8 · 12.50% | 1/8 · 12.50% |
+| Correction across a pause | 0/80 · 0% | 6/80 · 7.50% | 3/80 · 3.75% |
+
+- Parakeet produced its final sooner on all 112 paired speech clips. Seven of eight “Why?” clips came out as `Why?`. The two Indian English voices scored 17.08% WER, versus 19.58% for Whisper. Both engines produced one false transcript, on the chord control.
+- Parakeet regressed on technical words over telephone-band audio and on corrections across a pause. Three of eight correction clips missed words: “semaphore” became “Cemophore” and “a CMA for”, and “I meant a” became “I'm into”. VAD split every correction clip at the pause, so each half was decoded alone. Whisper's error, term and false-transcript counts matched its earlier run.
+- The live and offline Parakeet runs had the same 128 word errors with different text on 41 clips. Segment boundaries and trimmed trailing silence changed individual words in both directions.
+- ONNX Runtime threads spin while idle by default. With spinning, the same Parakeet run used 2,284.1 s of CPU time with identical transcripts. The engine now disables intra-op and inter-op spinning. On a 12-clip Python probe that cut CPU time from 128.9 s to 25.5 s and added 1.4% to decode time.
+- The live WASAPI smoke played `cache-0.wav` on the default Speaker (Realtek(R) Audio) output and captured it through loopback. Both engines returned “when would you use an lru cache in java?” on the default and explicit routes. Whisper's final arrived 1,334 and 1,350 ms after the last voiced frame. Parakeet's arrived 899 and 870 ms after it. The first Parakeet attempt stopped before the explicit route because the quiet-output guard saw another audio session. The repeat passed both routes.
+- The desktop native smoke passed with each engine, with the Windows shell and provider fixture checks on. It played the same clip through system output and waited for “Question heard” and a final line containing cache and Java. A clean-profile Parakeet download from the app took 57.1 s. All four files matched their pinned sizes and SHA-256 values, and no staged file remained.
+- On this PC, this measurement shows Parakeet ahead on WER and final latency. The default stays `small.en` in this change because of the telephone and correction regressions and the synthetic-only corpus. Human speakers, conferencing codecs and real microphones remain untested. Parakeet is also a 670 MB download, versus 488 MB for Whisper.
 
 ## Short follow-up mode
 
@@ -81,4 +121,20 @@ cargo build --release --locked -p copilot --features audio
 .\.venv\Scripts\python.exe benchmarks/profile_engines.py --cli target/release/copilot.exe --model models/ggml-small.en.bin
 ```
 
-For the offline reference, use the official `sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2` release asset with SHA-256 `5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf`. Extract it locally and pass the model directory to `benchmarks/parakeet_probe.py --input benchmarks/output/stress --model <directory>`. `--runtime-dir` can point to an isolated installation of `sherpa-onnx==2.0.1`. [Official release assets](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models)
+For the live pipeline comparison, add `--profile` to record process CPU and memory. A model folder selects Parakeet in the CLI. The app downloads that folder to `%LOCALAPPDATA%\dev.personalcopilot.desktop\models`.
+
+```powershell
+.\.venv\Scripts\python.exe benchmarks/asr.py --output benchmarks/output/stress rust --cli target/release/copilot.exe --model models/ggml-small.en.bin --profile
+.\.venv\Scripts\python.exe benchmarks/asr.py --output benchmarks/output/stress rust --cli target/release/copilot.exe --model models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8 --profile
+```
+
+The WASAPI smoke and `npm run test:native` accept the same folder in `COPILOT_TEST_MODEL`. Windows 11 ships an older `onnxruntime.dll` in System32, and the loader searches there before `PATH`. Copy the two bundled DLLs next to the test binary first. The app, the CLI and the installer already keep them beside the executable.
+
+```powershell
+Copy-Item target/release/onnxruntime.dll, target/release/sherpa-onnx-c-api.dll target/release/deps/
+$env:COPILOT_TEST_MODEL = (Resolve-Path models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8).Path
+$env:COPILOT_TEST_WAV = (Resolve-Path benchmarks/output/cache-0.wav).Path
+cargo test --release --locked -p copilot-audio --test wasapi -- --ignored --nocapture
+```
+
+For the offline reference, pass the Parakeet model folder to `benchmarks/parakeet_probe.py --input benchmarks/output/stress --model <directory>`. `--runtime-dir` can point to an isolated installation of `sherpa-onnx==2.0.1`. The first offline run used the `sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2` release asset with SHA-256 `5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf`. Upstream replaced that asset and the Hugging Face files with a new export on 7 November 2026 at 11:20 am IST. The replacement archive has SHA-256 `1495e91b59d7fc53ddca91f3431758ec99f8fa253fdb0e1e851be0f72b14b0f9` and was not measured. The desktop download and these runs use the earlier export, pinned to Hugging Face revision `2bda32ec70b097a55adaa07d9a7173915b43cc78`. Its four files reproduce all 116 earlier offline transcripts exactly. [Official release assets](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models), [Pinned export](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tree/2bda32ec70b097a55adaa07d9a7173915b43cc78)

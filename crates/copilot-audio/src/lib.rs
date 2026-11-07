@@ -1,5 +1,6 @@
 //! Local audio capture and recognition. Consumers receive text and health events only.
 
+mod parakeet;
 mod pipeline;
 mod whisper;
 #[cfg(windows)]
@@ -7,6 +8,7 @@ mod windows;
 
 use std::{
     fmt,
+    path::Path,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -17,8 +19,37 @@ use std::{
 use copilot_core::{Source, SourceKind, Span, Utterance};
 use serde::{Deserialize, Serialize};
 
+pub use parakeet::{LocalParakeet, PARAKEET_FILES, PARAKEET_FOLDER, PARAKEET_REVISION};
 pub use pipeline::{StreamOptions, recognize_wav};
 pub use whisper::{LocalWhisper, MODELS, Model};
+
+/// Local speech engine. Whisper `small.en` stays the default.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Engine {
+    #[default]
+    Whisper,
+    Parakeet,
+}
+
+/// Loads a verified model. Vocabulary and short follow-ups only change Whisper decoding.
+pub fn load(
+    engine: Engine,
+    path: &Path,
+    vocabulary: &str,
+    short_followups: bool,
+) -> Result<Box<dyn SpeechRecognizer>, AudioError> {
+    Ok(match engine {
+        Engine::Whisper => {
+            let mut model = LocalWhisper::load(path, vocabulary)?;
+            if short_followups {
+                model.enable_short_followups();
+            }
+            Box::new(model)
+        }
+        Engine::Parakeet => Box::new(LocalParakeet::load(path)?),
+    })
+}
 
 pub const SAMPLE_RATE: u32 = 16_000;
 const FRAME_MS: u64 = 30;
