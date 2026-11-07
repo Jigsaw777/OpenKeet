@@ -1,6 +1,6 @@
 # OpenKeet launch audit
 
-The launch scope is the Windows 11 x64 preview. The existing GitHub repository is private and has no published packages. The preview is buildable from source. See [release readiness](../release-readiness.md) for the public distribution gates.
+The launch scope is the Windows 11 x64 source preview. There is no published installer. See the [public release checklist](../OPEN_SOURCE_RELEASE_CHECKLIST.md) for source and package requirements and [release readiness](../release-readiness.md) for packaging details.
 
 ## What the preview supports
 
@@ -15,10 +15,10 @@ The launch scope is the Windows 11 x64 preview. The existing GitHub repository i
 | Local history | Functional | [SQLite tests](../../apps/desktop/src-tauri/src/history.rs) and [native smoke](../../apps/desktop/tests/native-smoke.mjs) cover save, search, notes, and deletion. |
 | macOS and Linux desktop | Outside preview scope | The [legacy Python prototype](../legacy-python.md) has source paths for both. The Tauri package is documented for Windows. |
 
-## What remains before going public
+## What remains before distributing a Windows package
 
-- Keep the existing [MIT notice](../../LICENSE). Complete provenance review for source, including the legacy bridge and any adapted snippets. The existing [dependency review](DEPENDENCY_AND_LICENSE_AUDIT.md) records the restricted Natively reference as research only.
-- Record public redistribution terms for the maintainer-supplied logo. The gallery uses synthetic app data. No font files, speech weights, or installer binaries are tracked for the launch.
+- Keep the existing [MIT notice](../../LICENSE) and preserve third-party notices. The [dependency review](DEPENDENCY_AND_LICENSE_AUDIT.md) records the restricted Natively reference as research only and describes the legacy bridge separately.
+- Use the maintainer-supplied logo and synthetic app data for the gallery. No font files, speech weights, or installer binaries are tracked for the source preview.
 - Produce a dependency bill of materials and the notices for the exact installer, including native speech libraries and installer/runtime components. Confirm the terms for any model or runtime asset that would ship. The preview downloads Whisper and Parakeet model weights separately.
 - Recheck release history and package contents for credentials, personal material, and unexpected binaries. A pattern scan is one check in that review.
-- Verify signing, real provider entitlement, clean Windows installation, and a direct private vulnerability reporting channel before changing visibility or uploading a release.
+- Verify signing, real provider entitlement, clean Windows installation, and a direct private vulnerability reporting channel before uploading a release.

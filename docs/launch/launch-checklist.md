@@ -1,6 +1,6 @@
 # Controlled launch checklist
 
-1. **Get approval.** Complete the [public release audit](../OPEN_SOURCE_RELEASE_CHECKLIST.md). Have the owner approve the exact source, package, and launch stage before any public change.
+1. **Approve each stage.** Complete the matching gates in the [public release audit](../OPEN_SOURCE_RELEASE_CHECKLIST.md). Source publication does not approve a Windows package or community announcements.
 2. **Prepare the destinations.** Verify the canonical repository, download, documentation, and private vulnerability channel. Make a short list of reproducible starter issues. Check the read-only workflow and branch controls again when eligibility changes.
 3. **Verify the media.** Confirm each screenshot and demo came from the release build. Review rights, captions, alt text, and consent. Replace all [asset placeholders](launch-assets.md).
 4. **Verify channel eligibility.** Read the current community rules, the live sticky thread, and post requirements. Use the [Reddit matrix](reddit-community-matrix.md) and [platform research](platform-research.md). Author HN and other human-only submissions directly. Disclose affiliation where required.
