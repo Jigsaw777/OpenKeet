@@ -36,8 +36,8 @@ Add your resume and the role you're applying for. OpenKeet helps you organize to
 | --- | --- | --- |
 | [Interview packs](docs/features/instantprep.md) | Resume + job description → ranked topics, questions, and 15 s / 45 s / 2 min answer drafts | Available offline. AI drafts need a connected provider |
 | [My experience](docs/features/truestory.md) | Facts from your documents with sources; confirm, correct, reject; conflict checks | Available offline |
-| [Practice](docs/features/challenge-mode.md) | Adaptive follow-ups, transparent feedback, readiness map | Available offline, typed answers |
-| [Prepared answers in sessions](docs/features/anticipate.md) | Approved answers appear instantly with no AI call; question revisions never show a stale answer | Available |
+| [Practice](docs/features/challenge-mode.md) | Adaptive follow-ups, transparent feedback, readiness map | Type offline or use voice with a local speech model |
+| [Prepared answers in sessions](docs/features/anticipate.md) | Show approved matches for the current question revision without an AI call | Available |
 | [Community packs](docs/features/community-packs.md) | Install, update and share data-only question packs | Available offline. No online catalog yet |
 
 PDF import, optional local embedding search, AI-suggested facts and AI practice feedback are included. AI help runs only when you press it, with the provider you chose.

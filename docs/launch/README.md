@@ -21,7 +21,7 @@ Use this library to prepare the private Windows preview for a controlled public 
 - Choose transcription only, local Ollama, Claude Console with your own API key, or the preview sign-in for eligible ChatGPT accounts. A cloud provider receives question text and relevant context when an answer is requested. [Provider guide](../ai-providers.md)
 - Save completed sessions explicitly to local history. Search, add notes, export, or delete them. [Privacy guide](../privacy.md)
 
-The reviewed `main` preview has no shipped résumé or job-description grounding, precomputed answers, adaptive mock interviews, personal experience store, or contributed interview pack workflow. Predicting the answer or question before the person asks is separate from the implemented question detection. Keep those ideas in roadmap or feedback language. The older Python prototype has a separate scope.
+The drafts describe the preview reviewed at [`d064df6`](https://github.com/Jigsaw777/OpenKeet/commit/d064df6780ec9423f3291c24fffd8d9cfe972f54). That build did not include résumé or job-description grounding, prepared answers, adaptive practice, a personal experience store, or community packs. The [current feature guides](../README.md) cover those additions. Confirm them on the release build before adding them to the drafts. Anticipate offers tentative matches while a question is forming; it does not predict unasked questions. The older Python prototype has a separate scope.
 
 ## Match the message to the reader
 
