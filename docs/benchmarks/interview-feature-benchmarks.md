@@ -14,7 +14,7 @@ cargo run --release -p copilot -- bench-prep 1000 --json target/bench-prep.json
 | RAM | 15.7 GB |
 | OS | Windows 11 Home 10.0.26200 |
 | Build | Release, rustc 1.97.1 |
-| Retrieval | Exact alias + IDF-weighted lexical overlap, in-process. No embeddings, no network. |
+| Retrieval | Exact alias + IDF-weighted lexical overlap, in-process. No embeddings, no network. Optional embedding search (local Ollama) was not benchmarked: no embedding model was installed on the test machine. |
 
 ## Results
 

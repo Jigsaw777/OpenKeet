@@ -77,6 +77,16 @@ fn request_detected(app: AppHandle, state: State<'_, Shared>) -> Result<View, St
     update(&app, &state, Desktop::request_detected)
 }
 
+/// Answers a forming question with one of the pack interpretations the user picked.
+#[tauri::command]
+fn use_prepared(
+    app: AppHandle,
+    state: State<'_, Shared>,
+    family_id: String,
+) -> Result<View, String> {
+    update(&app, &state, |desktop| desktop.choose_candidate(&family_id))
+}
+
 #[tauri::command]
 fn cancel_answer(app: AppHandle, state: State<'_, Shared>) -> Result<View, String> {
     update(&app, &state, |desktop| {
@@ -312,6 +322,9 @@ fn main() {
             history::export_saved_session,
             prep::prep,
             prep::prep_draft_with_ai,
+            prep::prep_ai,
+            prep::prep_paraphrase,
+            use_prepared,
             use_transcript,
             clear_session,
             open_focus,

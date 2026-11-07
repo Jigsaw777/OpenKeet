@@ -28,7 +28,14 @@ Use **History** to delete saved sessions. This removes the entry from the app li
 ## Interview packs, facts and practice
 
 - **Where.** Documents you add, the facts found in them, stories, interview packs, answers and practice history are stored in a separate local database, `prep.sqlite3`, in the app data folder. Nothing is uploaded.
-- **What leaves your PC.** Nothing, unless you press **Draft with AI** on one answer. That sends the question, its outline and your confirmed facts for that topic to the answer provider you connected. Prepared answers in sessions never call a provider.
+- **What leaves your PC.** Nothing, unless you press one of these buttons. Each sends data only to the answer provider you connected:
+  - **Draft with AI** or **Draft N answers with AI**: each question, its outline and your confirmed facts for that topic.
+  - **Suggest facts**: the text of that one document, up to 24,000 characters.
+  - **Get AI feedback**: the practice question, its key points and your answer.
+
+  Prepared answers in sessions never call a provider.
+- **Reworded-question matching.** Turning on **Catch reworded questions** sends your pack's question wordings, and later any live question wording alone can't match, to Ollama on this PC (`127.0.0.1`) only. The resulting vectors are cached in `prep.sqlite3`, only for the pack in use, and deleted with **Delete all my prep data** or when you turn the feature off.
+- **Voice answers in Practice.** **Answer by voice** uses your microphone and the local speech model only while you're recording. The transcript is discarded unless you submit it.
 - **Community packs.** Installing a pack copies public questions into a separate table. Exporting a shareable pack uses a field allowlist and never includes your documents, facts, stories, answers, names or file names. Pack links are never opened automatically.
 - **Logs.** Prep features write no logs. Their in-memory change list holds identifiers only, never document, transcript or answer text.
 - **Delete.** Remove a document in **Prepare**, a pack in **Manage this pack**, practice history in **Practice**, or everything with **Delete all my prep data** in **My experience**. **Save private backup** writes a JSON file you control; it contains your private data.

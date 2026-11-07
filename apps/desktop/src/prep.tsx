@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Empty, Icon } from "./components";
@@ -11,6 +11,7 @@ type Ownership = "personal" | "led" | "contributed" | "team" | "interest" | "uns
 type Claim = {
   id: string; kind: string; subject: string; object: string; skills: string[]; ownership: Ownership;
   source_ids: string[]; quote: string; state: ReviewState; evidence: string; confidence: number; revision: number;
+  predicate: string; span: [number, number] | null;
 };
 type Conflict = { id: string; kind: string; a: string; b: string | null; detail: string; status: string; note: string };
 type Story = { id: string; title: string; situation: string; task: string; action: string; result: string; reflection: string; topics: string[]; claim_ids: string[] };
@@ -27,7 +28,7 @@ type Answer = {
   id: string; family_id: string; length: Length; text: string; claim_ids: string[]; approval: "draft" | "approved" | "needs_review" | "rejected";
   groundedness: string; origin: string; generated_with: { provider: string; model: string } | null; revision: number; note: string; edited: boolean;
 };
-type Candidate = { family_id: string; question: string; score: number; method: string; negation_conflict: boolean; intent_compatible: boolean; entity_compatible: boolean };
+type Candidate = { family_id: string; question: string; score: number; method: string; semantic: number | null; negation_conflict: boolean; intent_compatible: boolean; entity_compatible: boolean };
 type Resolution = {
   outcome: "prepared" | "community" | "unapproved" | "clarify" | "no_match"; pack_revision: number; candidates: Candidate[];
   answer: { text: string; question: string; label: string; attribution: string | null; claim_ids: string[] } | null;
@@ -39,6 +40,7 @@ type Score = { criterion: string; value: number | null; note: string };
 type Attempt = {
   id: string; session_id: string; family_id: string; topic_id: string; prompt: string; response: string; overall: number | null; band: string | null; skipped: boolean; created_ms: number;
   scores: Score[]; feedback: { well: string[]; strengthen: string; structure: string[]; follow_up: string | null; covered: string[]; missed: string[]; limitations: string; truncated: boolean };
+  input_mode: "text" | "voice"; ai_review: { scores: Score[]; summary: string; improve: string; by: string; at_ms: number } | null;
 };
 type Study = { topic_id: string; topic_name: string; attempts: number; strength: number | null; confidence: string; next_ms: number | null };
 type Practice = {
@@ -47,14 +49,16 @@ type Practice = {
 };
 type Recommendation = { topic_id: string; topic_name: string; reason: string };
 type SourceView = {
-  id: string; kind: DocKind; name: string; parser: string; imported_ms: number; chars: number; preview: string; warnings: string[];
+  id: string; kind: DocKind; name: string; parser: string; imported_ms: number; chars: number; preview: string; warnings: string[]; pages: number[];
   job: { requirements: { skill: string; name: string; strength: "not_required" | "mentioned" | "preferred" | "required"; quote: string }[]; years: number | null } | null;
 };
 export type PrepView = {
   sources: SourceView[]; claims: Claim[]; conflicts: Conflict[]; stories: Story[]; packs: Pack[]; families: Family[]; answers: Answer[];
   community: { pack: PublicPack; installed_ms: number; file_name: string }[]; catalog: Catalog[]; attempts: Attempt[]; study: Study[];
-  practice: Practice | null; recommendations: [string, Recommendation[]][]; active_pack: string | null; test: Resolution | null; message: string | null;
+  practice: Practice | null; recommendations: [string, Recommendation[]][]; active_pack: string | null; paraphrase_model: string | null; test: Resolution | null; message: string | null;
 };
+/** Microphone answers for Practice through the same local speech pipeline as live sessions. */
+export type Voice = { recording: boolean; blocked: string | null; start: () => Promise<boolean>; finish: () => Promise<string | null> };
 
 export function usePrep(enabled: boolean) {
   const [data, setData] = useState<PrepView | null>(null);
@@ -114,6 +118,11 @@ function sourceBadge(claim: Claim, sources: SourceView[]) {
   return "From your documents";
 }
 
+function pageOf(claim: Claim, sources: SourceView[]) {
+  const source = sources.find(s => claim.source_ids.includes(s.id) && s.pages.length);
+  return source && claim.span ? source.pages.filter(start => start <= claim.span![0]).length || 1 : null;
+}
+
 function readFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -166,7 +175,7 @@ export function PreparePage({ prep, enabled, aiReady, review, startPractice, pre
       <button className="primary" onClick={review}>Review your experience <Icon name="arrow" /></button></div>}
     <section className="card setup-card" aria-labelledby="docs-title">
       <h2 id="docs-title">1. Your documents</h2>
-      <p className="subtle">Resume, job description and optional project notes. TXT, Markdown and DOCX files work. For a PDF, copy its text and paste it.</p>
+      <p className="subtle">Resume, job description and optional project notes. PDF, DOCX, TXT and Markdown files work. A scanned PDF has no text to read, so paste its text instead.</p>
       {data?.sources.length ? <ul className="plain-list">{data.sources.map(source => <li key={source.id} className="list-row">
         <div><strong>{source.name}</strong> <span className="soft-label">{KIND_LABEL[source.kind]}</span>
           <p className="subtle">{source.chars.toLocaleString()} characters{source.warnings.length ? " · " + source.warnings.join(" ") : ""}</p>
@@ -236,7 +245,22 @@ function PackDetail({ prep, pack, aiReady, startPractice }: { prep: Prep; pack: 
   const [exportId, setExportId] = useState("org.example.my-practice-pack");
   const [exportTitle, setExportTitle] = useState("My practice questions");
   const [author, setAuthor] = useState("");
+  const [drafting, setDrafting] = useState("");
+  const stop = useRef(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [model, setModel] = useState(data.paraphrase_model ?? "");
   const family = families.find(f => f.id === familyId) ?? null;
+  // Questions without an answer you approved, wrote or already drafted with AI; community reference answers are kept.
+  const todo = families.filter(f => !f.excluded && f.origin !== "community_pack" &&
+    !data.answers.some(a => a.family_id === f.id && a.length === "standard" && (a.approval === "approved" || a.edited || a.generated_with)));
+  async function draftAll() {
+    stop.current = false;
+    for (let i = 0; i < todo.length && !stop.current; i++) {
+      setDrafting(`${i + 1} of ${todo.length}`);
+      if (!await prep.run({ familyId: todo[i].id, length: "standard" }, `Drafting ${i + 1} of ${todo.length} with your configured AI…`, "prep_draft_with_ai")) break;
+    }
+    setDrafting("");
+  }
   const active = data.active_pack === pack.id;
   const recommendations = data.recommendations.find(([id]) => id === pack.id)?.[1] ?? [];
   return <section className="card library-card" aria-labelledby="pack-title">
@@ -248,7 +272,11 @@ function PackDetail({ prep, pack, aiReady, startPractice }: { prep: Prep; pack: 
         {active ? "Stop using in sessions" : "Use in sessions"}</button>
       <button disabled={!!prep.busy} onClick={() => void prep.run({ action: "compile", pack_id: pack.id, settings: pack.settings }, "Rebuilding your pack…")}>Rebuild</button>
       <button disabled={!!prep.busy} onClick={startPractice}>Practice with it</button>
+      {aiReady && (drafting ? <button className="stop" onClick={() => { stop.current = true; }}>Stop after {drafting}</button>
+        : <button disabled={!!prep.busy || !todo.length} title="Sends each question, its outline and your confirmed facts for that topic to your connected AI service, one at a time."
+          onClick={() => void draftAll()}>Draft {todo.length} answers with AI</button>)}
     </div>
+    {aiReady && <p className="subtle">AI drafts are never approved automatically. Answers you approved or wrote yourself are left alone.</p>}
     <p className="subtle">{active ? "Live and typed sessions show your approved answers first, labeled \"From your prepared pack\", with no AI call." : "Use it in sessions to see your approved answers instantly."}</p>
     <form className="prep-form" onSubmit={event => { event.preventDefault(); void prep.run({ action: "test", pack_id: pack.id, question }, "Looking through your prepared answers…"); }}>
       <label htmlFor="test-question">Try a question</label>
@@ -256,6 +284,16 @@ function PackDetail({ prep, pack, aiReady, startPractice }: { prep: Prep; pack: 
         <button type="submit" disabled={!question.trim() || !!prep.busy}>Test</button></div>
     </form>
     {data.test && data.test.pack_revision === pack.revision && <TestResult result={data.test} choose={setFamilyId} />}
+    {active && <details className="advanced-settings" onToggle={event => {
+      if (event.currentTarget.open && !models.length) void invoke<{ id: string }[]>("provider_models", { kind: "ollama" }).then(list => setModels(list.map(m => m.id))).catch(() => setModels([]));
+    }}><summary>Catch reworded questions (optional)</summary>
+      <p className="subtle">Uses a local Ollama embedding model, such as nomic-embed-text, on this PC to match questions asked in other words. Without it, sessions match wording only. Either way, a question that flips the meaning, like "avoid" instead of "use", never gets the other answer. "Try a question" above uses wording only.</p>
+      <div className="field-row"><input list="embedding-models" aria-label="Ollama embedding model" maxLength={160} value={model} onChange={event => setModel(event.target.value)} placeholder="nomic-embed-text" />
+        <button disabled={!model.trim() || !!prep.busy} onClick={() => void prep.run({ model: model.trim() }, "Indexing your questions on this PC…", "prep_paraphrase")}>Turn on</button>
+        {data.paraphrase_model && <button disabled={!!prep.busy} onClick={() => void prep.run({ model: null }, "Turning it off…", "prep_paraphrase")}>Turn off</button>}</div>
+      <datalist id="embedding-models">{models.map(m => <option key={m} value={m} />)}</datalist>
+      <p className="subtle">{data.paraphrase_model ? `On with ${data.paraphrase_model}. Live questions are checked against it only when wording alone finds no match.` : "Off."}</p>
+    </details>}
     {recommendations.length > 0 && <div><h3>Worth practicing next</h3><ul className="plain-list">{recommendations.map(r => <li key={r.topic_id}><strong>{r.topic_name}</strong>: {r.reason}</li>)}</ul></div>}
     <details><summary><strong>Topics and why they were chosen</strong></summary>
       <ul className="plain-list">{pack.topics.map(topic => <li key={topic.id} className="list-row"><div><strong>{topic.name}</strong>
@@ -352,7 +390,7 @@ function FamilyEditor({ prep, family, aiReady }: { prep: Prep; family: Family; a
 const EMPTY_STORY: Story = { id: "", title: "", situation: "", task: "", action: "", result: "", reflection: "", topics: [], claim_ids: [] };
 const BEHAVIORAL = [["leadership", "Leadership"], ["communication", "Communication"], ["collaboration", "Collaboration"], ["ownership", "Ownership"], ["problem-solving", "Problem solving"]];
 
-export function ExperiencePage({ prep }: { prep: Prep }) {
+export function ExperiencePage({ prep, aiReady }: { prep: Prep; aiReady: boolean }) {
   const data = prep.data;
   const [skipped, setSkipped] = useState<string[]>([]);
   const [correcting, setCorrecting] = useState<string | null>(null);
@@ -378,7 +416,9 @@ export function ExperiencePage({ prep }: { prep: Prep }) {
         queue.slice(0, 6).map(claim => <article key={claim.id} className="fact-card">
           <p><strong>{claim.object}</strong></p>
           <p className="chip-row"><span className="soft-label">{sourceBadge(claim, data!.sources)}</span><span className="soft-label">{OWNER_LABEL[claim.ownership]}</span>
-            {claim.subject !== "General" && <span className="soft-label">{claim.subject}</span>}</p>
+            {claim.subject !== "General" && <span className="soft-label">{claim.subject}</span>}
+            {claim.predicate === "suggested_by_ai" && <span className="soft-label">Suggested by AI</span>}
+            {pageOf(claim, data!.sources) && <span className="soft-label">Page {pageOf(claim, data!.sources)}</span>}</p>
           <p className="subtle">Source text: "{claim.quote}"</p>
           {correcting === claim.id ? <form className="field-row" onSubmit={event => { event.preventDefault(); decide(claim.id, { decision: "correct", text: correction }); setCorrecting(null); }}>
             <input aria-label="Corrected fact" maxLength={400} value={correction} onChange={event => setCorrection(event.target.value)} />
@@ -391,6 +431,12 @@ export function ExperiencePage({ prep }: { prep: Prep }) {
             </div>}
         </article>)}
     </section>
+    {aiReady && data && data.sources.some(s => s.kind !== "job_description") && <section className="card setup-card" aria-labelledby="ai-facts-title">
+      <h2 id="ai-facts-title">Find more facts with AI</h2>
+      <p className="subtle">Sends one document's text to your connected AI service. Each suggestion must quote the document word for word and waits above for your review. Suggestions that add numbers, names or stronger ownership than the document are left out.</p>
+      <ul className="plain-list">{data.sources.filter(s => s.kind !== "job_description").map(s => <li key={s.id} className="list-row"><span>{s.name} · {KIND_LABEL[s.kind]}</span>
+        <button disabled={!!prep.busy} onClick={() => void prep.run({ task: { task: "extract_facts", source_id: s.id } }, "Asking your AI for suggested facts…", "prep_ai")}>Suggest facts</button></li>)}</ul>
+    </section>}
     {open.length > 0 && <section className="card setup-card" aria-labelledby="conflict-title">
       <h2 id="conflict-title">Conflicts to review <span className="soft-label">{open.length}</span></h2>
       {open.map(c => <article key={c.id} className="fact-card">
@@ -442,7 +488,7 @@ export function ExperiencePage({ prep }: { prep: Prep }) {
 
 // ---------- Practice (Challenge Mode) ----------
 
-export function PracticePage({ prep }: { prep: Prep }) {
+export function PracticePage({ prep, aiReady, voice }: { prep: Prep; aiReady: boolean; voice?: Voice }) {
   const data = prep.data;
   const practice = data?.practice ?? null;
   const [packId, setPackId] = useState("");
@@ -453,17 +499,18 @@ export function PracticePage({ prep }: { prep: Prep }) {
   const [response, setResponse] = useState("");
   const [rating, setRating] = useState("");
   const [reset, setReset] = useState(false);
+  const [inputMode, setInputMode] = useState<"text" | "voice">("text");
   const pack = packId || data?.active_pack || data?.packs[0]?.id || "";
   const attempts = (data?.attempts ?? []).filter(a => practice && a.session_id === practice.id);
   const last = attempts.filter(a => !a.skipped).at(-1);
-  useEffect(() => setResponse(""), [practice?.current?.text]);
+  useEffect(() => { setResponse(""); setInputMode("text"); }, [practice?.current?.text]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    await prep.run({ action: "submit", response, input_mode: "text", self_rating: rating ? Number(rating) : null }, "Reviewing your answer…");
+    await prep.run({ action: "submit", response, input_mode: inputMode, self_rating: rating ? Number(rating) : null }, "Reviewing your answer…");
   }
   const inSession = practice && !practice.done && practice.current;
-  return <Page eyebrow="Practice" title="Practice the hard questions" intro="Learn from every answer. Type or paste what you'd say; no microphone is needed. Feedback runs on this PC.">
+  return <Page eyebrow="Practice" title="Practice the hard questions" intro="Learn from every answer. Type what you'd say, or answer by voice; a microphone is optional. Feedback runs on this PC unless you ask your AI service.">
     <Feedback prep={prep} />
     {!inSession && <form className="card setup-card" onSubmit={event => { event.preventDefault(); void prep.run({ action: "start_practice", setup: { pack_id: pack, mode, difficulty, count, coaching, topics: [], max_depth: 2 } }); }}>
       <h2>Start a practice round</h2>
@@ -486,7 +533,11 @@ export function PracticePage({ prep }: { prep: Prep }) {
       {practice.current.outline.length > 0 && <details><summary className="subtle">See structure</summary><ol>{practice.current.outline.map(o => <li key={o}>{o}</li>)}</ol></details>}
       <label htmlFor="practice-answer">Your answer</label>
       <textarea id="practice-answer" rows={7} maxLength={8000} value={response} onChange={event => setResponse(event.target.value)}
-        placeholder="Type your answer, or paste a transcript and fix any recognition mistakes before submitting." />
+        placeholder="Type your answer, or answer by voice and fix any recognition mistakes before submitting." />
+      {voice && <div className="actions">{voice.recording
+        ? <button type="button" className="stop" onClick={() => void voice.finish().then(text => { if (text) { setResponse(text); setInputMode("voice"); } })}>Stop and use what I said</button>
+        : <button type="button" disabled={!!voice.blocked || !!prep.busy} onClick={() => void voice.start()}>Answer by voice</button>}
+        <span className="subtle">{voice.recording ? "Listening to your microphone on this PC. Nothing is kept unless you submit." : voice.blocked ?? "Uses your default microphone and local speech model. Check the words before submitting."}</span></div>}
       <label htmlFor="practice-rating">How did that feel? (optional, never changes your scores)</label>
       <select id="practice-rating" value={rating} onChange={event => setRating(event.target.value)}><option value="">Skip</option>
         {[1, 2, 3, 4, 5].map(r => <option key={r} value={r}>{r} of 5</option>)}</select>
@@ -496,7 +547,7 @@ export function PracticePage({ prep }: { prep: Prep }) {
         <button type="button" disabled={!!prep.busy} onClick={() => void prep.run({ action: "end_practice" })}>End round</button>
       </div>
     </form>}
-    {practice && (practice.coaching || practice.done) && last && <AttemptFeedback prep={prep} attempt={last} />}
+    {practice && (practice.coaching || practice.done) && last && <AttemptFeedback prep={prep} attempt={last} aiReady={aiReady} />}
     {practice?.done && attempts.length > 0 && <details className="card history" open><summary>Round summary <span className="soft-label">{attempts.length}</span></summary>
       {attempts.map(a => <article key={a.id}><strong>{a.prompt}</strong><p className="subtle">{a.skipped ? "Skipped: it stays on your review list." : `${BAND_LABEL[a.band ?? ""] ?? "Not scored"}. ${a.feedback.strengthen}`}</p></article>)}</details>}
     <section className="card setup-card" aria-labelledby="readiness-title">
@@ -520,7 +571,8 @@ function bandOf(score: number) {
 
 const CRITERIA: Record<string, string> = { relevance: "Relevance", correctness: "Technical correctness", reasoning: "Reasoning", structure: "Structure", completeness: "Key points covered", grounding: "Your own experience" };
 
-function AttemptFeedback({ prep, attempt }: { prep: Prep; attempt: Attempt }) {
+function AttemptFeedback({ prep, attempt, aiReady }: { prep: Prep; attempt: Attempt; aiReady: boolean }) {
+  const review = attempt.ai_review;
   const f = attempt.feedback;
   return <section className="card setup-card" aria-labelledby="feedback-title">
     <h2 id="feedback-title">Here's what worked, and what to improve</h2>
@@ -532,6 +584,12 @@ function AttemptFeedback({ prep, attempt }: { prep: Prep; attempt: Attempt }) {
     <table className="score-table"><caption className="subtle">0 missing · 1 mostly absent · 2 partial · 3 good · 4 strong</caption>
       <tbody>{attempt.scores.map(s => <tr key={s.criterion}><th scope="row">{CRITERIA[s.criterion] ?? s.criterion}</th><td>{s.value === null ? "Not assessed" : `${s.value} of 4`}</td><td className="subtle">{s.note}</td></tr>)}</tbody></table>
     <p className="subtle">{f.limitations}{f.truncated ? " Only the first 8,000 characters were reviewed." : ""}</p>
+    {review ? <div><p className="eyebrow">AI feedback · {review.by}</p>{review.summary && <p>{review.summary}</p>}
+      {review.improve && <p><strong>Next step:</strong> {review.improve}</p>}
+      <table className="score-table"><tbody>{review.scores.map(s => <tr key={s.criterion}><th scope="row">{CRITERIA[s.criterion] ?? s.criterion}</th><td>{s.value} of 4</td><td className="subtle">{s.note}</td></tr>)}</tbody></table>
+      <p className="subtle">AI feedback can be wrong, especially on facts. It reviews your words only and says nothing about hiring. Only its correctness score counts toward your readiness map.</p></div>
+      : aiReady && <button disabled={!!prep.busy} title="Sends this question, its key points and your answer to your connected AI service."
+        onClick={() => void prep.run({ task: { task: "review_attempt", attempt_id: attempt.id } }, "Asking your AI for feedback…", "prep_ai")}>Get AI feedback</button>}
     <button disabled={!!prep.busy} onClick={() => void prep.run({ action: "propose_improvement", attempt_id: attempt.id })}>Save this explanation to my pack as a draft</button>
   </section>;
 }

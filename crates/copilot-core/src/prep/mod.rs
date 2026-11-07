@@ -44,6 +44,16 @@ pub struct SourceDoc {
     pub imported_ms: u64,
     #[serde(default)]
     pub warnings: Vec<String>,
+    /// Byte offset in `text` where each page starts (PDF imports only).
+    #[serde(default)]
+    pub pages: Vec<usize>,
+}
+
+impl SourceDoc {
+    /// 1-based page of a byte offset, when the document has pages.
+    pub fn page_of(&self, offset: usize) -> Option<usize> {
+        (!self.pages.is_empty()).then(|| self.pages.iter().filter(|&&p| p <= offset).count().max(1))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -425,7 +435,23 @@ impl Workspace {
         if self.sources.len() >= MAX_SOURCES {
             return Err("Remove an older document before adding another.".into());
         }
-        let text = normalize_text(raw);
+        // Form feeds separate PDF pages; each page is normalized on its own so offsets map back.
+        let (text, pages, blank_pages) = if raw.contains('\u{c}') {
+            let (mut text, mut pages, mut blank) = (String::new(), Vec::new(), Vec::new());
+            for (i, page) in raw.split('\u{c}').enumerate() {
+                let page = normalize_text(page);
+                if page.is_empty() {
+                    blank.push((i + 1).to_string());
+                } else if !text.is_empty() {
+                    text.push('\n');
+                }
+                pages.push(text.len());
+                text.push_str(&page);
+            }
+            (text, pages, blank)
+        } else {
+            (normalize_text(raw), Vec::new(), Vec::new())
+        };
         if text.trim().len() < 20 {
             return Err(
                 "We couldn't find readable text. If this is a scanned PDF, paste its text instead."
@@ -449,6 +475,12 @@ impl Workspace {
         if text.matches('\u{FFFD}').count() > 5 {
             warnings.push("Some characters could not be decoded.".into());
         }
+        if !blank_pages.is_empty() {
+            warnings.push(format!(
+                "No text found on page {}. Scanned pages need their text pasted in; OpenKeet doesn't run OCR.",
+                blank_pages.join(", ")
+            ));
+        }
         let source = SourceDoc {
             id: id.clone(),
             kind,
@@ -458,6 +490,7 @@ impl Workspace {
             text,
             imported_ms: now_ms,
             warnings,
+            pages,
         };
         if kind != DocKind::JobDescription {
             for claim in story::extract(&source, now_ms) {
@@ -750,6 +783,13 @@ pub fn normalize_text(raw: &str) -> String {
         out.push('\n');
     }
     out.trim().to_owned()
+}
+
+/// The outermost `open`…`close` block in model output, which may wrap JSON in prose or fences.
+pub fn json_block(raw: &str, open: char, close: char) -> Option<&str> {
+    let start = raw.find(open)?;
+    let end = raw.rfind(close)?;
+    (end > start).then(|| &raw[start..=end])
 }
 
 fn clean_name(name: &str, kind: DocKind) -> String {

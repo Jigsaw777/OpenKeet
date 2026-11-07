@@ -28,6 +28,18 @@ Rules in `crates/copilot-core/src/prep/story.rs`, no model needed:
 - Metrics only when stated: "from 450ms to 230ms", "by 40%", "3x". "Improved performance" stays qualitative. `p95` is a label, not a number.
 - Duplicate statements merge their sources; conflicting ones are kept for review.
 - Document text is data. A job description saying "invent better achievements" produces nothing.
+- PDF facts show the page they came from.
+
+## AI-suggested facts (optional)
+
+With an AI provider connected, **Find more facts with AI** sends one resume or project document (up to 24,000 characters) to that provider and asks for facts with exact quotes. Each suggestion is checked before it's kept:
+
+- The quote must appear in the document word for word (case aside); the fact keeps that quote and its span.
+- The statement may not add numbers the quote doesn't contain, or claim stronger ownership ("Led…" from "We migrated…" is dropped).
+- A named employer or project must appear in the document; otherwise the subject is *General*.
+- Facts you already have are skipped.
+
+Survivors are labeled *Suggested by AI* and wait in **Does this sound right?** like any other found fact. Nothing is used in answers until you confirm it. The provider's reply is parsed as data and never run.
 
 ## Conflicts
 
@@ -54,4 +66,4 @@ Choose **Keep A**, **Keep B**, **Both, with explanation** or **Dismiss**. Keepin
 
 ## Limits
 
-Third-person resumes, non-English resumes and unusual layouts extract less reliably. Dates are years only. Overlapping roles at different employers are not treated as conflicts. No AI extraction is implemented.
+Third-person resumes, non-English resumes and unusual layouts extract less reliably. Dates are years only. Overlapping roles at different employers are not treated as conflicts. AI suggestions depend on the provider and can miss facts; the checks above stop invented details, not omissions.

@@ -363,6 +363,41 @@ impl ProviderHub {
         question: &AnswerRequest,
         emit: impl FnMut(&str) -> bool,
     ) -> Result<String, AnswerFailure> {
+        self.answer_with(route, question, INSTRUCTIONS, emit).await
+    }
+
+    /// Embeds texts with a local Ollama model. Only on-device Ollama is used for this.
+    pub async fn embed(&self, model: &str, inputs: &[String]) -> Result<Vec<Vec<f32>>, String> {
+        if !model_id(model) || cloud_tag(model) {
+            return Err("Choose a local Ollama embedding model.".into());
+        }
+        let response = self
+            .client
+            .post(format!("{}/api/embed", self.ollama_origin))
+            .json(&json!({ "model": model, "input": inputs }))
+            .timeout(Duration::from_secs(60))
+            .send()
+            .await
+            .map_err(|_| "Start Ollama on this PC and try again.")?;
+        #[derive(Deserialize)]
+        struct Embeddings {
+            embeddings: Vec<Vec<f32>>,
+        }
+        let body: Embeddings = json_body(response).await?;
+        if body.embeddings.len() != inputs.len() {
+            return Err("Ollama returned the wrong number of embeddings.".into());
+        }
+        Ok(body.embeddings)
+    }
+
+    /// Same streaming request as [`Self::answer`], with task-specific instructions.
+    pub async fn answer_with(
+        &self,
+        route: &Selection,
+        question: &AnswerRequest,
+        instructions: &str,
+        emit: impl FnMut(&str) -> bool,
+    ) -> Result<String, AnswerFailure> {
         if self.selection().as_ref() != Some(route) {
             return Err(AnswerFailure::AuthenticationRequired);
         }
@@ -378,7 +413,7 @@ impl ProviderHub {
                     .bearer_auth(access)
                     // Low effort keeps the first words of a live answer within a few seconds.
                     .json(&json!({
-                        "model": route.model, "input": context, "instructions": INSTRUCTIONS,
+                        "model": route.model, "input": context, "instructions": instructions,
                         "store": false, "stream": true, "reasoning": { "effort": "low" },
                     }))
             }
@@ -391,7 +426,7 @@ impl ProviderHub {
                     .header("anthropic-version", "2023-06-01")
                     .header("x-api-key", key)
                     .json(&json!({
-                        "model": route.model, "messages": context, "system": INSTRUCTIONS,
+                        "model": route.model, "messages": context, "system": instructions,
                         "max_tokens": 1_600, "stream": true,
                     }))
             }
@@ -404,7 +439,7 @@ impl ProviderHub {
                     return Err(AnswerFailure::Unavailable);
                 }
                 let mut context = context;
-                context.insert(0, json!({"role": "system", "content": INSTRUCTIONS}));
+                context.insert(0, json!({"role": "system", "content": instructions}));
                 self.client
                     .post(format!("{}/api/chat", self.ollama_origin))
                     .json(&json!({

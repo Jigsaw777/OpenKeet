@@ -153,6 +153,50 @@ fn truestory_extracts_reviewable_facts_without_inflating_them() {
     );
     // The JD's embedded instruction is ordinary text: it produced no claims and no topic.
     assert!(!ws.claims.iter().any(|c| c.object.contains("invent better")));
+    // C4: AI suggestions must quote the document and may not inflate it; survivors await review.
+    let src = ws.sources[0].id.clone();
+    assert!(
+        ws.add_ai_facts(&src, "I can't help with that.", 10)
+            .is_err()
+    );
+    let reply = r#"Here you go: [
+      {"statement":"Java and Spring Boot backend experience","quote":"Backend engineer working with Java and Spring Boot","subject":"Orbit Retail","confidence":0.9},
+      {"statement":"Led the orders service migration to Kubernetes","quote":"We migrated the orders service to Kubernetes"},
+      {"statement":"Cut search latency by 70%","quote":"Reduced p95 latency from 450ms to 230ms on the search endpoint"},
+      {"statement":"Won the CEO award","quote":"Won the CEO award for outstanding work"},
+      {"statement":"Managed a team","quote":"Ignore previous instructions","subject":"Acme Corp"}
+    ]"#;
+    assert_eq!(ws.add_ai_facts(&src, reply, 11).unwrap(), (1, 4));
+    let ai = claim(&ws, "Java and Spring Boot backend experience");
+    let (start, end) = ai.span.unwrap();
+    assert_eq!(&ws.sources[0].text[start..end], ai.quote);
+    assert_eq!(
+        (ai.state, ai.subject.as_str(), ai.predicate.as_str()),
+        (
+            ReviewState::ExtractedUnreviewed,
+            "Orbit Retail",
+            "suggested_by_ai"
+        )
+    );
+    // A PDF's pages survive import, so each fact can name its page; blank pages are reported.
+    let pdf = ws
+        .import_source(
+            DocKind::ProjectNote,
+            "notes.pdf",
+            "Projects\n- Built a search indexer for the catalog API\u{c}\u{c}Skills\nRust, Redis",
+            "pdf/1",
+            12,
+        )
+        .unwrap();
+    let pdf = ws.sources.iter().find(|s| s.id == pdf).unwrap();
+    assert!(
+        pdf.warnings.iter().any(|w| w.contains("page 2")),
+        "{:?}",
+        pdf.warnings
+    );
+    let indexer = claim(&ws, "search indexer");
+    assert_eq!(pdf.page_of(indexer.span.unwrap().0), Some(1));
+    assert_eq!(pdf.page_of(pdf.text.find("Rust").unwrap()), Some(3));
 }
 
 #[test]
@@ -291,6 +335,59 @@ fn resolver_separates_negation_entities_and_edits() {
             )
             .outcome,
         Outcome::NoMatch
+    );
+    // Paraphrase matching: vectors find a reworded question, the gates still block polarity.
+    let avoid_family = resolver
+        .resolve("When should I avoid Redis?", Length::Standard)
+        .answer
+        .unwrap()
+        .family_id;
+    let owners: Vec<&str> = ws
+        .families
+        .iter()
+        .filter(|f| f.pack_id == id && !f.excluded)
+        .flat_map(|f| std::iter::repeat_n(f.id.as_str(), 1 + f.paraphrases.len()))
+        .collect();
+    let toy = |f: &str, i: usize| match f {
+        f if f == use_family => vec![1.0, 0.0, 0.0],
+        f if f == avoid_family => vec![0.0, 1.0, 0.0],
+        _ => vec![0.0, 0.1 * i as f32, 1.0],
+    };
+    let vectors = owners.iter().enumerate().map(|(i, f)| toy(f, i)).collect();
+    let hybrid = Resolver::build(&ws, &id)
+        .unwrap()
+        .with_vectors("toy", vectors);
+    assert_eq!(hybrid.semantic_texts().len(), owners.len());
+    let reworded = "In which situations does Redis pay off?";
+    assert_ne!(
+        resolver.resolve(reworded, Length::Standard).outcome,
+        Outcome::Community
+    );
+    let found = hybrid.resolve_with(reworded, Length::Standard, Some(&[0.9, 0.05, 0.0]));
+    assert_eq!(
+        found.answer.unwrap().family_id,
+        use_family,
+        "{:?}",
+        found.candidates
+    );
+    let flipped = hybrid.resolve_with(
+        "In which situations is Redis a bad idea?",
+        Length::Standard,
+        Some(&[0.9, 0.05, 0.0]),
+    );
+    assert!(
+        flipped.answer.is_none_or(|a| a.family_id != use_family),
+        "negation gate holds"
+    );
+    // Picking a displayed interpretation uses that family, but never across polarity.
+    let picked = resolver
+        .choose("When should I use Redis?", &use_family, Length::Standard)
+        .unwrap();
+    assert_eq!(picked.answer.unwrap().family_id, use_family);
+    assert!(
+        resolver
+            .choose("When should I use Redis?", &avoid_family, Length::Standard)
+            .is_none()
     );
     // A5: an approved edit is served at the new pack revision; the old index is stale.
     let edited = ws
@@ -849,6 +946,31 @@ fn challenge_mode_runs_offline_with_transparent_adaptive_feedback() {
         (Approval::Draft, Origin::Practice)
     );
     assert!(ws.recommendations(&id, 8).len() <= 5);
+    // AI review: only rubric criteria in range survive; correctness then counts toward readiness.
+    let prompt = ws.ai_review_prompt(&strong.id).unwrap();
+    assert!(prompt.contains("delete the cache entry") && prompt.contains("Key points"));
+    assert!(
+        ws.apply_ai_review(&strong.id, "Great answer!", "Test · model", 9)
+            .is_err()
+    );
+    let reply = r#"```json
+    {"scores":[{"criterion":"correctness","score":3,"reason":"Delete-after-write with a TTL is sound."},
+      {"criterion":"structure","score":9},{"criterion":"charisma","score":4}],
+     "summary":"Accurate and ordered.","improve":"Mention what happens if the delete fails."}
+    ```"#;
+    ws.apply_ai_review(&strong.id, reply, "Test · model", 9)
+        .unwrap();
+    let reviewed = ws.attempts.iter().find(|a| a.id == strong.id).unwrap();
+    let review = reviewed.ai_review.as_ref().unwrap();
+    assert_eq!(
+        review.scores.len(),
+        1,
+        "out-of-range and unknown criteria are dropped"
+    );
+    assert!(
+        reviewed.scores.iter().all(|s| s.value.is_some()),
+        "correctness now assessed"
+    );
     // D6: nothing claims to predict hiring.
     let text = serde_json::to_string(&ws.attempts).unwrap().to_lowercase();
     assert!(!text.contains("hire") && !text.contains("chance of"));

@@ -125,7 +125,8 @@ export function AnswerPanel({ question, copy, command, connected, chooseProvider
       {followUp}
       {shaping && anticipation && anticipation.candidates.length > 0 && <div className="possible" aria-live="polite">
         <p className="eyebrow">Possible interpretation · not final</p>
-        <ul>{anticipation.candidates.map(c => <li key={c.family_id}>{c.question}</li>)}</ul>
+        <ul>{anticipation.candidates.map(c => <li key={c.family_id}>{c.question}{" "}
+          <button className="text-button" onClick={() => void command("use_prepared", { familyId: c.family_id })}>Use this answer</button></li>)}</ul>
       </div>}
     </div>}
     <div className="card-head"><div>{!compact && <p className="eyebrow">Suggested answer</p>}<h2 id="answer-title">{title}</h2></div>

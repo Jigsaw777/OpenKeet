@@ -40,7 +40,7 @@ Add your resume and the role you're applying for. OpenKeet helps you organize to
 | [Prepared answers in sessions](docs/features/anticipate.md) | Approved answers appear instantly with no AI call; question revisions never show a stale answer | Available |
 | [Community packs](docs/features/community-packs.md) | Install, update and share data-only question packs | Available offline. No online catalog yet |
 
-PDF import, semantic search and AI-scored feedback aren't implemented yet.
+PDF import, optional local embedding search, AI-suggested facts and AI practice feedback are included. AI help runs only when you press it, with the provider you chose.
 
 ## From a question to a clearer answer
 

@@ -37,10 +37,14 @@ Existing defaults are unchanged: 3.2 s debounce (shortened by 1/8 for short expl
 
 Resolver cases in `resolver_separates_negation_entities_and_edits` cover corrections (B9), Hindi-English (B10), a quoted "why" statement (B11) and near-equal candidates (B15). Out-of-order finals (B14) are rejected by the existing session tests. Everything runs with no provider (B13).
 
-## Not yet supported
+## Pick an interpretation
 
-- Speaker diarization: speech is treated as "speaker unknown".
-- Choosing between 2–3 tentative candidates during a live session (they are shown, not selectable).
+While a heard question is still taking shape, each listed interpretation has **Use this answer**. It answers the current question revision with that pack question's answer at once. It still passes the negation, intent and entity gates, and if the question changes before the answer is due, the pick is dropped. If that pack question has no approved or community answer, the usual route applies: the AI provider if one is connected, otherwise *no prepared match*.
+
+## Speakers
+
+
+Each session listens to one source: your microphone or the call's playback device. OpenKeet doesn't separate voices within a source, so speech is treated as *speaker unknown*. It never assumes who asked a question. Practice works without speaker separation.
 - Separate stage latency metrics in the live UI. Retrieval timing is in the [benchmark report](../benchmarks/interview-feature-benchmarks.md); speech-end to final transcript is unchanged from the [speech benchmarks](../benchmarks/interview-stress.md).
 
 Use live help only where the interview allows it. Capture always starts from **Start listening** and can be paused or stopped.

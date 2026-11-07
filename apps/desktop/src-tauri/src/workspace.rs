@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::Path,
     sync::{Arc, Mutex},
     thread,
@@ -9,7 +10,11 @@ use copilot_audio::{AudioError, AudioEvent, Engine, Stop, StreamOptions, elapsed
 use copilot_core::{
     AnswerFailure, AnswerKey, CaptureState, MAX_QUESTION_BYTES, Policy, Session, Snapshot, Source,
     SourceKind, Span, Work,
-    prep::resolve::{Anticipation, Resolution, Resolver, answer_from_pack, anticipate},
+    prep::{
+        Length,
+        resolve::{Anticipation, Resolution, Resolver, anticipate, complete_from},
+        words,
+    },
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -77,8 +82,10 @@ struct Job {
 }
 
 pub struct Generation {
-    route: Selection,
+    route: Option<Selection>,
     work: Work,
+    /// Set when the active pack has paraphrase matching: tried before any provider.
+    semantic: Option<Arc<Resolver>>,
 }
 
 /// Provenance of an answer that came from the active interview pack, keyed to its exact turn.
@@ -96,6 +103,7 @@ struct PackRef {
     id: String,
     name: String,
     revision: u32,
+    paraphrase: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -133,6 +141,9 @@ pub struct Desktop {
     prepared: Option<Arc<Resolver>>,
     anticipation: Option<Anticipation>,
     prepared_answers: Vec<PreparedAnswer>,
+    /// Interpretation the user picked: (question id, revision, family id).
+    chosen: Option<(u64, u64, String)>,
+    query_vectors: HashMap<String, Vec<f32>>,
 }
 
 impl Desktop {
@@ -154,6 +165,8 @@ impl Desktop {
             prepared: None,
             anticipation: None,
             prepared_answers: Vec::new(),
+            chosen: None,
+            query_vectors: HashMap::new(),
         }))
     }
 
@@ -181,6 +194,7 @@ impl Desktop {
                 id: r.pack_id.clone(),
                 name: r.pack_name.clone(),
                 revision: r.revision,
+                paraphrase: r.semantic_model().map(String::from),
             }),
             anticipation: self.anticipation.clone(),
             prepared_answers: self.prepared_answers.clone(),
@@ -214,7 +228,11 @@ impl Desktop {
     pub fn set_prepared(&mut self, resolver: Option<Arc<Resolver>>) -> Option<View> {
         let unchanged = match (&self.prepared, &resolver) {
             (None, None) => true,
-            (Some(a), Some(b)) => a.pack_id == b.pack_id && a.revision == b.revision,
+            (Some(a), Some(b)) => {
+                a.pack_id == b.pack_id
+                    && a.revision == b.revision
+                    && a.semantic_model() == b.semantic_model()
+            }
             _ => false,
         };
         if unchanged {
@@ -223,6 +241,28 @@ impl Desktop {
         self.prepared = resolver;
         self.anticipation = None;
         Some(self.changed())
+    }
+
+    pub fn prepared(&self) -> Option<&Arc<Resolver>> {
+        self.prepared.as_ref()
+    }
+
+    /// Answers the forming question with an interpretation the user picked from the list.
+    pub fn choose_candidate(&mut self, family_id: &str) -> Result<(), String> {
+        let question = self
+            .session
+            .current_question()
+            .ok_or("Wait for a question first.")?;
+        let listed = self.anticipation.as_ref().is_some_and(|a| {
+            a.question_id == question.id
+                && a.revision == question.revision
+                && a.candidates.iter().any(|c| c.family_id == family_id)
+        });
+        if !listed {
+            return Err("That suggestion is out of date. Wait for the question to settle.".into());
+        }
+        self.chosen = Some((question.id, question.revision, family_id.into()));
+        self.session.request_detected().map_err(Into::into)
     }
 
     fn remember(&mut self, key: AnswerKey, hit: Resolution) {
@@ -256,6 +296,7 @@ impl Desktop {
         self.audio_metrics = AudioMetrics::default();
         self.anticipation = None;
         self.prepared_answers.clear();
+        self.chosen = None;
         Ok(())
     }
 
@@ -425,20 +466,33 @@ impl Desktop {
             && let Some(work) = self.session.next_request(now)
         {
             // An approved prepared answer is used at once, with no model call.
-            let local = self
-                .prepared
-                .clone()
-                .and_then(|r| answer_from_pack(&mut self.session, &work, &r, now));
+            let key = work.request.key;
+            let chosen = self
+                .chosen
+                .take()
+                .filter(|c| c.0 == key.question_id && c.1 == key.revision);
+            let resolver = self.prepared.clone();
+            let local = resolver.as_ref().and_then(|r| {
+                let resolution = match &chosen {
+                    Some((_, _, family)) => {
+                        r.choose(&work.request.question, family, Length::Standard)?
+                    }
+                    None => r.resolve(&work.request.question, Length::Standard),
+                };
+                complete_from(&mut self.session, &work, resolution, now)
+            });
+            let semantic = resolver.filter(|r| r.semantic_model().is_some());
             if let Some(hit) = local {
-                self.remember(work.request.key, hit);
-            } else if let Some(route) = &self.provider {
+                self.remember(key, hit);
+            } else if self.provider.is_some() || semantic.is_some() {
                 generation = Some(Generation {
-                    route: route.clone(),
+                    route: self.provider.clone(),
                     work,
+                    semantic,
                 });
             } else {
                 self.session
-                    .complete(work.request.key, now, Err(AnswerFailure::NoPreparedMatch));
+                    .complete(key, now, Err(AnswerFailure::NoPreparedMatch));
             }
         }
         (
@@ -563,6 +617,23 @@ pub fn run_generation(
 ) {
     tauri::async_runtime::spawn(async move {
         let key = generation.work.request.key;
+        if let Some(resolver) = &generation.semantic
+            && let Some(view) =
+                semantic_answer(&state, &providers, resolver, &generation.work).await
+        {
+            emit(&app, &view);
+            return;
+        }
+        let Some(route) = generation.route.clone() else {
+            let view = state
+                .lock()
+                .expect("desktop session lock")
+                .finish_answer(key, Err(AnswerFailure::NoPreparedMatch));
+            if let Some(view) = view {
+                emit(&app, &view);
+            }
+            return;
+        };
         let cancel = async {
             while !generation.work.is_cancelled() {
                 tokio::time::sleep(Duration::from_millis(40)).await;
@@ -571,7 +642,7 @@ pub fn run_generation(
         let result = tokio::select! {
             biased;
             () = cancel => return,
-            answer = providers.answer(&generation.route, &generation.work.request, |delta| {
+            answer = providers.answer(&route, &generation.work.request, |delta| {
                 let view = {
                     let mut desktop = state.lock().expect("desktop session lock");
                     if generation.work.is_cancelled() {
@@ -598,6 +669,46 @@ pub fn run_generation(
             emit(&app, &view);
         }
     });
+}
+
+/// Embeds the question with the pack's local model and retries the pack. Any failure or a
+/// slow embedding falls through to the provider (or to "no prepared match").
+async fn semantic_answer(
+    state: &Shared,
+    providers: &ProviderHub,
+    resolver: &Resolver,
+    work: &Work,
+) -> Option<View> {
+    let model = resolver.semantic_model()?;
+    let question = &work.request.question;
+    let norm = format!("{model}\n{}", words(question).join(" "));
+    let cached = state
+        .lock()
+        .expect("desktop session lock")
+        .query_vectors
+        .get(&norm)
+        .cloned();
+    let vector = match cached {
+        Some(v) => v,
+        None => tokio::time::timeout(
+            Duration::from_millis(1_500),
+            providers.embed(model, std::slice::from_ref(question)),
+        )
+        .await
+        .ok()?
+        .ok()?
+        .pop()?,
+    };
+    let resolution = resolver.resolve_with(question, Length::Standard, Some(&vector));
+    let mut desktop = state.lock().expect("desktop session lock");
+    if desktop.query_vectors.len() >= 64 {
+        desktop.query_vectors.clear();
+    }
+    desktop.query_vectors.insert(norm, vector);
+    let now = elapsed_ms(desktop.clock);
+    let hit = complete_from(&mut desktop.session, work, resolution, now)?;
+    desktop.remember(work.request.key, hit);
+    Some(desktop.changed())
 }
 
 pub fn emit(app: &AppHandle, view: &View) {
@@ -824,6 +935,40 @@ mod tests {
         assert!(answer.text.starts_with("Avoid a cache"));
         assert_eq!(view.prepared_answers[0].key, answer.key);
         assert_eq!(view.prepared_answers[0].label, "Community concept");
+        // A heard question still taking shape: the user picks a listed interpretation.
+        desktop.clear().unwrap();
+        let job = begin(&mut desktop);
+        desktop.audio_event(AudioEvent::Ready {
+            source: job.config.source,
+        });
+        desktop.audio_event(AudioEvent::Transcript {
+            utterance: Utterance {
+                id: 1,
+                revision: 1,
+                span: Span::at(200),
+                stability: Stability::Final,
+                text: "Can you explain when to use Redis".into(),
+            },
+            at_ms: 300,
+            decode_ms: 100,
+            queue_ms: 0,
+        });
+        let pick = desktop
+            .anticipation
+            .as_ref()
+            .expect("candidates while forming")
+            .candidates[0]
+            .family_id
+            .clone();
+        assert!(desktop.choose_candidate("not-listed").is_err());
+        desktop.choose_candidate(&pick).unwrap();
+        let (view, generation) = desktop.tick();
+        assert!(generation.is_none());
+        let question = view.unwrap().session.question.unwrap();
+        assert_eq!(
+            question.answer.unwrap().status,
+            copilot_core::AnswerStatus::Checked
+        );
     }
 
     #[test]

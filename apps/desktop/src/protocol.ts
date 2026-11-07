@@ -59,7 +59,7 @@ export type DesktopView = {
   shortcut_available: boolean;
   auto_answer: boolean;
   /** The interview pack whose approved answers this session uses, if any. */
-  pack: { id: string; name: string; revision: number } | null;
+  pack: { id: string; name: string; revision: number; paraphrase: string | null } | null;
   /** Tentative local matches for a question still forming. Never an answer. */
   anticipation: Anticipation | null;
   prepared_answers: PreparedAnswer[];

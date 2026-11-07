@@ -39,6 +39,6 @@ cargo run -p copilot -- validate-packs community-packs/examples
 
 The `Validate community packs` workflow runs the same check and the pack tests on pull requests, with no cloud services.
 
-## Not yet supported
+## Out of scope
 
-Online catalog, signed packs, ZIP containers, Markdown rendering (text is shown plain), pack-specific rubrics.
+There's no online catalog or pack signing, by design: packs ship with the app or arrive as reviewed pull requests to `community-packs/`, with no server to run. A future signed index would show who published a pack, which is not the same as editorial review. Also not supported: ZIP containers, Markdown rendering (text is shown plain), pack-specific rubrics.

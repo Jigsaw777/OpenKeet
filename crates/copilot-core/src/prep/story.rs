@@ -594,6 +594,114 @@ impl Workspace {
         Ok(flagged)
     }
 
+    /// Adds facts an AI model suggested for a document. Each suggestion must quote the document
+    /// verbatim and may not add numbers, a named subject or stronger ownership than the quote;
+    /// survivors wait in the review queue like rule-based facts. Returns (added, rejected).
+    pub fn add_ai_facts(
+        &mut self,
+        source_id: &str,
+        model_output: &str,
+        now_ms: u64,
+    ) -> Result<(usize, usize), String> {
+        #[derive(Deserialize)]
+        struct Suggestion {
+            statement: String,
+            quote: String,
+            #[serde(default)]
+            subject: String,
+            #[serde(default)]
+            confidence: Option<f32>,
+        }
+        let source = self
+            .sources
+            .iter()
+            .find(|s| s.id == source_id)
+            .ok_or("Document not found.")?;
+        let suggestions: Vec<Suggestion> = json_block(model_output, '[', ']')
+            .and_then(|json| serde_json::from_str(json).ok())
+            .ok_or("The AI reply wasn't a list of facts. Try again or add facts yourself.")?;
+        let digits = |t: &str| -> BTreeSet<String> {
+            t.split(|c: char| !c.is_ascii_digit())
+                .filter(|n| !n.is_empty())
+                .map(Into::into)
+                .collect()
+        };
+        let rank = |o: Ownership| match o {
+            Ownership::Led => 4,
+            Ownership::Personal => 3,
+            Ownership::Contributed => 2,
+            Ownership::Team => 1,
+            Ownership::Interest | Ownership::Unstated => 0,
+        };
+        let lower = source.text.to_ascii_lowercase();
+        let mut accepted = Vec::new();
+        let total = suggestions.len().min(40);
+        for s in suggestions.into_iter().take(40) {
+            let (Some(statement), Some(quote)) =
+                (single_line(&s.statement, 400), single_line(&s.quote, 400))
+            else {
+                continue;
+            };
+            let quote = strip_bullet(&quote).0.to_owned();
+            // ASCII lowercasing keeps byte offsets, so the span still points at the source.
+            let Some(start) = source
+                .text
+                .find(&quote)
+                .or_else(|| lower.find(&quote.to_ascii_lowercase()))
+            else {
+                continue;
+            };
+            let found = &source.text[start..start + quote.len()];
+            let subject = single_line(&s.subject, 120)
+                .filter(|v| lower.contains(&v.to_ascii_lowercase()))
+                .unwrap_or_else(|| "General".into());
+            let owner = ownership(found);
+            if quote.len() < 8
+                || !digits(&statement).is_subset(&digits(found))
+                || rank(ownership(&statement)) > rank(owner)
+            {
+                continue;
+            }
+            let metric = metrics_in(&statement).into_iter().next();
+            let kind = if metric.is_some() {
+                ClaimKind::Metric
+            } else {
+                ClaimKind::Action
+            };
+            let id = claim_id(kind, &subject, &format!("ai{statement}"));
+            if self.claims.iter().chain(&accepted).any(|c: &Claim| {
+                c.id == id
+                    || (c.source_ids.iter().any(|x| x == source_id)
+                        && jaccard(&c.object, &statement) >= 0.8)
+            }) {
+                continue;
+            }
+            accepted.push(Claim {
+                id,
+                kind,
+                subject,
+                predicate: "suggested_by_ai".into(),
+                skills: skills_in(&statement).into_iter().map(Into::into).collect(),
+                ownership: owner,
+                metric,
+                years: parse_years(found),
+                source_ids: vec![source_id.into()],
+                quote: found.into(),
+                object: statement,
+                span: Some((start, start + found.len())),
+                state: ReviewState::ExtractedUnreviewed,
+                evidence: EvidenceLevel::DocumentSupported,
+                confidence: s.confidence.unwrap_or(0.5).clamp(0.0, 1.0),
+                revision: 1,
+                updated_ms: now_ms,
+            });
+        }
+        let added = accepted.len();
+        self.claims.extend(accepted);
+        self.refresh();
+        Ok((added, total - added))
+    }
+
     /// Adds a fact typed by the user. Self-reported and confirmed by definition.
     pub fn add_claim(&mut self, subject: &str, text: &str, now_ms: u64) -> Result<String, String> {
         let text =

@@ -18,7 +18,7 @@ Legacy Python (`app.py` and friends) is a separate prototype and was not touched
 
 ## New module boundaries
 
-All domain logic is pure Rust in `crates/copilot-core/src/prep/` (serde only, no I/O, no network). The desktop crate adds storage and commands; the UI calls one command.
+All domain logic is pure Rust in `crates/copilot-core/src/prep/` (serde only, no I/O, no network). The desktop crate adds storage and commands. The UI calls `prep` for local actions; `prep_draft_with_ai` and `prep_ai` (suggested facts, practice feedback) for user-triggered provider calls; `prep_paraphrase` to turn local embedding search on or off; and `use_prepared` to answer a forming question with a picked interpretation. Provider replies are validated in `copilot_core::prep` before anything is stored.
 
 | Prompt service | Implementation |
 | --- | --- |
@@ -51,9 +51,9 @@ Practice attempts -> rubric + follow-up -> StudyState -> recommendations
 
 ## Storage and migrations
 
-`prep.sqlite3` in the app data folder, `PRAGMA user_version = 1`, created inside an immediate transaction. It refuses newer versions, like `sessions.sqlite3`. Tables keep relational keys as columns and the remaining fields as a JSON payload:
+`prep.sqlite3` in the app data folder, `PRAGMA user_version = 2`, created or migrated inside an immediate transaction. Version 2 adds the `embeddings` cache table (model, text hash, vector); a version-1 database upgrades in place with its rows kept. It refuses newer versions, like `sessions.sqlite3`. Tables keep relational keys as columns and the remaining fields as a JSON payload:
 
-`sources`, `claims`, `claim_sources` (FK cascade), `conflicts`, `stories`, `packs`, `question_families` (FK cascade to packs), `answer_variants` (FK cascade to families), `answer_claims`, `community_packs` (public scope, separate table), `practice_attempts`, `study_states`.
+`sources`, `claims`, `claim_sources` (FK cascade), `conflicts`, `stories`, `packs`, `question_families` (FK cascade to packs), `answer_variants` (FK cascade to families), `answer_claims`, `community_packs` (public scope, separate table), `practice_attempts`, `study_states`, `embeddings` (derived vectors for the active pack only), `meta` (practice state, active pack, embedding model).
 
 Every mutation clones the in-memory `Workspace`, applies the change, and writes the clone in one transaction. The in-memory copy is replaced only after commit. A failed compile or crash never leaves a half-written pack. Existing `sessions.sqlite3`, provider settings and speech models are untouched.
 
@@ -78,14 +78,14 @@ contracts and storage -> TrueStory -> Community Pack schema -> InstantPrep compi
 | Capability | Status |
 | --- | --- |
 | Paste/TXT/MD/DOCX import, claim review, conflicts, stories | Available |
-| PDF import | Not yet supported (paste the text instead) |
+| PDF import | Available: text PDFs with page numbers; no OCR |
 | Deterministic pack compile, topic scores, three answer lengths | Available |
 | AI-drafted answers | Requires configured AI (one answer at a time, user-triggered) |
 | Local retrieval (exact + lexical) | Available |
-| Semantic/embedding retrieval | Not yet supported |
-| Prepared answers in live sessions, tentative candidates | Available |
-| Speaker diarization | Not yet supported (speaker unknown) |
+| Semantic/embedding retrieval | Optional: local Ollama embeddings, fused with lexical ranking |
+| Prepared answers in live sessions, tentative candidates you can pick | Available |
+| Speaker diarization | Not used by design: one source per session, speaker unknown |
 | Typed practice, deterministic feedback, readiness, schedule | Available |
-| AI-evaluated practice feedback | Not yet supported |
+| AI-evaluated practice feedback, voice answers in Practice | Available (AI feedback needs a connected provider) |
 | Community pack install/update/uninstall/export, CLI validator | Available |
-| Online pack catalog, signatures | Not yet supported |
+| Online pack catalog, signatures | Out of scope: bundled catalog and GitHub pull requests instead |

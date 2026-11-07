@@ -10,6 +10,7 @@ import { ProviderSetup } from "./provider-setup";
 import { SaveSession, SavedSessions } from "./saved-sessions";
 import { acceptView, answerOrigin, currentAnticipation, emptyView, providerLabel, sourceLabel, unansweredSpeech } from "./protocol";
 import { CommunityPage, ExperiencePage, PracticePage, PreparePage, usePrep } from "./prep";
+import type { Voice } from "./prep";
 import type { DesktopView, Session } from "./protocol";
 import { AppShell } from "./workspace-shell";
 import type { Page, Theme } from "./workspace-shell";
@@ -51,6 +52,7 @@ function App() {
   const audio = useAudioSetup(desktop && !focusWindow);
   const prep = usePrep(desktop && !focusWindow);
   const [presetCommunity, setPresetCommunity] = useState<string | null>(null);
+  const [practiceVoice, setPracticeVoice] = useState(false);
 
   const receive = useCallback((incoming: DesktopView) => {
     if (incoming.session.protocol_version !== 1) {
@@ -158,6 +160,32 @@ function App() {
 
   const session = view.session;
   const running = view.loading || view.stopping || ["paused", "capturing"].includes(session.capture);
+  const mic = audio.endpoints.find(e => e.kind === "microphone" && e.is_default) ?? audio.endpoints.find(e => e.kind === "microphone");
+  // Practice answers by voice reuse the live capture pipeline on the microphone, never auto-answering.
+  const voice: Voice | undefined = desktop ? {
+    recording: practiceVoice,
+    blocked: !mic ? "Connect a microphone to answer by voice." : !audio.modelReady ? "Set up a speech model in Settings → Audio and display first."
+      : running && !practiceVoice ? "Stop the live session first." : null,
+    start: async () => {
+      if (!mic || !await command("start_capture", { config: { source: { kind: "microphone", endpoint_id: mic.id }, engine: audio.prefs.engine,
+        model_path: audio.prefs.model.trim(), vocabulary: audio.prefs.vocabulary.trim(), short_followups: false, auto_answer: false, consent: true } })) return false;
+      setPracticeVoice(true);
+      return true;
+    },
+    finish: async () => {
+      await command("stop_capture");
+      // Stopping drains speech still being recognized; wait for it before reading the words.
+      for (let i = 0; i < 75; i++) {
+        const snapshot = await invoke<DesktopView>("get_snapshot");
+        if (!snapshot.stopping && snapshot.session.capture !== "capturing") break;
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      setPracticeVoice(false);
+      try { return await invoke<string>("use_transcript"); }
+      catch (problem) { setError(String(problem)); return null; }
+      finally { await command("clear_session"); }
+    },
+  } : undefined;
   const engine = providerLabel(view.provider);
   const showTranscript = transcriptOpen ?? !view.provider;
   const hasSession = running || view.mode !== "idle" || Boolean(session.question);
@@ -197,7 +225,7 @@ function App() {
             <button disabled={!desktop} onClick={() => void command("open_focus")}><Icon name="focus" /> Overlay</button></div>
         </div>
         <div className="session-meta"><span>{sourceLabel(session.source.kind)}</span><span className="provider-account">{engine}</span>
-          {view.pack && <span className="soft-label">Interview pack: {view.pack.name}</span>}
+          {view.pack && <span className="soft-label">Interview pack: {view.pack.name}{view.pack.paraphrase ? " · catches rewording" : ""}</span>}
           <button className="text-button" aria-pressed={showTranscript} onClick={() => setTranscriptOpen(!showTranscript)}>{showTranscript ? "Hide transcript" : "Show transcript"}</button>
         </div>
         <div className={"live-grid " + (showTranscript ? "" : "answer-view")}>
@@ -231,8 +259,8 @@ function App() {
     {page === "history" && <SavedSessions enabled={desktop} />}
     {page === "prepare" && <PreparePage prep={prep} enabled={desktop} aiReady={Boolean(view.provider)} review={() => setPage("experience")}
       startPractice={() => setPage("practice")} presetCommunity={presetCommunity} />}
-    {page === "experience" && <ExperiencePage prep={prep} />}
-    {page === "practice" && <PracticePage prep={prep} />}
+    {page === "experience" && <ExperiencePage prep={prep} aiReady={Boolean(view.provider)} />}
+    {page === "practice" && <PracticePage prep={prep} aiReady={Boolean(view.provider)} voice={voice} />}
     {page === "community" && <CommunityPage prep={prep} enabled={desktop} prepare={id => { setPresetCommunity(id); setPage("prepare"); }} />}
     {(page === "audio" || page === "providers") && <div className="settings-heading">
       <h1>Settings</h1>

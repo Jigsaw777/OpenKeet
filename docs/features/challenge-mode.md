@@ -46,4 +46,12 @@ Per topic: number of scored answers, recent performance (mean of the last 3), an
 
 ## Limits
 
-AI-evaluated feedback and microphone input inside Practice aren't implemented; use a live session for voice. Feedback quality depends on how specific a question's outline is.
+## Answer by voice
+
+**Answer by voice** records from your default microphone through the same local speech model as live sessions. It never answers automatically. **Stop and use what I said** puts the transcript in the answer box so you can fix recognition mistakes before submitting. The attempt is stored as a voice answer. Nothing is kept unless you submit. It's disabled during a live session, without a microphone, or before a speech model is set up.
+
+## AI feedback (optional)
+
+With an AI provider connected, **Get AI feedback** sends the question, its key points and your answer to that provider. The reply must follow the same 0–4 rubric. Unknown criteria and out-of-range scores are dropped, and nothing in the reply is run or trusted as an instruction. The AI's scores are shown beside the offline scores and labeled with the provider and model. Only its correctness score, which offline rules can't assess, counts toward the readiness map. AI feedback can be wrong, especially on facts, and says nothing about hiring.
+
+Offline feedback quality depends on how specific a question's outline is.

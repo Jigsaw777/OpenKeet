@@ -4,7 +4,8 @@
 //! Retrieval is exact alias lookup, then an in-process IDF-weighted token overlap (a
 //! normalized lexical score that is comparable across queries, so thresholds mean the same
 //! thing everywhere). Negation, intent, entity and pack-revision gates run before any answer
-//! is shown. Semantic embeddings are not used.
+//! is shown. When the user turns on paraphrase matching, local embedding vectors add a second
+//! ranking, fused with the lexical one by reciprocal rank; the same gates still decide.
 
 use std::{
     cmp::Reverse,
@@ -20,6 +21,12 @@ use crate::{AnswerMode, QuestionPhase, QuestionView, Session, Work};
 pub const ACCEPT: f32 = 0.6;
 pub const MARGIN: f32 = 0.08;
 pub const CANDIDATE: f32 = 0.3;
+// ponytail: cosine thresholds picked for typical local embedding models, not calibrated per
+// model; measure on a paraphrase set before relying on a new embedding model.
+pub const SEMANTIC_ACCEPT: f32 = 0.82;
+pub const SEMANTIC_MARGIN: f32 = 0.04;
+pub const SEMANTIC_CANDIDATE: f32 = 0.7;
+const RRF_K: f32 = 60.0;
 
 #[rustfmt::skip]
 const NEGATORS: &[&str] = &[
@@ -209,14 +216,19 @@ fn compatible(query: Option<Intent>, family: Intent) -> bool {
 pub enum Method {
     Exact,
     Lexical,
+    Semantic,
+    Hybrid,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Candidate {
     pub family_id: String,
     pub question: String,
+    /// Lexical score (0 when only the embedding ranking found it).
     pub score: f32,
     pub method: Method,
+    /// Cosine similarity, when paraphrase matching is on.
+    pub semantic: Option<f32>,
     pub negation_conflict: bool,
     pub intent_compatible: bool,
     pub entity_compatible: bool,
@@ -262,6 +274,7 @@ pub struct Resolution {
     pub pack_revision: u32,
 }
 
+#[derive(Clone)]
 struct FamilyIndex {
     id: String,
     question: String,
@@ -270,14 +283,17 @@ struct FamilyIndex {
     entities: BTreeSet<String>,
     attribution: Option<String>,
     answers: Vec<AnswerVariant>,
+    texts: Vec<String>,
 }
 
+#[derive(Clone)]
 struct Alias {
     family: usize,
     tokens: Vec<String>,
     exact: String,
 }
 
+#[derive(Clone)]
 pub struct Resolver {
     pub pack_id: String,
     pub pack_name: String,
@@ -287,6 +303,15 @@ pub struct Resolver {
     postings: HashMap<String, Vec<usize>>,
     idf: HashMap<String, f32>,
     max_idf: f32,
+    /// Unit vectors per family (one per question wording) and the model that made them.
+    vectors: Vec<(usize, Vec<f32>)>,
+    semantic_model: Option<String>,
+}
+
+fn unit(v: &[f32]) -> Option<Vec<f32>> {
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    (norm > f32::EPSILON && v.iter().all(|x| x.is_finite()))
+        .then(|| v.iter().map(|x| x / norm).collect())
 }
 
 fn entity_ok(q: &Features, f: &FamilyIndex) -> bool {
@@ -386,6 +411,10 @@ impl Resolver {
                     .as_ref()
                     .map(|c| format!("By {} · {}", c.authors.join(", "), c.license)),
                 answers: usable.cloned().collect(),
+                texts: std::iter::once(&family.canonical)
+                    .chain(&family.paraphrases)
+                    .cloned()
+                    .collect(),
             });
         }
         let mut df: HashMap<String, usize> = HashMap::new();
@@ -410,7 +439,125 @@ impl Resolver {
             postings,
             idf,
             max_idf: (1.0 + n).ln(),
+            vectors: Vec::new(),
+            semantic_model: None,
         }
+    }
+
+    /// Question wordings to embed for paraphrase matching, in the order `with_vectors` expects.
+    pub fn semantic_texts(&self) -> Vec<String> {
+        self.families.iter().flat_map(|f| f.texts.clone()).collect()
+    }
+
+    /// Attaches embedding vectors (one per `semantic_texts` entry). A mismatch leaves the
+    /// resolver lexical-only rather than pairing vectors with the wrong questions.
+    pub fn with_vectors(mut self, model: &str, vectors: Vec<Vec<f32>>) -> Self {
+        let owners: Vec<usize> = self
+            .families
+            .iter()
+            .enumerate()
+            .flat_map(|(i, f)| std::iter::repeat_n(i, f.texts.len()))
+            .collect();
+        let dims = vectors.first().map_or(0, Vec::len);
+        if owners.len() == vectors.len() && dims > 0 && vectors.iter().all(|v| v.len() == dims) {
+            self.vectors = owners
+                .into_iter()
+                .zip(vectors)
+                .filter_map(|(f, v)| unit(&v).map(|v| (f, v)))
+                .collect();
+            self.semantic_model = Some(model.into());
+        }
+        self
+    }
+
+    pub fn semantic_model(&self) -> Option<&str> {
+        self.semantic_model.as_deref()
+    }
+
+    fn family_index(&self, family_id: &str) -> Option<usize> {
+        self.families.iter().position(|f| f.id == family_id)
+    }
+
+    fn candidate(
+        &self,
+        q: &Features,
+        fi: usize,
+        lexical: Option<(f32, Method)>,
+        semantic: Option<f32>,
+    ) -> Candidate {
+        let f = &self.families[fi];
+        let (score, method) = match (lexical, semantic) {
+            (Some((s, Method::Exact)), _) => (s, Method::Exact),
+            (Some((s, _)), Some(_)) => (s, Method::Hybrid),
+            (Some((s, m)), None) => (s, m),
+            (None, _) => (0.0, Method::Semantic),
+        };
+        Candidate {
+            family_id: f.id.clone(),
+            question: f.question.clone(),
+            score,
+            method,
+            semantic,
+            negation_conflict: f.negated != q.negated,
+            intent_compatible: compatible(q.intent, f.intent),
+            entity_compatible: entity_ok(q, f),
+        }
+    }
+
+    /// The answer the pack would show for a family: approved first, then community material.
+    fn hit(&self, fi: usize, preferred: Length) -> (Outcome, Option<AnswerHit>) {
+        let f = &self.families[fi];
+        let pick = |prepared: bool| {
+            f.answers
+                .iter()
+                .filter(|a| (a.approval == Approval::Approved) == prepared)
+                .min_by_key(|a| {
+                    (
+                        a.length != preferred,
+                        Reverse(a.updated_ms),
+                        Reverse(a.revision),
+                    )
+                })
+        };
+        let (hit, outcome) = match (pick(true), pick(false)) {
+            (Some(a), _) => (Some(a), Outcome::Prepared),
+            (None, Some(a)) => (Some(a), Outcome::Community),
+            _ => (None, Outcome::Unapproved),
+        };
+        let answer = hit.map(|a| AnswerHit {
+            answer_id: a.id.clone(),
+            family_id: f.id.clone(),
+            question: f.question.clone(),
+            text: a.text.clone(),
+            length: a.length,
+            claim_ids: a.claim_ids.clone(),
+            label: if outcome == Outcome::Prepared {
+                "From your prepared pack"
+            } else {
+                "Community concept"
+            }
+            .into(),
+            attribution: f.attribution.clone(),
+        });
+        (outcome, answer)
+    }
+
+    /// The user picked one of the displayed interpretations. Ranking is skipped; the
+    /// approval rules and the negation, intent and entity gates still apply.
+    pub fn choose(&self, query: &str, family_id: &str, preferred: Length) -> Option<Resolution> {
+        let fi = self.family_index(family_id)?;
+        let candidate = self.candidate(&features(query), fi, None, None);
+        if !candidate.passes() {
+            return None;
+        }
+        let (outcome, answer) = self.hit(fi, preferred);
+        Some(Resolution {
+            outcome,
+            answer,
+            candidates: vec![candidate],
+            pack_id: self.pack_id.clone(),
+            pack_revision: self.revision,
+        })
     }
 
     pub fn len(&self) -> usize {
@@ -422,6 +569,18 @@ impl Resolver {
     }
 
     pub fn resolve(&self, query: &str, preferred: Length) -> Resolution {
+        self.resolve_with(query, preferred, None)
+    }
+
+    /// Lexical ranking, plus an embedding ranking when `query_vector` is given and the pack
+    /// has vectors. Rankings are fused by reciprocal rank for display; acceptance uses each
+    /// ranker's own calibrated threshold, and every answer passes the same gates.
+    pub fn resolve_with(
+        &self,
+        query: &str,
+        preferred: Length,
+        query_vector: Option<&[f32]>,
+    ) -> Resolution {
         let q = features(query);
         let weight = |t: &str| self.idf.get(t).copied().unwrap_or(self.max_idf);
         let query_weight: f32 = q.tokens.iter().map(|t| weight(t)).sum();
@@ -459,78 +618,88 @@ impl Resolver {
                 }
             }
         }
-        let mut ranked: Vec<(usize, f32, Method)> =
+        let mut lexical: Vec<(usize, f32, Method)> =
             best.into_iter().map(|(f, (s, m))| (f, s, m)).collect();
-        ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
-        let candidates: Vec<Candidate> = ranked
-            .iter()
-            .take(8)
-            .map(|&(fi, score, method)| {
-                let f = &self.families[fi];
-                Candidate {
-                    family_id: f.id.clone(),
-                    question: f.question.clone(),
-                    score,
-                    method,
-                    negation_conflict: f.negated != q.negated,
-                    intent_compatible: compatible(q.intent, f.intent),
-                    entity_compatible: entity_ok(&q, f),
-                }
-            })
-            .collect();
-        let passing: Vec<&Candidate> = candidates.iter().filter(|c| c.passes()).collect();
-        let mut answer = None;
-        let outcome = match passing.first() {
-            Some(top) if top.score >= ACCEPT => {
-                let rival = top.method != Method::Exact
-                    && passing
-                        .get(1)
-                        .is_some_and(|c| c.score >= top.score - MARGIN);
-                if rival {
-                    Outcome::Clarify
-                } else {
-                    let f = self
-                        .families
-                        .iter()
-                        .find(|f| f.id == top.family_id)
-                        .expect("ranked family");
-                    let pick = |prepared: bool| {
-                        f.answers
-                            .iter()
-                            .filter(|a| (a.approval == Approval::Approved) == prepared)
-                            .min_by_key(|a| {
-                                (
-                                    a.length != preferred,
-                                    Reverse(a.updated_ms),
-                                    Reverse(a.revision),
-                                )
-                            })
-                    };
-                    let (hit, outcome) = match (pick(true), pick(false)) {
-                        (Some(a), _) => (Some(a), Outcome::Prepared),
-                        (None, Some(a)) => (Some(a), Outcome::Community),
-                        _ => (None, Outcome::Unapproved),
-                    };
-                    answer = hit.map(|a| AnswerHit {
-                        answer_id: a.id.clone(),
-                        family_id: f.id.clone(),
-                        question: f.question.clone(),
-                        text: a.text.clone(),
-                        length: a.length,
-                        claim_ids: a.claim_ids.clone(),
-                        label: if outcome == Outcome::Prepared {
-                            "From your prepared pack"
-                        } else {
-                            "Community concept"
-                        }
-                        .into(),
-                        attribution: f.attribution.clone(),
-                    });
-                    outcome
+        lexical.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        lexical.truncate(8);
+        let mut semantic: Vec<(usize, f32)> = Vec::new();
+        if let Some(query) = query_vector
+            .filter(|_| !self.vectors.is_empty())
+            .and_then(unit)
+        {
+            let mut cosine: HashMap<usize, f32> = HashMap::new();
+            for (fi, v) in &self.vectors {
+                if v.len() == query.len() {
+                    let c: f32 = v.iter().zip(&query).map(|(a, b)| a * b).sum();
+                    let entry = cosine.entry(*fi).or_insert(c);
+                    *entry = entry.max(c);
                 }
             }
-            Some(top) if top.score >= CANDIDATE => Outcome::Clarify,
-            _ => Outcome::NoMatch,
+            semantic = cosine.into_iter().collect();
+            semantic.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+            semantic.truncate(8);
+        }
+        let lex_of = |fi: usize| lexical.iter().find(|l| l.0 == fi).map(|l| (l.1, l.2));
+        let sem_of = |fi: usize| semantic.iter().find(|s| s.0 == fi).map(|s| s.1);
+        let mut order: Vec<(usize, f32)> = Vec::new();
+        for (rank, fi) in lexical
+            .iter()
+            .map(|l| l.0)
+            .enumerate()
+            .chain(semantic.iter().map(|s| s.0).enumerate())
+        {
+            let rrf = 1.0 / (RRF_K + rank as f32 + 1.0);
+            match order.iter_mut().find(|o| o.0 == fi) {
+                Some(o) => o.1 += rrf,
+                None => order.push((fi, rrf)),
+            }
+        }
+        order.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        let candidates: Vec<Candidate> = order
+            .iter()
+            .take(8)
+            .map(|&(fi, _)| self.candidate(&q, fi, lex_of(fi), sem_of(fi)))
+            .collect();
+        let passes = |fi: usize| self.candidate(&q, fi, None, None).passes();
+        let lex_pass: Vec<&(usize, f32, Method)> = lexical.iter().filter(|l| passes(l.0)).collect();
+        let sem_pass: Vec<&(usize, f32)> = semantic.iter().filter(|s| passes(s.0)).collect();
+        let mut chosen = None;
+        let mut clarify = false;
+        if let Some(top) = lex_pass.first().filter(|t| t.1 >= ACCEPT) {
+            let rival =
+                top.2 != Method::Exact && lex_pass.get(1).is_some_and(|c| c.1 >= top.1 - MARGIN);
+            if rival {
+                clarify = true
+            } else {
+                chosen = Some(top.0)
+            }
+        }
+        if chosen.is_none()
+            && !clarify
+            && let Some(top) = sem_pass.first().filter(|t| t.1 >= SEMANTIC_ACCEPT)
+        {
+            let rival = sem_pass
+                .get(1)
+                .is_some_and(|c| c.1 >= top.1 - SEMANTIC_MARGIN);
+            // A strong lexical match for a different question means the rankers disagree.
+            let disagree = lex_pass
+                .first()
+                .is_some_and(|l| l.0 != top.0 && l.1 >= CANDIDATE);
+            if rival || disagree {
+                clarify = true
+            } else {
+                chosen = Some(top.0)
+            }
+        }
+        let (outcome, answer) = match chosen {
+            Some(fi) => self.hit(fi, preferred),
+            None if clarify
+                || lex_pass.first().is_some_and(|l| l.1 >= CANDIDATE)
+                || sem_pass.first().is_some_and(|s| s.1 >= SEMANTIC_CANDIDATE) =>
+            {
+                (Outcome::Clarify, None)
+            }
+            None => (Outcome::NoMatch, None),
         };
         Resolution {
             outcome,
@@ -588,29 +757,42 @@ pub fn anticipate(
         candidates: resolution
             .candidates
             .into_iter()
-            .filter(|c| c.passes() && c.score >= CANDIDATE)
+            .filter(|c| {
+                c.passes()
+                    && (c.score >= CANDIDATE || c.semantic.is_some_and(|s| s >= SEMANTIC_CANDIDATE))
+            })
             .take(3)
             .collect(),
     })
 }
 
-/// Answers due work from the approved pack before any provider is called. The answer is
-/// keyed to the work's exact question revision, so the session drops it if speech resumes.
-pub fn answer_from_pack(
+/// Completes due work with a resolved prepared answer. The answer is keyed to the work's
+/// exact question revision, so the session drops it if speech resumes.
+pub fn complete_from(
     session: &mut Session,
     work: &Work,
-    resolver: &Resolver,
+    resolution: Resolution,
     now_ms: u64,
 ) -> Option<Resolution> {
-    if work.request.key.mode != AnswerMode::Checked || work.is_cancelled() {
-        return None;
-    }
-    let resolution = resolver.resolve(&work.request.question, Length::Standard);
-    if !matches!(resolution.outcome, Outcome::Prepared | Outcome::Community) {
+    if work.request.key.mode != AnswerMode::Checked
+        || work.is_cancelled()
+        || !matches!(resolution.outcome, Outcome::Prepared | Outcome::Community)
+    {
         return None;
     }
     let text = resolution.answer.as_ref()?.text.clone();
     session
         .complete(work.request.key, now_ms, Ok(text))
         .then_some(resolution)
+}
+
+/// Answers due work from the approved pack before any provider is called.
+pub fn answer_from_pack(
+    session: &mut Session,
+    work: &Work,
+    resolver: &Resolver,
+    now_ms: u64,
+) -> Option<Resolution> {
+    let resolution = resolver.resolve(&work.request.question, Length::Standard);
+    complete_from(session, work, resolution, now_ms)
 }
