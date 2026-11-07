@@ -1,6 +1,6 @@
 # Troubleshoot OpenKeet
 
-Start with the status line. It says what OpenKeet is doing and what to try next. To separate audio problems from answer problems, type a question under **Ask a question**. If an answer arrives, the answer model works.
+Start with the status line. It says what OpenKeet is doing and what to try next. To separate audio problems from answer problems, connect an answer model and send a typed question under **Ask a question**. If an answer arrives, check the audio setup next.
 
 | What you see | What to try |
 | --- | --- |
@@ -8,7 +8,7 @@ Start with the status line. It says what OpenKeet is doing and what to try next.
 | The window disappears or startup seems stuck | Check the Windows tray for **Show OpenKeet**. Try **Ctrl+Alt+I**. If the app never appears, check the build or installer output and the WebView2 runtime. |
 | Microphone is missing | Plug it in, check that Windows lists it as an input, allow desktop-app microphone access, then refresh the device list. |
 | Playback is silent in OpenKeet | Play a short speech clip. Under **Listen to**, select the same speakers or headset your call uses. If the device was unplugged, reconnect it or stop and choose a new device. |
-| Listening starts but text is missing | Check the input meter and the selected source. Wait for **Speech model** to finish downloading. If you picked a model manually, use a [supported file](desktop-slice.md#build-and-test). |
+| Listening starts but text is missing | Check the input meter and the selected source. Wait for the speech model download to finish. If you selected a model manually, check that the [Whisper file or Parakeet folder](getting-started.md#3-practice-with-audio) matches your selected engine. |
 | No answer appears | Try **Get answer** or **Ask a question**. Under **Settings**, open **Answers** and check which provider is active. |
 | Ollama model list is empty | Start Ollama, download a local model, and reload the list. Cloud models are filtered out. |
 | Claude key is missing or rejected | Save a current Console API key from an enabled workspace. Check workspace billing and model access. Keep the key out of bug reports. |

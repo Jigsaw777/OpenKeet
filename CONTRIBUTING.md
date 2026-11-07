@@ -6,7 +6,7 @@ You don't need to be an expert to contribute to OpenKeet. Helpful contributions 
 
 ## Find a starting point
 
-- Try the offline sample and tell us where the instructions or keyboard navigation get confusing.
+- Try the [first-run setup](docs/getting-started.md) or ask a practice question. Tell us where the instructions or keyboard navigation get confusing.
 - Look for [good first issues](https://github.com/Jigsaw777/Personal-Interview-Assistant/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). If the list is empty, check the [roadmap](docs/roadmap.md) for a small test or documentation gap.
 - Use a [GitHub issue form](https://github.com/Jigsaw777/Personal-Interview-Assistant/issues/new/choose) for a reproducible bug, a feature proposal, or a documentation correction. Start with the problem someone experiences.
 
@@ -35,7 +35,7 @@ Install the [Windows desktop prerequisites](docs/desktop-slice.md#build-and-test
 | --- | --- |
 | [Desktop UI](apps/desktop/src) | Session, model, audio, and history screens |
 | [Windows backend](apps/desktop/src-tauri/src) | Tauri commands, connections, local history, and windows |
-| [Session engine](crates/copilot-core) | Question detection, answers, and replay |
+| [Session engine](crates/copilot-core) | Question detection, answers, and session state |
 | [Audio engine](crates/copilot-audio) and [CLI](apps/cli) | Local transcription, Windows capture, and fixture commands |
 | [Documentation](docs) and [benchmarks](benchmarks) | Guides, synthetic audio fixtures, and measurements |
 

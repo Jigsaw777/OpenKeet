@@ -2,16 +2,16 @@
 
 ## Run the app
 
-1. On the start screen, pick what to **Listen to** (the speakers or headphones your call plays through) and get the **Speech model** (**Download** or **Choose file**). Optionally choose **Connect answers**: **Continue with ChatGPT** for browser sign-in, a Claude Console API key, or a local Ollama model, then **Use**.
+1. On the start screen, choose a microphone or the playback device under **Listen to** and [set up a local speech model](getting-started.md#3-practice-with-audio). Use **Connect answers** if you want suggestions from an [answer provider](ai-providers.md).
 2. **Start listening** opens a see-through answer window that stays on top of the call, with an **Opacity** slider. Its status line shows each step: Listening, Hearing speech, Question heard, Writing answer, Answer ready. Answers start automatically when **Answer detected questions automatically** is on; otherwise use **Get answer**. **Answer what they said** answers the latest lines when no question was detected.
 3. Use **Pause**, **Resume**, or **Stop** to control capture. **Retry same source** resumes a recoverable device failure in the current session. **Main window** shows the transcript, the full answer and **Ask a question**.
 4. After stopping, choose **Save to history** to retain the available final transcript and checked answers in SQLite. Find it under **History** to add notes, export it, or delete it. **Clear current session** clears the workspace.
 
 **Hide** hides the window and pauses listening. **Ctrl+Alt+I** or **Show OpenKeet** in the Windows tray brings it back; press **Resume** to keep listening. The tray also offers **Quit**. If Windows rejects the shortcut registration, the app shows the tray fallback.
 
-Whisper decodes audio locally in memory. The selected answer provider receives the current question and linked question/answer context when you request a response. Choosing **Transcription only** disconnects the active route. [Provider authorization and account setup](audit/PROVIDER_AUTHORIZATION.md)
+The speech engine decodes audio locally in memory. The selected answer provider receives the current question and linked question and answer context when a response is requested. Applying **Transcription only** clears the active answer route. [Provider authorization and account setup](audit/PROVIDER_AUTHORIZATION.md)
 
-**Short follow-up mode** in Settings → Audio and display enables a faster decoder for very short utterances. This is optional. The measured synthetic pack still had errors on short prompts such as “Why?”. [Short speech results](benchmarks/interview-stress.md#short-follow-up-mode)
+**Short follow-up mode** under **Settings**, then **Audio and display**, enables an optional faster Whisper decoder for very short utterances. The measured synthetic pack still had errors on short prompts such as “Why?”. [Short speech results](benchmarks/interview-stress.md#short-follow-up-mode)
 
 ## Build and test
 
@@ -19,7 +19,6 @@ Install stable Rust with the `x86_64-pc-windows-msvc` target, VS C++ build tools
 
 ```powershell
 cargo test --locked -p copilot-core -p copilot-audio -p copilot --features copilot/audio
-cargo run --locked -p copilot -- replay
 Set-Location apps/desktop
 npm ci
 npm test
