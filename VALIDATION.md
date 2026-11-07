@@ -34,7 +34,7 @@ November 4, 2026. Windows 11 25H2, build 26200.9711, Python 3.12.10.
 
 ## Complete the remaining Windows checks
 
-1. Open the **Personal Interview Assistant** desktop shortcut and put synthetic text in the assistant. In a test meeting, share the full display to a second device. Compare the receiver's view with exclusion off and on. Repeat with window sharing if you use that mode.
+1. Open the **OpenKeet (Legacy)** desktop shortcut and put synthetic text in the assistant. In a test meeting, share the full display to a second device. Compare the receiver's view with exclusion off and on. Repeat with window sharing if you use that mode.
 2. Open an assistant dropdown and an import path prompt during the test. Record the Windows build, meeting app and version, share mode, and what each device displays.
 3. Connect a headset, route playback to it, refresh inputs, and select its system output. Load a speech model and play a known spoken clip. Confirm a rolling partial, a completed transcript, and no transcript during silence.
 4. Change the Windows default while listening to **System output (default)**. Confirm the app asks you to restart and then listens to the new default. Repeat with the headset explicitly selected and unplug it. Confirm a visible error, then refresh, select an available output, and restart.

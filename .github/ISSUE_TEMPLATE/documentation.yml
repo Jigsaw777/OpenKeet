@@ -1,0 +1,23 @@
+name: Documentation feedback
+description: Flag a confusing step, missing explanation, or broken link
+title: "[Docs] "
+labels: [documentation]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Which page or section?
+      description: Paste a link or give the file name and heading.
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: What needs to be clearer?
+      description: Share the step you tried and what happened. Keep personal data and keys out of screenshots or examples.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested wording or fix

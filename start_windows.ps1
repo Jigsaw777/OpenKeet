@@ -16,10 +16,10 @@ if (-not $ownsSetup) {
 function Add-DesktopShortcut {
     $desktop = [Environment]::GetFolderPath('DesktopDirectory')
     if (-not $desktop) { return }
-    $shortcutPath = Join-Path $desktop 'Personal Interview Assistant.lnk'
+    $shortcutPath = Join-Path $desktop 'OpenKeet (Legacy).lnk'
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($shortcutPath)
-    $description = 'Launch Personal Interview Assistant'
+    $description = 'Launch the legacy OpenKeet prototype'
     if ((Test-Path -LiteralPath $shortcutPath) -and $shortcut.Description -ne $description) { return }
     $launcher = Join-Path $PSScriptRoot 'start_windows.vbs'
     if ($shortcut.Arguments -eq ('"' + $launcher + '"')) { return }
@@ -148,13 +148,13 @@ try {
         $progress.Refresh()
         try { Install-WithWinGet 'Anthropic.ClaudeCode' } catch {
             [Windows.Forms.MessageBox]::Show($_.Exception.Message + "`nYou can still open the app and choose another provider.",
-                'Personal Interview Assistant') | Out-Null
+                'OpenKeet (Legacy)') | Out-Null
         }
     }
     Start-Process -FilePath $venvGui -ArgumentList @('app.py', '--prepare') -WorkingDirectory $PSScriptRoot
 } catch {
     [Windows.Forms.MessageBox]::Show($_.Exception.Message + "`nSetup logs are in $logFolder.",
-        'Personal Interview Assistant') | Out-Null
+        'OpenKeet (Legacy)') | Out-Null
     exit 1
 } finally {
     if ($progress) { $progress.Dispose() }

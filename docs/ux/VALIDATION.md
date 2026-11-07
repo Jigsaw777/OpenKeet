@@ -1,15 +1,15 @@
 # Native desktop UI validation
 
-Baseline B [overview](../../benchmarks/output/baseline-3.0/ui/first-run.png) used a large welcome panel. The [new dark overview](../../target/ui-smoke/first-run.png) puts sample start, audio setup, and capture status in the initial viewport. [Light overview](../../target/ui-smoke/overview-light.png) uses a light canvas and light navigation rail.
+Baseline B used a large welcome panel. The current dark overview puts sample start, audio setup, and capture status in the initial viewport. The light overview uses a light canvas and light navigation rail. See the [screenshot gallery](../community/screenshots.md). The remaining images are local outputs from the [native smoke test](../desktop-slice.md#build-and-test) under `target/ui-smoke/`.
 
 | Screen | Checked behavior | Screenshot |
 | --- | --- | --- |
-| Overview | Keyboard skip link, primary session action, dark/light/system switching, visible status | [Dark overview](../../target/ui-smoke/first-run.png) |
-| Live workspace | Checked follow-up, copy, manual and full transcript actions, separate reading regions. Rust tests cover superseded state. | [Split](../../target/ui-smoke/live-long-question.png), [answer view](../../target/ui-smoke/answer-view.png) |
-| Focus | 380 × 480 CSS px, keyboard scroll, visible Copy, pin/unpin and return to workspace | [Focus](../../target/ui-smoke/focus.png) |
-| Audio setup | Endpoint list, permission, verified model path, missing-model recovery, manual-answer default, pause/resume | [Audio setup](../../target/ui-smoke/audio-setup.png) |
-| Saved sessions | Save, transcript search, notes reopen, export controls and confirmed deletion | [Saved sessions](../../target/ui-smoke/saved-sessions.png) |
-| Providers | Browser sign-in entry points, masked Claude key field, installed model picker and selected route. Live fixture answers render lists and code and preserve raw text for follow-up context. | [Providers](../../target/ui-smoke/providers.png) |
+| Overview | Keyboard skip link, primary session action, dark/light/system switching, visible status | `first-run.png`, `overview-light.png` |
+| Live workspace | Checked follow-up, copy, manual and full transcript actions, separate reading regions. Rust tests cover superseded state. | `live-long-question.png`, `answer-view.png` |
+| Focus | 380 × 480 CSS px, keyboard scroll, visible Copy, pin/unpin and return to workspace | `focus.png` |
+| Audio setup | Endpoint list, permission, verified model path, missing-model recovery, manual-answer default, pause/resume | `audio-setup.png` |
+| Saved sessions | Save, transcript search, notes reopen, export controls and confirmed deletion | `saved-sessions.png` |
+| Providers | Browser sign-in entry points, masked Claude key field, installed model picker and selected route. Live fixture answers render lists and code and preserve raw text for follow-up context. | `providers.png` |
 
 At the observed desktop window size the answer expanded from 510 to 878 CSS px. The native viewport stayed the same and the full-screen element remained unset. The compact answer received 273 of 480 CSS px with the controls visible. Earlier B measured 501 to 863 CSS px and 273 of 480 CSS px in focus.
 
@@ -19,7 +19,7 @@ Typography and spacing specifications are in [design system](DESIGN_SYSTEM.md). 
 
 ## Public interface review
 
-| Reference | Public UI observed | Personal Copilot scope |
+| Reference | Public UI observed | OpenKeet scope |
 | --- | --- | --- |
 | Natively | The dashboard separates session start and history. Its guide describes provider settings, a compact overlay and optional automatic answers. [Dashboard and demo](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/blob/7fb88cf56f1e1317075776228615a1f79e8b3c0a/README.md) | The matte workspace separates providers, live capture and history. A native Focus window leaves most of its viewport to the answer. Context library and visual system-design answers remain open. |
 | Cluely | A thin listening toolbar sits above a larger answer card. The card can reveal transcript and offers manual answers and suggested questions. [Live Insights guide](https://docs.cluely.com/feature/liveinsights) | **Get answer** acts on the detected question, and **Answer view** toggles the transcript and widens reading. Contextual action chips remain open. |

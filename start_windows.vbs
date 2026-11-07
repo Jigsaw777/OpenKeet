@@ -9,7 +9,7 @@ command = "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Fi
 On Error Resume Next
 shell.Run command, 0, False
 If Err.Number <> 0 Then
-    WScript.Echo "Personal Interview Assistant could not start. Keep the project files together and try again."
+    WScript.Echo "OpenKeet (Legacy) could not start. Keep the project files together and try again."
 End If
 
 Function Quote(value)

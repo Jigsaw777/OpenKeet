@@ -6,11 +6,10 @@ import { activity, sourceLabel } from "./protocol";
 
 export type Command = (name: string, args?: Record<string, unknown>) => Promise<boolean>;
 
+const markUrl = new URL("../src-tauri/icons/icon.png", import.meta.url).href;
+
 export function Mark({ size = 35 }: { size?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 36 36" fill="none" aria-hidden="true">
-    <rect x="1" y="1" width="34" height="34" rx="10" fill="currentColor" opacity=".12" />
-    <path d="M7.5 18h5.3l2.4-6.8 4 13.5 3.4-9.2 2.1 2.5h3.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>;
+  return <img src={markUrl} width={size} height={size} alt="" />;
 }
 
 export function Icon({ name }: { name: "home" | "wave" | "settings" | "focus" | "arrow" | "sun" | "lock" | "clock" | "plug" }) {

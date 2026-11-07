@@ -1,4 +1,4 @@
-# Personal Copilot 3.0 performance comparison
+# OpenKeet 3.0 performance comparison
 
 See the [generated A/B/C table](../../benchmarks/results/comparison.md) and [CSV](../../benchmarks/results/comparison.csv). The [benchmark instructions](../../benchmarks/README.md) reproduce the work. Windows 11 build 26200, Intel i5-1335U, Iris Xe, 15.72 GiB visible RAM, Balanced, CPU inference. All 25 WAVs match by SHA-256. They contain 21 spoken synthetic clips and four controls, 135.097 seconds total and 216 reference words.
 

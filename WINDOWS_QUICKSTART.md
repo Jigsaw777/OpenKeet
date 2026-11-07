@@ -1,18 +1,16 @@
-# Windows setup
+# Legacy Python setup on Windows
 
-Use the standalone app in this folder for system-audio transcription and automatic Claude answers. The optional GitHub text bridge is not needed for this flow.
+For the current desktop preview, follow [Get started with OpenKeet](docs/getting-started.md). This guide covers the older Python prototype.
 
 ## 1. Open the app
 
-Open **Personal Interview Assistant** on your desktop. On a new checkout, open `start_windows.vbs` in the project folder once to create that shortcut.
+Open **OpenKeet (Legacy)** on your desktop. On a new checkout, open `start_windows.vbs` in the project folder once to create that shortcut.
 
 The first launch creates `.venv` and installs the app dependencies. It uses an existing 64-bit Python 3.11 or 3.12 with Tk, or tries to install Python 3.12 through WinGet. It also tries to install native Claude Code if it is missing. Downloads need an internet connection. Later launches reuse the local environment.
 
-## 2. Connect Claude
+## 2. Choose an answer model
 
-If the app asks you to sign in, click **Sign in to Claude**. Complete the official subscription sign-in in your browser. Keep the sign-in window open in case Claude asks you to paste a code there. The app checks the connection when sign-in finishes.
-
-Claude starts with **sonnet**. Type a question and click **Suggest answer**. You can add résumé, job description, and preference text in **Your context**.
+Follow the [legacy model setup](docs/legacy-python.md#practice-with-a-question) and try a typed question with **Suggest answer**.
 
 ## 3. Listen to the other participant through system audio
 

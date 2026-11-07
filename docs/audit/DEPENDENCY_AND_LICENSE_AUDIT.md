@@ -1,6 +1,6 @@
 # Dependency and license audit
 
-Personal Copilot declares MIT in [LICENSE](../../LICENSE) and [Cargo.toml](../../Cargo.toml). The benchmark archives and user files are local. [Release readiness](../release-readiness.md) records the distribution and signing gates.
+OpenKeet declares MIT in [LICENSE](../../LICENSE) and [Cargo.toml](../../Cargo.toml). The benchmark archives and user files are local. [Release readiness](../release-readiness.md) records the distribution and signing gates.
 
 | Scope | Evidence | Review disposition |
 | --- | --- | --- |
@@ -11,4 +11,6 @@ Personal Copilot declares MIT in [LICENSE](../../LICENSE) and [Cargo.toml](../..
 | Local library | [Rust manifest](../../apps/desktop/src-tauri/Cargo.toml), [rusqlite](https://docs.rs/rusqlite/0.41.1/rusqlite/), [SQLite terms](https://www.sqlite.org/copyright.html) | rusqlite and libsqlite3-sys declare MIT. Bundled SQLite is public-domain code. Include the wrapper's notice in a distributable license set. |
 | Natively | [License](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/blob/7fb88cf56f1e1317075776228615a1f79e8b3c0a/LICENSE), [reference revision](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/blob/7fb88cf56f1e1317075776228615a1f79e8b3c0a/README.md) | Personal Use Source License v1.0. Read for feature research. No code, prompts, branding, assets, provider identities, or license text are included in this product. |
 
-Live model/API credentials and user transcripts must stay outside Git. Rust starts local-only. Before shipping, verify a secret scan, Rust and npm vulnerability audits, a complete transitive notice list, and installer provenance. The separately maintained Python capture-exclusion code is outside the Rust installer and requires its own privacy review before any distribution.
+The OpenKeet wordmark and app mark use the maintainer-supplied PNG. The public release review must record its redistribution terms. The screenshot gallery uses the app's synthetic rehearsal and test history. Review any material added to future media the same way.
+
+Live model/API credentials and user transcripts must stay outside Git. The Rust desktop preview starts with answers off. Before shipping, verify a secret scan, Rust and npm vulnerability audits, a complete transitive notice list, and installer provenance. The separately maintained Python capture-exclusion code is outside the Rust installer and requires its own privacy review before any distribution.

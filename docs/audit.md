@@ -1,4 +1,4 @@
-# Personal Copilot 2.0 architecture audit
+# Legacy OpenKeet architecture audit (2.0)
 
 Baseline checkout `69616f4` on `main`, 6 November 2026. The product is a Python 3.12/Tkinter desktop app. Its launcher, provider choices, profiles, and full-transcript workflow are the compatibility baseline during migration. There was no existing repository graph or tracked test suite at this revision. Earlier tests are visible in `1b30f47` and were removed in `18d0edb`.
 
@@ -14,7 +14,7 @@ Baseline checkout `69616f4` on `main`, 6 November 2026. The product is a Python 
 | P1 | [`providers.py:104–134`](../providers.py#L104) invokes subscription-backed CLI processes. [`providers.py:214–222`](../providers.py#L214) launches Claude login. [`start_windows.ps1`](../start_windows.ps1) can install separate tools. | Keep the adapters in the legacy app during migration. The new product needs independently approved provider routes and a self-contained installer. |
 | P2 | [`core.py:76–133`](../core.py#L76) reads local profiles and text/DOCX/PDF files. [`core.py:227`](../core.py#L227) uses a fixed Ollama loopback URL. | Preserve profile import and fail closed on invalid formats. Reassess decompression limits, prompt-data separation, and redirects before reusing imports/providers. |
 
-[`VALIDATION.md`](../VALIDATION.md#L18) reports 1/68 word errors for `small.en` and 7/68 for `base.en` and `tiny.en` on five synthetic questions. Windows launch and one Realtek route had controlled checks. The exact audio and runnable old benchmark were unavailable in the checkout. Production accent, device diversity, long sessions, and meeting codec effects remain open.
+[`VALIDATION.md`](../VALIDATION.md#november-5-update) reports 1/68 word errors for `small.en` and 7/68 for `base.en` and `tiny.en` on five synthetic questions. Windows launch and one Realtek route had controlled checks. The exact audio and runnable old benchmark were unavailable in the checkout. Production accent, device diversity, long sessions, and meeting codec effects remain open.
 
 ## File-by-file migration map
 

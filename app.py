@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Personal Interview Assistant for local transcription and text answers."""
+"""Legacy OpenKeet prototype for local transcription and text answers."""
 from __future__ import annotations
 
 import importlib.util
@@ -16,7 +16,7 @@ from core import (CONTEXT_LIMIT, MODEL_CHOICES, MODELS, MODES, PRESETS, PROVIDER
                   read_document, save_profile)
 
 
-APP_NAME = "Personal Interview Assistant"
+APP_NAME = "OpenKeet (Legacy)"
 
 
 def diagnostics():

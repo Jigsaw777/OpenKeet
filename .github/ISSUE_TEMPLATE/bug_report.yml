@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a problem you can reproduce in OpenKeet
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Use synthetic interview text. Keep API keys, passwords, personal transcripts, and sensitive documents out of reports, logs, and screenshots.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What went wrong?
+      description: Describe the problem and how it affects your session.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open OpenKeet…"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and OpenKeet version
+      description: Include the Windows version, architecture, and OpenKeet version or Git commit.
+    validations:
+      required: true
+  - type: input
+    id: models
+    attributes:
+      label: Audio source, speech model, and answer provider
+      description: Include only the details that apply. Keep account names and keys private.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted logs or screenshots
+      description: Include the first relevant error or a screenshot using synthetic data.

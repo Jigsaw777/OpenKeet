@@ -1,4 +1,4 @@
-# Reproduce the Personal Copilot 3.0 ASR comparison
+# Reproduce the OpenKeet 3.0 speech comparison
 
 Run these on Windows with the same synthetic WAVs and the legacy Python environment. The setup in [audio benchmarks](../docs/benchmarks/audio.md) covers the model and Python dependencies. [Baseline provenance](../docs/audit/PERFORMANCE_BASELINE.md) identifies the source and hardware. Exact archive A was unavailable and the table uses the unchanged Git-era Python ASR.
 

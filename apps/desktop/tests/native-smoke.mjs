@@ -153,7 +153,7 @@ try {
   console.log(`Answer view widened the reading area from ${Math.round(split.width)} to ${Math.round(expanded.width)} CSS px.`);
   await page.screenshot({ path: join(output, "answer-view.png"), animations: "disabled" });
   await page.getByRole("button", { name: "Show transcript", exact: true }).click();
-  await page.screenshot({ path: join(output, "live-long-question.png"), animations: "disabled" });
+  await page.locator(".live-grid").screenshot({ path: join(output, "live-long-question.png"), animations: "disabled" });
   await page.getByRole("button", { name: "Use full transcript" }).click();
   await page.waitForFunction(() => document.querySelector("#manual-question")?.value.includes("without blocking the coroutine thread"));
   assert.match(await page.getByRole("textbox", { name: "Question", exact: true }).inputValue(), /shared state\nwithout blocking the coroutine thread/);
@@ -210,17 +210,17 @@ try {
     await checkWindow("Visible");
   }
 
-  await page.getByLabel("Session title").fill("SQL practice smoke");
+  await page.getByLabel("Session title").fill("Kotlin concurrency practice");
   await page.getByRole("button", { name: "Save to history" }).click();
   await page.getByRole("heading", { name: "Saved sessions", exact: true }).waitFor();
   await page.getByRole("searchbox", { name: "Search saved sessions" }).fill("coroutine");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  await page.getByRole("button", { name: /^SQL practice smoke/ }).click();
+  await page.getByRole("button", { name: /^Kotlin concurrency practice/ }).click();
   await page.getByRole("region", { name: "Saved transcript" }).getByText(/without blocking the coroutine thread/).waitFor();
   await page.getByLabel("Session notes").fill("Review coroutine cancellation.");
   await page.getByRole("button", { name: "Save notes" }).click();
   await page.getByRole("status").filter({ hasText: "Notes saved." }).waitFor();
-  await page.getByRole("button", { name: /^SQL practice smoke/ }).click();
+  await page.getByRole("button", { name: /^Kotlin concurrency practice/ }).click();
   await page.waitForFunction(() => {
     const notes = document.querySelector("#saved-notes");
     return !notes?.disabled && notes?.value === "Review coroutine cancellation.";
