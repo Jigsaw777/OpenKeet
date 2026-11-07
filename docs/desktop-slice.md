@@ -1,17 +1,17 @@
-# Personal Copilot 3.0 Windows preview
+# OpenKeet Windows desktop app
 
-## Run the preview
+## Run the app
 
-1. Open **Providers**. Select **Continue with ChatGPT** for browser sign-in, **Open Claude Console** to get and save an Anthropic API key, or **Find installed models** under **Ollama** when the local service is running. Pick a model, confirm the data route for cloud providers, and choose **Use**. **Run sample session** is also available as an offline rehearsal with bundled answers.
-2. In **Audio setup**, choose an output or microphone, select a verified speech model, confirm capture permission, and select **Start local capture**. Confirm the meter and transcript. Use **Get answer** on a detected question or enter your own. Automatic requests are an explicit option in Audio Setup.
-3. Use **Pause**, **Resume**, or **Stop** to control capture. **Retry same source** resumes a recoverable device failure in the current session. **Use full transcript** puts finalized text in the question field. **Answer view** uses the workspace width for the current answer. **Focus window** is a pinnable companion window with a scrollable answer, an expandable question, and a fixed copy button.
-4. After stopping, choose **Save to history** to retain the available final transcript and checked answers in SQLite. Find it under **Saved sessions** to add notes, export it, or delete it. **Clear current session** clears the workspace.
+1. On the start screen, pick what to **Listen to** (the speakers or headphones your call plays through) and get the **Speech model** (**Download** or **Choose file**). Optionally choose **Connect answers**: **Continue with ChatGPT** for browser sign-in, a Claude Console API key, or a local Ollama model, then **Use**. **Try a sample** plays an offline rehearsal with bundled answers.
+2. **Start listening** opens a see-through answer window that stays on top of the call, with an **Opacity** slider. Its status line shows each step: Listening, Hearing speech, Question heard, Writing answer, Answer ready. Answers start automatically when **Answer detected questions automatically** is on; otherwise use **Get answer**. **Answer what they said** answers the latest lines when no question was detected.
+3. Use **Pause**, **Resume**, or **Stop** to control capture. **Retry same source** resumes a recoverable device failure in the current session. **Main window** shows the transcript, the full answer and **Ask a question**.
+4. After stopping, choose **Save to history** to retain the available final transcript and checked answers in SQLite. Find it under **History** to add notes, export it, or delete it. **Clear current session** clears the workspace.
 
-**Hide window** leaves the workspace running. **Ctrl+Shift+I** or **Show Personal Copilot** in the Windows tray restores it. The tray also offers **Quit**. If Windows rejects the shortcut registration, the sidebar shows the tray fallback.
+**Hide** hides the window and pauses listening. **Ctrl+Alt+I** or **Show OpenKeet** in the Windows tray brings it back; press **Resume** to keep listening. The tray also offers **Quit**. If Windows rejects the shortcut registration, the app shows the tray fallback.
 
 Whisper decodes audio locally in memory. The selected answer provider receives the current question and linked question/answer context when you request a response. Choosing **Transcription only** disconnects the active route. [Provider authorization and account setup](audit/PROVIDER_AUTHORIZATION.md)
 
-**Short follow-up mode** in Audio Setup enables a faster decoder for very short utterances. This is optional. The measured synthetic pack still had errors on short prompts such as “Why?”. [Short speech results](benchmarks/interview-stress.md#short-follow-up-mode)
+**Short follow-up mode** in Settings → Audio and display enables a faster decoder for very short utterances. This is optional. The measured synthetic pack still had errors on short prompts such as “Why?”. [Short speech results](benchmarks/interview-stress.md#short-follow-up-mode)
 
 ## Build and test
 
@@ -25,11 +25,11 @@ npm ci
 npm test
 npm run desktop -- build --ci -- --locked
 npm run test:native
-# Verify the built installer when Personal Copilot is not already installed.
+# Verify the built installer when OpenKeet is not already installed.
 powershell -NoProfile -File tests/installer-smoke.ps1
 ```
 
-The desktop executable is `target/release/personal-copilot-desktop.exe`. The unsigned NSIS installer is generated under `target/release/bundle/nsis/`. The binaries use Windows WebView2 and native inference. The native smoke script runs a separate app process, tests the actual WebView2 controls and Rust IPC, and writes screenshots to `target/ui-smoke/`.
+The desktop executable is `target/release/OpenKeet.exe`. The unsigned NSIS installer is generated under `target/release/bundle/nsis/`. The binaries use Windows WebView2 and native inference. The native smoke script runs a separate app process, tests the actual WebView2 controls and Rust IPC, and writes screenshots to `target/ui-smoke/`.
 
 The repository has a manually dispatched GitHub Actions workflow for portable core tests, Windows build and packaging, and dependency advisories. Physical audio and WebView2 screenshot checks run on a Windows desktop with known test inputs.
 

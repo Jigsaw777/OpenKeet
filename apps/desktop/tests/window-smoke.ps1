@@ -73,7 +73,7 @@ public static class CopilotWindowProbe {
             var title = new StringBuilder(256);
             GetWindowText(hwnd, title, title.Capacity);
             var value = title.ToString();
-            if (focus ? value.StartsWith("Personal Copilot") && value.EndsWith("Focus") : value == "Personal Copilot") {
+            if (focus ? value.StartsWith("OpenKeet") && value.EndsWith("Focus") : value == "OpenKeet") {
                 match = hwnd;
                 return false;
             }

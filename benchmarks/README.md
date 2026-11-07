@@ -12,6 +12,6 @@ For the short-speech comparison, run `benchmarks/asr.py --output benchmarks/outp
 
 Keep foreground activity low. Model load is process-cold and file-cache state is uncontrolled. Archive A and B should use the same Windows hardware as C. The Python profiler bypasses the venv launcher when collecting counters.
 
-For the separate desktop probe, retain the B desktop executable and run `powershell -NoProfile -File benchmarks/desktop-startup.ps1 -Before <baseline-desktop-exe> -After target/release/personal-copilot-desktop.exe`. It launches and closes isolated app instances and writes per-run window and process-tree measurements.
+For the separate desktop probe, retain the B desktop executable and run `powershell -NoProfile -File benchmarks/desktop-startup.ps1 -Before <baseline-desktop-exe> -After target/release/OpenKeet.exe`. It launches and closes isolated app instances and writes per-run window and process-tree measurements.
 
 Do not commit private audio. The checked-in data is generated from the repository's synthetic scripts and Windows voices. Tests and profile commands need no paid credentials.

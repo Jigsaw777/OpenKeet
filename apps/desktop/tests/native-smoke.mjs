@@ -9,7 +9,7 @@ import { setTimeout as wait } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
-const executable = process.env.COPILOT_DESKTOP_EXE || fileURLToPath(new URL("../../../target/release/personal-copilot-desktop.exe", import.meta.url));
+const executable = process.env.COPILOT_DESKTOP_EXE || fileURLToPath(new URL("../../../target/release/OpenKeet.exe", import.meta.url));
 const output = fileURLToPath(new URL("../../../target/ui-smoke/", import.meta.url));
 await mkdir(output, { recursive: true });
 const profile = await mkdtemp(join(output, "webview-"));

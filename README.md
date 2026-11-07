@@ -1,12 +1,14 @@
-# Personal Interview Assistant
+# OpenKeet
 
-## Personal Copilot 3.0 Windows preview
+## OpenKeet for Windows
 
-The Rust preview runs on Windows 11 x64. In **Providers**, connect ChatGPT, Claude Console, or local Ollama and choose a model. **Run sample session** plays an offline practice example. In **Audio setup**, choose one Windows source and a verified local Whisper model, then confirm capture permission. Automatic answers are off for live capture until you enable them.
+OpenKeet runs on Windows 11 x64. It transcribes the other person's audio on your PC, spots their questions, and shows suggested answers in a see-through window on top of your call.
 
-Use **Ctrl+Shift+I** or the Personal Copilot tray icon to show the workspace. **Answer view** expands the answer inside the workspace. **Focus window** opens a resizable reading panel.
+The start screen has three steps: what to **Listen to**, the local **Speech model**, and optional **Answers** from ChatGPT, Claude Console, or local Ollama. **Start listening** opens the see-through answer window; **Try a sample** plays an offline practice example. Install with `target/release/bundle/nsis/OpenKeet_0.1.1_x64-setup.exe`.
 
-Stop a session before saving its retained transcript and checked answers to the local SQLite library. **Saved sessions** supports transcript search, notes, Markdown/JSON/TXT export, and deletion.
+Use **Ctrl+Alt+I** or the OpenKeet tray icon to bring a hidden window back. Hiding pauses listening.
+
+Stop a session before saving its retained transcript and checked answers to the local SQLite library. **History** supports transcript search, notes, Markdown/JSON/TXT export, and deletion.
 
 See the [build and test guide](docs/desktop-slice.md), [provider authorization audit](docs/audit/PROVIDER_AUTHORIZATION.md), [3.0 validation report](docs/validation/DESKTOP_3_0.md), [paired performance comparison](docs/performance/PERFORMANCE_COMPARISON.md), and [feature parity matrix](docs/audit/FEATURE_PARITY_MATRIX.md).
 

@@ -110,7 +110,7 @@ async fn open_focus(app: AppHandle) -> Result<(), String> {
     if app.get_webview_window("focus").is_none() {
         let window =
             WebviewWindowBuilder::new(&app, "focus", WebviewUrl::App("index.html?focus=1".into()))
-                .title("Personal Copilot · Focus")
+                .title("OpenKeet · Focus")
                 .theme(Some(tauri::Theme::Dark))
                 .inner_size(420.0, 510.0)
                 .min_inner_size(340.0, 420.0)
@@ -161,7 +161,7 @@ fn restore_last_surface(app: &AppHandle) {
 fn show_surface(app: &AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
-        .ok_or("Could not find this Personal Copilot window.")?;
+        .ok_or("Could not find this OpenKeet window.")?;
     reveal(&window)?;
     let overlay = label == "focus";
     if let Some(other) = app.get_webview_window(if overlay { "main" } else { "focus" }) {
@@ -182,11 +182,11 @@ fn reveal(window: &WebviewWindow) -> Result<(), String> {
 }
 
 fn install_tray(app: &tauri::App) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Show Personal Copilot", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Personal Copilot", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show OpenKeet", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit OpenKeet", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
     let mut tray = TrayIconBuilder::with_id("copilot")
-        .tooltip("Personal Copilot")
+        .tooltip("OpenKeet")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -325,5 +325,5 @@ fn main() {
             show_workspace
         ])
         .run(tauri::generate_context!())
-        .expect("run Personal Copilot desktop");
+        .expect("run OpenKeet desktop");
 }

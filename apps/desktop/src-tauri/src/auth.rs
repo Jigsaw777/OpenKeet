@@ -223,7 +223,7 @@ pub async fn sign_in(
             ("code_challenge", &challenge),
         ]);
         if known_client.is_none() {
-            query.append_pair("agent_name_hint", "Personal Copilot");
+            query.append_pair("agent_name_hint", "OpenKeet");
         }
     }
     open_browser(url.as_str())?;
@@ -366,15 +366,15 @@ async fn receive_callback(
         let (status, body) = match &parsed {
             Ok(Some(_)) => (
                 "200 OK",
-                "Authorization response received. Return to Personal Copilot.",
+                "Authorization response received. Return to OpenKeet.",
             ),
             Ok(None) => (
                 "400 Bad Request",
-                "This is not the current Personal Copilot sign-in request.",
+                "This is not the current OpenKeet sign-in request.",
             ),
             Err(_) => (
                 "400 Bad Request",
-                "Sign-in did not complete. Return to Personal Copilot.",
+                "Sign-in did not complete. Return to OpenKeet.",
             ),
         };
         let reply = format!(

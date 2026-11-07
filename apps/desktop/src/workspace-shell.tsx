@@ -16,7 +16,7 @@ export function AppShell({ page, navigate, shortcut, status, hideWindow, childre
   return <div className="app-shell">
     <a className="skip" href="#main-content">Skip to content</a>
     <header className="app-header">
-      <div className="brand"><Mark size={32} /><strong>Personal Copilot</strong></div>
+      <div className="brand"><Mark size={32} /><strong>OpenKeet</strong></div>
       <nav aria-label="Workspace">
         <button aria-current={page === "session" ? "page" : undefined} onClick={() => navigate("session")}>Session</button>
         <button aria-current={settings ? "page" : undefined} onClick={() => navigate("providers")}>Settings</button>

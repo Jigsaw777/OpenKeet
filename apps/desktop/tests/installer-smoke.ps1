@@ -5,13 +5,13 @@ param(
 $ErrorActionPreference = 'Stop'
 if (!$Installer) {
     $version = (Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '../src-tauri/tauri.conf.json') | ConvertFrom-Json).version
-    $Installer = Join-Path $PSScriptRoot "../../../target/release/bundle/nsis/Personal Copilot_${version}_x64-setup.exe"
+    $Installer = Join-Path $PSScriptRoot "../../../target/release/bundle/nsis/OpenKeet_${version}_x64-setup.exe"
 }
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $existing = Get-ChildItem $uninstallKey -ErrorAction SilentlyContinue |
     ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue } |
-    Where-Object { $_.DisplayName -eq 'Personal Copilot' }
-if ($existing) { throw 'Personal Copilot is already installed. Run the portable native smoke test instead.' }
+    Where-Object { $_.DisplayName -eq 'OpenKeet' }
+if ($existing) { throw 'OpenKeet is already installed. Run the portable native smoke test instead.' }
 
 $installerPath = (Resolve-Path -LiteralPath $Installer).Path
 $target = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../../target')).Path
@@ -22,7 +22,7 @@ if (![IO.Path]::GetFullPath($installDir).StartsWith($target + [IO.Path]::Directo
 $installed = Start-Process -FilePath $installerPath -ArgumentList @('/S', '/NS', "/D=$installDir") -WindowStyle Hidden -Wait -PassThru
 if ($installed.ExitCode -ne 0) { throw "Installer exited with $($installed.ExitCode)." }
 
-$application = Join-Path $installDir 'personal-copilot-desktop.exe'
+$application = Join-Path $installDir 'OpenKeet.exe'
 $uninstaller = (Resolve-Path -LiteralPath (Join-Path $installDir 'uninstall.exe')).Path
 if (![IO.Path]::GetDirectoryName($uninstaller).Equals($installDir, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Unexpected uninstaller path.'

@@ -1,4 +1,4 @@
-# Personal Copilot desktop wireframes
+# OpenKeet desktop wireframes
 
 Use matte charcoal with near-black navigation, gray borders, and a muted steel accent for active states. Dark is the default. The optional light palette uses neutral grays. Instrument labels and times use tabular numerals. Use reusable controls with visible focus rings, normal desktop windows, and explicit source and locality labels. A distinct timeline presents speech and answer revisions without moving the question box on every partial.
 
@@ -8,7 +8,7 @@ Product references inform separate setup and live work, a compact session view, 
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
-│ ◈ Personal Copilot                          Local mode   Settings │
+│ ◈ OpenKeet                                  Local mode   Settings │
 ├──────────────┬───────────────────────────────────────────────────┤
 │ Practice     │ YOUR PRACTICE SPACE                               │
 │ Library      │ Start with a rehearsal                            │
