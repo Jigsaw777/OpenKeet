@@ -31,6 +31,23 @@ The current desktop engine used Rust, WebRTC VAD, and whisper.cpp `small.en` on 
 - The NVIDIA candidate was exact on 52 speech clips and got seven of eight one-word prompts. Its technical-term recall was 61/104, versus 64/104 for Rust, and its telephone-band WER was worse. Keep the measured live default while testing the candidate with streaming and real microphones. On this run the candidate took 84.27 seconds to decode 537.23 seconds of files after a 2.16-second load.
 - Cluely and ParakeetAI are separate commercial services. ParakeetAI documents using Speechmatics for interview transcription. The NVIDIA model result establishes neither product's accuracy. A parity claim requires those products to run the same corpus under comparable settings. [ParakeetAI privacy policy](https://www.parakeet-ai.com/privacy-policy), [Cluely Live Insights](https://docs.cluely.com/feature/liveinsights)
 
+## Short follow-up mode
+
+The 60-clip follow-up pack pairs 48 new fast clips from eight Windows voices with eight original “Why?” clips and the four stress controls. All variants used the same PCM hashes and pinned `small.en` model. **Short follow-up mode** runs one greedy decode for finals whose buffered PCM is at most 1.25 seconds. Longer finals use the original beam search. The option is off at session setup.
+
+| Metric | Standard beam | Short follow-up mode | Rejected second pass with hints |
+| --- | ---: | ---: | ---: |
+| Word errors and WER | 55/88 · 62.50% | 47/88 · 53.41% | 310/88 · 352.27% |
+| Character errors | 162/312 | 140/312 | 1,386/312 |
+| Final p95, 56 spoken clips | 2.946 s | 2.547 s | 15.286 s |
+| Reported decode time | 93.586 s | 78.740 s | 367.480 s |
+| Empty speech results | 0/56 | 0/56 | 0/56 |
+| False transcripts on controls | 1/4 | 1/4 | 1/4 |
+
+“And then?” improved from 13/16 to 7/16 word errors. “Why?” remained at 7/8 errors. “What changed?” and “Which one?” had equal total errors with different individual failures. These are single-process synthetic runs on the same PC with background build activity. Human short speech and codec performance need separate validation. [Per-clip results and fixture hashes](../../benchmarks/results/short-followups.json)
+
+The initial hinted second pass on short or quiet speech scored 166/960 word errors on all 116 stress clips, versus 173/960 for the standard decoder. Character errors rose from 354 to 367 and final p95 rose from 2.678 s to 6.017 s. The second pass repeated phrases in the varied short pack. Insertions count toward WER, which can exceed 100%. The shipped short mode uses a single pass with no added prompt.
+
 ## Python versus Rust performance and memory
 
 Both shipped engines replayed the same 25 clips on the same PC in separate processes. The subset includes three voices, 21 speech clips, four controls, 135.10 seconds, and 216 reference words. The Python baseline was the Tkinter-era `SpeechListener` with faster-whisper 1.2.1, CTranslate2 4.8.5, and CPU/int8 `small.en`. The Rust CLI ran the current desktop ASR path with whisper.cpp `small.en`, CPU, and WebRTC VAD. The Windows memory counters cover each engine process and its model load. The desktop GUI processes are outside this measurement. [Windows memory counters](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex), [Windows process time](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes)

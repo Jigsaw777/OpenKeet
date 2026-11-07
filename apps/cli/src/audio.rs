@@ -13,7 +13,7 @@ type Result = std::result::Result<(), Box<dyn Error>>;
 
 pub fn help() {
     println!(
-        "       copilot devices\n       copilot transcribe MODEL [--vocabulary WORDS] WAV...\n       copilot capture MODEL system|mic default|ENDPOINT_ID SECONDS"
+        "       copilot devices\n       copilot transcribe MODEL [--vocabulary WORDS] [--short-followups] WAV...\n       copilot capture MODEL system|mic default|ENDPOINT_ID SECONDS"
     );
 }
 
@@ -33,10 +33,17 @@ fn transcribe(path: &str, args: &[String]) -> Result {
         [flag, vocabulary, clips @ ..] if flag == "--vocabulary" => (vocabulary.as_str(), clips),
         _ => ("", args),
     };
+    let (short_followups, clips) = match clips {
+        [flag, clips @ ..] if flag == "--short-followups" => (true, clips),
+        _ => (false, clips),
+    };
     if clips.is_empty() {
         return Err("Provide at least one mono 16 kHz PCM WAV.".into());
     }
     let mut model = model(path, vocabulary)?;
+    if short_followups {
+        model.enable_short_followups();
+    }
     for (index, clip) in clips.iter().enumerate() {
         emit(json!({"event":"clip_start","index":index}));
         copilot_audio::recognize_wav(&mut model, Path::new(clip), |event| {

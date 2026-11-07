@@ -5,7 +5,7 @@ use whisper_rs::{
     FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
 };
 
-use crate::{AudioError, SpeechRecognizer};
+use crate::{AudioError, SAMPLE_RATE, SpeechRecognizer};
 
 #[derive(Clone, Copy)]
 pub struct Model {
@@ -31,6 +31,7 @@ pub struct LocalWhisper {
     state: WhisperState,
     threads: i32,
     vocabulary: String,
+    short_followups: bool,
 }
 
 impl LocalWhisper {
@@ -77,7 +78,12 @@ impl LocalWhisper {
             state,
             threads,
             vocabulary: vocabulary.to_owned(),
+            short_followups: false,
         })
+    }
+
+    pub fn enable_short_followups(&mut self) {
+        self.short_followups = true;
     }
 }
 
@@ -94,7 +100,8 @@ impl SpeechRecognizer for LocalWhisper {
             .iter()
             .map(|sample| f32::from(*sample) * gain / 32_768.0)
             .collect();
-        let strategy = if final_result {
+        let short_followup = self.short_followups && samples.len() <= SAMPLE_RATE as usize * 5 / 4;
+        let strategy = if final_result && !short_followup {
             SamplingStrategy::BeamSearch {
                 beam_size: 3,
                 patience: -1.0,

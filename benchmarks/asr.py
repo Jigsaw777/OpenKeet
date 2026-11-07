@@ -85,13 +85,13 @@ def control_audio(control, rng):
     return samples
 
 
-def generate(output, *, stress=False):
+def generate(output, *, stress=False, corpus=None):
     output.mkdir(parents=True, exist_ok=True)
     jobs, entries = [], []
     rng = np.random.default_rng(20261106)
     voices = STRESS_VOICES if stress else VOICES
-    corpus = "stress-corpus.json" if stress else "corpus.json"
-    for fixture in read_json(ROOT / corpus):
+    default_corpus = ROOT / ("stress-corpus.json" if stress else "corpus.json")
+    for fixture in read_json(corpus or default_corpus):
         for voice_index, voice in enumerate(voices if fixture["parts"] else (None,)):
             name = f'{fixture["id"]}-{voice_index}' if voice else fixture["id"]
             parts = [f"{name}-part{index}.wav" for index in range(len(fixture["parts"]))]
@@ -287,7 +287,7 @@ def legacy(output, names):
         print(f"{name} {json.dumps(summary)}", flush=True)
 
 
-def rust(output, cli, model, vocabulary, *, profile=False):
+def rust(output, cli, model, vocabulary, *, profile=False, short_followups=False):
     manifest = read_json(output / "manifest.json")
     clips = [output / entry["file"] for entry in manifest]
     for entry, path in zip(manifest, clips):
@@ -298,6 +298,8 @@ def rust(output, cli, model, vocabulary, *, profile=False):
     command = [str(cli.resolve()), "transcribe", str(model.resolve())]
     if vocabulary:
         command.extend(["--vocabulary", vocabulary])
+    if short_followups:
+        command.append("--short-followups")
     command.extend(map(str, clips))
     timeout = sum(entry["duration_s"] for entry in manifest) * 4 + 180
     metrics = None
@@ -345,7 +347,7 @@ def rust(output, cli, model, vocabulary, *, profile=False):
         raise RuntimeError("Rust comparator did not finish every fixture in manifest order")
     summary = {**summarize(rows), "load_s": load_s, "wall_s_with_load": round(time.monotonic() - started, 3),
                "max_decode_queue_s": max(row["max_decode_queue_s"] for row in rows)}
-    label = f"rust-{model.stem}{'-hints' if vocabulary else ''}"
+    label = f"rust-{model.stem}{'-hints' if vocabulary else ''}{'-short-followups' if short_followups else ''}"
     report = {"backend": label, "vocabulary": vocabulary, "summary": summary, "clips": rows}
     if metrics:
         report["process"] = metrics
@@ -358,21 +360,24 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("generate").add_argument("--stress", action="store_true")
+    generator = commands.add_parser("generate")
+    generator.add_argument("--stress", action="store_true")
+    generator.add_argument("--corpus", type=Path)
     commands.add_parser("legacy").add_argument("--models", choices=SPEECH_MODELS, nargs="+", default=SPEECH_MODELS)
     candidate = commands.add_parser("rust")
     candidate.add_argument("--cli", type=Path, required=True)
     candidate.add_argument("--model", type=Path, required=True)
     candidate.add_argument("--vocabulary", default="")
+    candidate.add_argument("--short-followups", action="store_true")
     args = parser.parse_args()
     stress = getattr(args, "stress", False)
     output = (args.output or ROOT / "output" / ("stress" if stress else "")).resolve()
     if args.command == "generate":
-        generate(output, stress=stress)
+        generate(output, stress=stress, corpus=args.corpus)
     elif args.command == "legacy":
         legacy(output, args.models)
     else:
-        rust(output, args.cli, args.model, args.vocabulary)
+        rust(output, args.cli, args.model, args.vocabulary, short_followups=args.short_followups)
 
 
 if __name__ == "__main__":

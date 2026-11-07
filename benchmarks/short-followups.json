@@ -1,0 +1,8 @@
+[
+  {"id": "how-so", "condition": "followup", "parts": ["How so?"], "reference": "How so?", "speaking_rate": 4},
+  {"id": "what-changed", "condition": "followup", "parts": ["What changed?"], "reference": "What changed?", "speaking_rate": 4},
+  {"id": "which-one", "condition": "followup", "parts": ["Which one?"], "reference": "Which one?", "speaking_rate": 4},
+  {"id": "and-then", "condition": "followup", "parts": ["And then?"], "reference": "And then?", "speaking_rate": 4},
+  {"id": "yes", "condition": "acknowledgement", "parts": ["Yes."], "reference": "Yes.", "speaking_rate": 4},
+  {"id": "no", "condition": "acknowledgement", "parts": ["No."], "reference": "No.", "speaking_rate": 4}
+]
