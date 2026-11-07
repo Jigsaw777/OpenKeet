@@ -20,4 +20,4 @@
 - Accessibility feedback.
 - More local model choices where compatibility and redistribution terms are clear.
 
-See the [feature audit](audit/FEATURE_PARITY_MATRIX.md) for implementation gaps. Share your use case in [Discussions](https://github.com/Jigsaw777/Personal-Interview-Assistant/discussions).
+See the [feature audit](audit/FEATURE_PARITY_MATRIX.md) for implementation gaps. Share your use case in [Discussions](https://github.com/Jigsaw777/OpenKeet/discussions).

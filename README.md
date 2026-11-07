@@ -15,7 +15,7 @@ Interviews can be stressful. Preparing for them shouldn't be. OpenKeet helps you
 
 [Get started on Windows](docs/getting-started.md) · [See it in action](#see-it-in-action) · [Documentation](docs/README.md) · [Contribute](CONTRIBUTING.md)
 
-**Windows 11 x64 preview.** Build from source to try OpenKeet today. Prebuilt downloads will appear in [GitHub Releases](https://github.com/Jigsaw777/Personal-Interview-Assistant/releases) when packages are ready. [MIT source license](LICENSE)
+**Windows 11 x64 preview.** Build from source to try OpenKeet today. Prebuilt downloads will appear in [GitHub Releases](https://github.com/Jigsaw777/OpenKeet/releases) when packages are ready. [MIT source license](LICENSE)
 
 ## What you can practice
 
@@ -71,8 +71,8 @@ For real interviews or assessments, follow the interviewer's rules. Get permissi
 
 You don't have to write code to help. Share a confusing setup step, a question the app missed, or an accessibility issue. If OpenKeet helps you prepare, you can star the repo to find it again.
 
-- [Ask a question or share an idea](https://github.com/Jigsaw777/Personal-Interview-Assistant/discussions)
-- [Report a bug, request a feature, or flag a documentation gap](https://github.com/Jigsaw777/Personal-Interview-Assistant/issues/new/choose)
-- [Find beginner-friendly issues](https://github.com/Jigsaw777/Personal-Interview-Assistant/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+- [Ask a question or share an idea](https://github.com/Jigsaw777/OpenKeet/discussions)
+- [Report a bug, request a feature, or flag a documentation gap](https://github.com/Jigsaw777/OpenKeet/issues/new/choose)
+- [Find beginner-friendly issues](https://github.com/Jigsaw777/OpenKeet/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 - [Contribute code, testing, or docs](CONTRIBUTING.md)
 - [See what's next](docs/roadmap.md)

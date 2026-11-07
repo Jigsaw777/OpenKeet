@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Questions and community discussion
-    url: https://github.com/Jigsaw777/Personal-Interview-Assistant/discussions
+    url: https://github.com/Jigsaw777/OpenKeet/discussions
     about: Get help with setup, practice workflows, or choosing a model.
   - name: Security reporting
-    url: https://github.com/Jigsaw777/Personal-Interview-Assistant/security/policy
+    url: https://github.com/Jigsaw777/OpenKeet/security/policy
     about: Report suspected vulnerabilities privately.

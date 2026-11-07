@@ -7,10 +7,17 @@ You don't need to be an expert to contribute to OpenKeet. Helpful contributions 
 ## Find a starting point
 
 - Try the [first-run setup](docs/getting-started.md) or ask a practice question. Tell us where the instructions or keyboard navigation get confusing.
-- Look for [good first issues](https://github.com/Jigsaw777/Personal-Interview-Assistant/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). If the list is empty, check the [roadmap](docs/roadmap.md) for a small test or documentation gap.
-- Use a [GitHub issue form](https://github.com/Jigsaw777/Personal-Interview-Assistant/issues/new/choose) for a reproducible bug, a feature proposal, or a documentation correction. Start with the problem someone experiences.
+- Look for [good first issues](https://github.com/Jigsaw777/OpenKeet/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). If the list is empty, check the [roadmap](docs/roadmap.md) for a small test or documentation gap.
+- Use a [GitHub issue form](https://github.com/Jigsaw777/OpenKeet/issues/new/choose) for a reproducible bug, a feature proposal, or a documentation correction. Start with the problem someone experiences.
 
 ## Run and test locally
+
+Clone the [OpenKeet repository](https://github.com/Jigsaw777/OpenKeet) with an account that can access it. Use your own fork for a public contribution. Start new work from current `main`.
+
+```powershell
+git clone https://github.com/Jigsaw777/OpenKeet.git
+Set-Location OpenKeet
+```
 
 Install the [Windows desktop prerequisites](docs/desktop-slice.md#build-and-test), including Node.js 24 and the Rust/MSVC and libclang toolchain.
 
@@ -41,8 +48,8 @@ Install the [Windows desktop prerequisites](docs/desktop-slice.md#build-and-test
 
 ## Open a pull request
 
-1. Keep the change focused and follow the surrounding style. Format Rust with `cargo fmt`. Use task-focused language and actual button names in guides.
+1. Use a focused branch and open a PR to `main`. Follow the [branching strategy](docs/BRANCHING_STRATEGY.md) for naming, required checks, and release changes. Format Rust with `cargo fmt` and use actual button names in guides.
 2. Include the user impact, related issue, commands run, and any changes to data handling. Use synthetic text in screenshots and test data.
 3. Check your diff for keys, private transcripts, and local build files. Report vulnerabilities through [SECURITY.md](SECURITY.md).
 
-Reviewers look for a reproducible problem, a focused change, and evidence that the affected workflow still works. They may ask for a narrower diff or another check. Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+The maintainer reviews incoming work in batches. A reproducible problem and a focused diff make review easier. Share any check you could not run. Follow the [Code of Conduct](CODE_OF_CONDUCT.md).

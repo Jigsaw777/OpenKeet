@@ -23,3 +23,9 @@
 - [Speech benchmark instructions](../benchmarks/README.md) and [results](benchmarks/interview-stress.md)
 - [Roadmap](roadmap.md) and [release readiness](release-readiness.md)
 - [Brand guide](brand/BRAND.md) and [design system](brand/DESIGN_SYSTEM.md)
+
+## Maintain and release
+
+- [Branching and releases](BRANCHING_STRATEGY.md)
+- [Public release checklist](OPEN_SOURCE_RELEASE_CHECKLIST.md)
+- [Launch and community library](launch/README.md)
