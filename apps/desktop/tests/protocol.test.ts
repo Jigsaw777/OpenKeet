@@ -32,11 +32,6 @@ test("standalone meter events cannot override a stopped or newer session", () =>
   assert.deepEqual(meterForView(active, { ...reading, session_id: 1 }), { peak: 0, frames: 0 });
 });
 
-test("active sample never displays hardware recording status", () => {
-  const view: DesktopView = { ...emptyView, mode: "sample", session: { ...emptyView.session, capture: "capturing" } };
-  assert.equal(activity(view).title, "Playing sample");
-});
-
 test("only final speech after the current question can be answered on demand", () => {
   const line = (id: number, start_ms: number, text: string, stability: "interim" | "final" = "final") =>
     ({ id, revision: 1, span: { start_ms, end_ms: start_ms + 500 }, stability, text });

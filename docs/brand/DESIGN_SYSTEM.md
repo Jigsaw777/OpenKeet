@@ -98,7 +98,7 @@ States apply to every interactive component. **Hover** moves to `--raised` or th
 | --- | --- | --- | --- | --- |
 | Primary button | 2.4rem tall, 12 px inline padding, 8 px gap to icon | Button | `--primary`, `--primary-ink`, `--primary-hover` | One per view. Large variant 2.9rem for Start listening |
 | Secondary button | Same | Button | `--surface`, `--rule`, `--ink` | Default `button` |
-| Tertiary / text button | 1.8rem tall, no padding | Button | `--accent` | Underline on hover. Used for Try a sample, Show transcript |
+| Tertiary / text button | 1.8rem tall, no padding | Button | `--accent` | Underline on hover. Used for Show transcript, Change |
 | Destructive | Secondary shape | Button | `--danger` text | Stop, Delete saved session, Clear current session |
 | Icon button | 2.4rem square | — | Secondary tokens | Needs `aria-label` or visible text |
 | Navigation item | 2rem tall | 0.87rem / 600 | transparent → `--rail-selected` with `--rule` | `aria-current="page"` marks the active item |
@@ -124,23 +124,11 @@ States apply to every interactive component. **Hover** moves to `--raised` or th
 | Split panel | Two columns 1 : 1.45 | — | — | Collapses to one column under 900 px |
 | List row (library) | Full-width button | Label + compact meta | `--accent` border when selected | `aria-pressed` |
 
-Specified but not built yet (no matching feature today):
-
-| Component | Spec |
-| --- | --- |
-| Segmented control | 2rem segments in a `--soft` track. The selected segment is `--surface` with an `--rule` border |
-| Tooltip | `--ink` text on `--raised`, 6 px radius, 150 ms delay, no motion, dismissed by Esc |
-| Popover and menu | `--surface`, 1 px `--rule`, 8 px radius, layer 20, arrow keys move, Esc closes and returns focus |
-| Modal | Max 32rem, 24 px padding, layer 30, focus trapped, Esc and Cancel close, the destructive action on the right in `--danger` |
-| Skeleton | `--soft` blocks with no shimmer under reduced motion |
-| Table | Text-sized rows of 2.4rem, sticky header in `--soft`, numbers right-aligned in tabular figures |
-| Context citation | Caption chip "From your resume" with `--soft` fill and a book icon, linked to the source passage. Never styled like answer text |
-
 ## E. Screens
 
 ### Built today
 
-**Start (Session, idle).** Order: title (Finish setup or Ready to listen), then three numbered steps (Listen to, Speech model, Answers), then the primary action and Try a sample, then the permission note. Steps tick lime when complete. Start listening stays disabled until a device and a verified model exist. The card is 48rem wide.
+**Start (Session, idle).** Order: title (Finish setup or Ready to listen), then three numbered steps (Listen to, Speech model, Answers), then the primary action, then the permission note. Steps tick lime when complete. Start listening stays disabled until a device and a verified model exist. The card is 48rem wide.
 
 **Live session.** Order: live bar (eyebrow, live status, Pause or Resume, Stop, Overlay), session meta (source, provider, transcript toggle), then the split view. *What was said* (transcript) sits left and the question plus *Suggested answer* sits right. Answer view hides the transcript and widens the answer. Ask a question, session history, save and clear follow below.
 
@@ -160,7 +148,6 @@ Specified but not built yet (no matching feature today):
 | Speech detected | Status | Teal dot | Hearing speech |
 | Question emerging | Question block | Dashed teal rule | Question taking shape |
 | Question identified | Question block | Solid teal rule | Question |
-| Clarification needed | (planned) | Dashed amber rule | This question is still taking shape. Ask them to repeat it? |
 | Answer generating | Status, answer label | Teal ring, teal answer rule | Writing answer… · Writing |
 | Answer ready | Status, answer label | Lime dot, lime answer rule | Answer ready · Complete |
 | Answer updated | Answer label | Lime rule, revision badge | Revision 2 |
@@ -168,19 +155,6 @@ Specified but not built yet (no matching feature today):
 | Model unavailable | Notice | Amber notice | Your answer provider isn't responding |
 
 Only the listening and processing indicators animate, with a 2 s opacity pulse. Nothing flashes.
-
-### Designed, not built
-
-These screens are specifications only. Do not show or market them until the capability exists.
-
-- **Welcome and onboarding.** A three-step welcome (Interview smarter. Answer better. → audio → answers) that reuses the start checklist. The sample session comes first for people who want to look around.
-- **Model configuration.** One page listing speech engine, answer provider and model. Each shows where it runs (On this PC or Provider) as a text label, with a Test button.
-- **Interview preparation.** Interview type (technical, behavioural, system design), role and level, job description, background notes, practice question list, then Start practice. Context fields always show where the text is stored.
-- **Mock interview.** Question card, progress ("Question 3 of 8"), optional timer, your answer transcript, feedback in three parts (what worked, what to tighten, a stronger version), then Next question. No scores, streaks or confetti.
-- **Session review.** Timeline of questions with your answer and the suggested answer side by side, each clearly labelled, plus notes and export.
-- **Answer formats.** Concise, detailed, step by step, code, system design (components, data flow, trade-offs) and STAR (Situation, Task, Action, Result as labelled sections). Each shows an uncertainty note when the provider flags one.
-- **Evidence.** Citations from user-provided material appear as caption chips under the answer, never inline as if spoken.
-- **Integrations and help.** Provider cards with status and a disconnect action. Help is ordered audio → speech model → answers, matching the troubleshooting order in the copy library.
 
 ## Implementation notes
 

@@ -91,8 +91,8 @@ function formatTime(ms: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function AnswerPanel({ question, copy, command, sample, connected, chooseProvider, answerHeard, compact = false, footer }: {
-  question: Question | null; copy: (text: string) => void; command: Command; sample: boolean;
+export function AnswerPanel({ question, copy, command, connected, chooseProvider, answerHeard, compact = false, footer }: {
+  question: Question | null; copy: (text: string) => void; command: Command;
   connected: boolean; chooseProvider?: () => void; answerHeard?: () => void; compact?: boolean; footer?: ReactNode;
 }) {
   const answer = question?.answer;
@@ -102,11 +102,11 @@ export function AnswerPanel({ question, copy, command, sample, connected, choose
   const canCancel = question && ["answering", "drafting"].includes(question.phase);
   const scroll = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = 0; }, [question?.id, question?.revision]);
-  const label = answer?.status === "checked" ? (sample ? "Checked" : "Complete")
-    : answer?.status === "provisional" ? (sample ? "Draft" : "Writing")
+  const label = answer?.status === "checked" ? "Complete"
+    : answer?.status === "provisional" ? "Writing"
     : canCancel ? "Answering" : retry ? "Try again" : answer?.status === "superseded" ? "Superseded"
-    : question ? (connected || sample ? "Ready to answer" : "Transcript only") : "Awaiting question";
-  const title = sample ? "Practice answer" : "Answer";
+    : question ? (connected ? "Ready to answer" : "Transcript only") : "Awaiting question";
+  const title = "Answer";
   const text = question?.text || "A question will appear here.";
   // Detected but not settled: the interviewer may still be talking.
   const shaping = question && ["candidate", "waiting", "incomplete"].includes(question.phase);
@@ -128,13 +128,13 @@ export function AnswerPanel({ question, copy, command, sample, connected, choose
     <div ref={scroll} className="answer-content" role="region" aria-label={`${title} text`} tabIndex={0}>
       {answer ? <><div className={answer.status === "superseded" ? "answer-body superseded" : "answer-body"}><AnswerText text={answer.text} /></div>
         {answer.status === "superseded" && <p className="subtle">This answer is from an earlier revision.</p>}</> :
-        <Empty label={connected || sample ? (canCancel ? "Waiting for an answer" : "Ready for your question") : "Transcription only"}
-          detail={sample ? "The bundled rehearsal supplies example answers." : connected
+        <Empty label={connected ? (canCancel ? "Waiting for an answer" : "Ready for your question") : "Transcription only"}
+          detail={connected
             ? "Request an answer for a detected question or type your own." : "Connect an answer provider in Settings."} />}
     </div>
     <div className="card-foot">{canCancel ? <button onClick={() => void command("cancel_answer")}>Cancel answer</button>
-      : canRequest && (connected || sample) ? <button className="primary" onClick={() => void command("request_detected")}>{retry ? "Retry answer" : sample ? "Suggest answer" : "Get answer"}</button>
-      : !sample && !connected && chooseProvider && !answer ? <button onClick={chooseProvider}>Choose provider</button>
+      : canRequest && connected ? <button className="primary" onClick={() => void command("request_detected")}>{retry ? "Retry answer" : "Get answer"}</button>
+      : !connected && chooseProvider && !answer ? <button onClick={chooseProvider}>Choose provider</button>
       : <button disabled={answer?.status !== "checked"} onClick={() => answer && copy(answer.text)}>Copy answer</button>}
       {answerHeard && <button title="Answer the interviewer's latest lines, even if no question was detected" onClick={answerHeard}>Answer what they said</button>}
       {footer}</div>

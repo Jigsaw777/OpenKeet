@@ -139,14 +139,6 @@ function App() {
     }
   }
 
-  async function sample() {
-    if (await command("start_sample")) {
-      setPrompt("");
-      setPromptOpen(false);
-      setTranscriptOpen(undefined);
-    }
-  }
-
   async function useTranscript() {
     setError("");
     try {
@@ -163,11 +155,10 @@ function App() {
 
   const session = view.session;
   const running = view.loading || view.stopping || ["paused", "capturing"].includes(session.capture);
-  const isSample = view.mode === "sample";
-  const engine = isSample ? "Bundled rehearsal" : providerLabel(view.provider);
-  const showTranscript = transcriptOpen ?? (!isSample && !view.provider);
+  const engine = providerLabel(view.provider);
+  const showTranscript = transcriptOpen ?? !view.provider;
   const hasSession = running || view.mode !== "idle" || Boolean(session.question);
-  const heard = view.provider && !isSample ? unansweredSpeech(session) : "";
+  const heard = view.provider ? unansweredSpeech(session) : "";
   const answerHeard = heard ? () => void command("ask", { question: heard }) : undefined;
   const notice = error || session.notice;
   const feedback = <>{notice && <p className="notice" role="alert">{notice}{session.dropped_ms > 0 && " Reported audio loss: " + session.dropped_ms + " ms."}</p>}
@@ -180,7 +171,7 @@ function App() {
     <div className="focus-route"><CaptureControls view={view} command={command} />
       <label className="opacity">Opacity <input type="range" min={30} max={100} step={5} value={opacity} aria-label="Window opacity"
         onChange={event => setOpacity(Number(event.target.value))} /></label></div>
-    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} sample={isSample} connected={Boolean(view.provider)} compact answerHeard={answerHeard}
+    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} connected={Boolean(view.provider)} compact answerHeard={answerHeard}
       footer={<button onClick={() => void command("show_workspace")}>{running ? "Main window" : "New session"} <Icon name="arrow" /></button>} />
   </main>;
 
@@ -190,11 +181,11 @@ function App() {
     {!desktop && <p className="notice" role="status">Open the OpenKeet desktop app to listen and suggest answers.</p>}
     {page === "session" && <div className="page-stack live-page">
       {!running && <StartCard view={view} audio={audio} enabled={desktop} starting={starting} start={() => void startSession()}
-        sample={() => void sample()} connect={() => setPage("providers")} />}
+        connect={() => setPage("providers")} />}
       {hasSession && <>
         <div className="live-bar">
-          <div className="live-heading">{running ? <h1 className="eyebrow">{isSample ? "Sample session" : "Live session"}</h1>
-            : <h2 className="eyebrow">{isSample ? "Sample session" : "Last session"}</h2>}<LiveStatus view={view} /></div>
+          <div className="live-heading">{running ? <h1 className="eyebrow">Live session</h1>
+            : <h2 className="eyebrow">Last session</h2>}<LiveStatus view={view} /></div>
           <div className="live-controls"><CaptureControls view={view} command={command} />
             <button disabled={!desktop} onClick={() => void command("open_focus")}><Icon name="focus" /> Overlay</button></div>
         </div>
@@ -203,7 +194,7 @@ function App() {
         </div>
         <div className={"live-grid " + (showTranscript ? "" : "answer-view")}>
           <Transcript session={session} useTranscript={() => void useTranscript()} hidden={!showTranscript} />
-          <AnswerPanel question={session.question} copy={text => void copy(text)} command={command} sample={isSample}
+          <AnswerPanel question={session.question} copy={text => void copy(text)} command={command}
             connected={Boolean(view.provider)} chooseProvider={() => setPage("providers")} answerHeard={answerHeard} />
         </div>
       </>}
@@ -212,7 +203,7 @@ function App() {
         <form className="prompt" onSubmit={submit}><label htmlFor="manual-question">Question</label>
           <div className="prompt-row"><textarea id="manual-question" ref={promptInput} rows={2} maxLength={64000} value={prompt}
             placeholder="Type your question…" onChange={event => setPrompt(event.target.value)} />
-            {view.provider ? <button className="primary" disabled={!desktop || !prompt.trim() || (isSample && running)} type="submit">Ask <Icon name="arrow" /></button> :
+            {view.provider ? <button className="primary" disabled={!desktop || !prompt.trim()} type="submit">Ask <Icon name="arrow" /></button> :
               <button type="button" onClick={() => setPage("providers")}>Connect answers</button>}</div>
         </form>
       </details>}

@@ -54,7 +54,7 @@ let browser;
 let fixture;
 const requests = [];
 const fixtureModel = "copilot-smoke:local";
-const fixtureText = "Loopback fixture answer.\n\n- Ground the answer in the question.\n- State assumptions.\n\n```rust\nlet answer = 42;\n```";
+const fixtureText = "Loopback fixture answer.\n\nStart with the constraint that matters most, then explain your approach with one concrete example from your own work.\n\nClose with the main trade-off and how you would check it in production before rolling it out widely.\n\n- Ground the answer in the question.\n- State assumptions.\n\n```rust\nlet answer = 42;\n```";
 let catalogAvailable = true;
 let refuseAnswer = false;
 async function fixtureAnswer(req, res) {
@@ -132,104 +132,8 @@ try {
   await page.keyboard.press("Enter");
   assert.equal(await page.evaluate(() => document.activeElement?.id), "main-content");
 
-  await page.getByRole("button", { name: "Try a sample", exact: true }).click();
-  await page.getByRole("heading", { name: "Sample session", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await page.getByText("Paused", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Resume", exact: true }).click();
-  await page.getByText("Revision 2", { exact: true }).waitFor();
-  await page.getByText("Session ended", { exact: true }).waitFor();
-  await page.getByText("Follow-up to question 1", { exact: true }).waitFor();
-  await page.getByText("Checked", { exact: true }).waitFor();
-  await page.getByRole("region", { name: "Practice answer text" }).getByText(/Keep the API call outside the mutex/).waitFor();
-  await page.getByRole("button", { name: "Show transcript", exact: true }).click();
-  const split = await page.getByRole("region", { name: "Practice answer text" }).boundingBox();
-  const width = await page.evaluate(() => innerWidth);
-  await page.getByRole("button", { name: "Hide transcript", exact: true }).click();
-  const expanded = await page.getByRole("region", { name: "Practice answer text" }).boundingBox();
-  assert(expanded.width > split.width * 1.4, "Answer view should widen the reading area.");
-  assert.equal(await page.evaluate(() => innerWidth), width);
-  assert.equal(await page.evaluate(() => document.fullscreenElement), null);
-  console.log(`Answer view widened the reading area from ${Math.round(split.width)} to ${Math.round(expanded.width)} CSS px.`);
-  await page.screenshot({ path: join(output, "answer-view.png"), animations: "disabled" });
-  await page.getByRole("button", { name: "Show transcript", exact: true }).click();
-  await page.locator(".live-grid").screenshot({ path: join(output, "live-long-question.png"), animations: "disabled" });
-  await page.getByRole("button", { name: "Use full transcript" }).click();
-  await page.waitForFunction(() => document.querySelector("#manual-question")?.value.includes("without blocking the coroutine thread"));
-  assert.match(await page.getByRole("textbox", { name: "Question", exact: true }).inputValue(), /shared state\nwithout blocking the coroutine thread/);
-  await page.getByRole("button", { name: "Copy answer" }).click();
-  await page.getByText("Answer copied", { exact: true }).waitFor();
-
-  const focusPromise = context.waitForEvent("page", { timeout: 12_000 });
-  await page.getByRole("button", { name: "Overlay", exact: true }).click();
-  const focus = await focusPromise;
-  focus.on("pageerror", error => errors.push(error.message));
-  await focus.getByText("Session ended", { exact: true }).waitFor();
-  await focus.getByText("Follow-up to question 1", { exact: true }).waitFor();
-  await focus.setViewportSize({ width: 380, height: 480 });
-  const reading = focus.getByRole("region", { name: "Practice answer text" });
-  const visible = await reading.boundingBox();
-  assert(visible.height >= 240, `Compact answer only received ${visible.height} px of 480 px.`);
-  assert.equal(await focus.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await reading.focus();
-  await reading.press("End");
-  await focus.waitForFunction(() => document.querySelector(".answer-content")?.scrollTop > 0);
-  const copy = await focus.getByRole("button", { name: "Copy answer" }).boundingBox();
-  assert(copy.y + copy.height <= 480, "Copy should stay in view while the answer scrolls.");
-  await reading.press("Home");
-  await focus.waitForFunction(() => document.querySelector(".answer-content")?.scrollTop === 0);
-  console.log(`Compact answer used ${Math.round(visible.height)} of 480 CSS px with its controls visible.`);
-  const overlay = await focus.locator(".focus-shell").evaluate(shell => {
-    const color = getComputedStyle(shell).backgroundColor;
-    return { color, canvas: getComputedStyle(document.documentElement).backgroundColor, opacity: getComputedStyle(shell).opacity };
-  });
-  assert.deepEqual(overlay, { color: "rgba(11, 16, 32, 0.7)", canvas: "rgba(0, 0, 0, 0)", opacity: "1" });
-  const shell = color => focus.waitForFunction(expected =>
-    getComputedStyle(document.querySelector(".focus-shell")).backgroundColor === expected, color, { timeout: 3_000 });
-  const opacity = focus.getByRole("slider", { name: "Window opacity" });
-  await opacity.focus();
-  await opacity.press("Home");
-  await shell("rgba(11, 16, 32, 0.3)");
-  await opacity.press("End");
-  await shell("rgb(11, 16, 32)");
-  for (let step = 0; step < 6; step++) await opacity.press("ArrowLeft");
-  await shell("rgba(11, 16, 32, 0.7)");
-  console.log("Overlay opacity slider runs from 30% to solid while text stays opaque.");
-  await focus.screenshot({ path: join(output, "focus.png"), animations: "disabled", omitBackground: true });
-  await checkWindow("Overlay");
-  await focus.getByRole("button", { name: "New session" }).click();
-  if (process.env.COPILOT_TEST_WINDOWS_SHELL === "1") {
-    await page.getByText("Show with Ctrl+Alt+I", { exact: true }).waitFor();
-    await checkWindow("Visible");
-    await checkWindow("Close");
-    if (process.env.COPILOT_TEST_WINDOWS_SHORTCUT === "1") {
-      await checkWindow("Shortcut");
-    } else {
-      await relaunch();
-    }
-    await checkWindow("Visible");
-  }
-
-  await page.getByLabel("Session title").fill("Kotlin concurrency practice");
-  await page.getByRole("button", { name: "Save to history" }).click();
-  await page.getByRole("heading", { name: "Saved sessions", exact: true }).waitFor();
-  await page.getByRole("searchbox", { name: "Search saved sessions" }).fill("coroutine");
-  await page.getByRole("button", { name: "Search", exact: true }).click();
-  await page.getByRole("button", { name: /^Kotlin concurrency practice/ }).click();
-  await page.getByRole("region", { name: "Saved transcript" }).getByText(/without blocking the coroutine thread/).waitFor();
-  await page.getByLabel("Session notes").fill("Review coroutine cancellation.");
-  await page.getByRole("button", { name: "Save notes" }).click();
-  await page.getByRole("status").filter({ hasText: "Notes saved." }).waitFor();
-  await page.getByRole("button", { name: /^Kotlin concurrency practice/ }).click();
-  await page.waitForFunction(() => {
-    const notes = document.querySelector("#saved-notes");
-    return !notes?.disabled && notes?.value === "Review coroutine cancellation.";
-  });
-  assert(await page.getByRole("button", { name: "Export JSON" }).isEnabled());
-  await page.screenshot({ path: join(output, "saved-sessions.png"), animations: "disabled", fullPage: true });
-  await page.getByRole("button", { name: "Delete saved session" }).click();
-  await page.getByRole("button", { name: "Confirm delete" }).click();
-  await page.getByRole("status").filter({ hasText: "Saved session deleted." }).waitFor();
+  let focus;
+  let ollamaConnected = false;
 
   const workspace = page.getByRole("navigation", { name: "Workspace" });
   const settings = page.getByRole("navigation", { name: "Settings" });
@@ -284,8 +188,11 @@ try {
     await page.getByRole("heading", { name: "Ready to listen", exact: true }).waitFor();
     const startSession = page.getByRole("button", { name: "Start listening", exact: true });
     await page.screenshot({ path: join(output, "ready-to-listen.png"), animations: "disabled" });
+    const overlayPage = context.waitForEvent("page", { timeout: 12_000 });
     await startSession.click();
     // Start floats the see-through overlay over the call and hides the main window.
+    focus = await overlayPage;
+    focus.on("pageerror", error => errors.push(error.message));
     await focus.getByText("Listening", { exact: true }).waitFor();
     await checkWindow("Overlay");
     const playback = spawn("powershell.exe", ["-NoProfile", "-Command",
@@ -314,6 +221,7 @@ try {
       await page.getByRole("button", { name: "Refresh models", exact: true }).click();
       await page.waitForFunction(() => document.querySelector("#answer-model")?.value === "copilot-smoke:local");
       await page.getByRole("button", { name: "Use Ollama", exact: true }).click();
+      ollamaConnected = true;
       await page.getByRole("heading", { name: "Live session", exact: true }).waitFor();
       // Connecting mid-session keeps answers manual, and the status says so.
       await page.getByText("Press Get answer when they finish.", { exact: true }).waitFor();
@@ -367,6 +275,112 @@ try {
     }
     await page.screenshot({ path: join(output, "session-ready.png"), animations: "disabled" });
     console.log("Audio readiness survived stop and reload. Hiding paused capture and reopening kept it paused.");
+  }
+
+  // A typed question answered by the local fixture provider drives the answer view, overlay, window and history checks.
+  if (fixture) {
+    if (!ollamaConnected) {
+      await answersSettings();
+      await provider.selectOption("ollama");
+      await page.waitForFunction(() => document.querySelector("#answer-model")?.value === "copilot-smoke:local");
+      await page.getByRole("button", { name: "Use Ollama", exact: true }).click();
+    }
+    await workspace.getByRole("button", { name: "Session", exact: true }).click();
+    await page.getByText("Ask a question", { exact: true }).click();
+    await page.getByRole("textbox", { name: "Question", exact: true }).fill("How would you protect shared state without blocking the coroutine thread?");
+    await page.getByRole("button", { name: "Ask", exact: true }).click();
+    const answerText = page.getByRole("region", { name: "Answer text" });
+    await answerText.getByText("Loopback fixture answer.").waitFor();
+    await page.getByText("Complete", { exact: true }).waitFor();
+    assert.match(requests.at(-1).messages.at(-1).content, /coroutine thread/);
+    await page.getByRole("button", { name: "Show transcript", exact: true }).click();
+    const split = await answerText.boundingBox();
+    const width = await page.evaluate(() => innerWidth);
+    await page.getByRole("button", { name: "Hide transcript", exact: true }).click();
+    const expanded = await answerText.boundingBox();
+    assert(expanded.width > split.width * 1.4, "Answer view should widen the reading area.");
+    assert.equal(await page.evaluate(() => innerWidth), width);
+    assert.equal(await page.evaluate(() => document.fullscreenElement), null);
+    console.log(`Answer view widened the reading area from ${Math.round(split.width)} to ${Math.round(expanded.width)} CSS px.`);
+    await page.screenshot({ path: join(output, "answer-view.png"), animations: "disabled" });
+    await page.getByRole("button", { name: "Show transcript", exact: true }).click();
+    await page.locator(".live-grid").screenshot({ path: join(output, "live-long-question.png"), animations: "disabled" });
+    await page.getByRole("button", { name: "Copy answer" }).click();
+    await page.getByText("Answer copied", { exact: true }).waitFor();
+
+    const overlayPage = focus ? null : context.waitForEvent("page", { timeout: 12_000 });
+    await page.getByRole("button", { name: "Overlay", exact: true }).click();
+    if (overlayPage) {
+      focus = await overlayPage;
+      focus.on("pageerror", error => errors.push(error.message));
+    }
+    await focus.locator(".compact-question summary").filter({ hasText: /coroutine thread/ }).waitFor();
+    await focus.setViewportSize({ width: 380, height: 480 });
+    const reading = focus.getByRole("region", { name: "Answer text" });
+    const visible = await reading.boundingBox();
+    assert(visible.height >= 240, `Compact answer only received ${visible.height} px of 480 px.`);
+    assert.equal(await focus.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await reading.focus();
+    await reading.press("End");
+    await focus.waitForFunction(() => document.querySelector(".answer-content")?.scrollTop > 0);
+    const copy = await focus.getByRole("button", { name: "Copy answer" }).boundingBox();
+    assert(copy.y + copy.height <= 480, "Copy should stay in view while the answer scrolls.");
+    await reading.press("Home");
+    await focus.waitForFunction(() => document.querySelector(".answer-content")?.scrollTop === 0);
+    console.log(`Compact answer used ${Math.round(visible.height)} of 480 CSS px with its controls visible.`);
+    const overlay = await focus.locator(".focus-shell").evaluate(shell => {
+      const color = getComputedStyle(shell).backgroundColor;
+      return { color, canvas: getComputedStyle(document.documentElement).backgroundColor, opacity: getComputedStyle(shell).opacity };
+    });
+    assert.deepEqual(overlay, { color: "rgba(11, 16, 32, 0.7)", canvas: "rgba(0, 0, 0, 0)", opacity: "1" });
+    const shell = color => focus.waitForFunction(expected =>
+      getComputedStyle(document.querySelector(".focus-shell")).backgroundColor === expected, color, { timeout: 3_000 });
+    const opacity = focus.getByRole("slider", { name: "Window opacity" });
+    await opacity.focus();
+    await opacity.press("Home");
+    await shell("rgba(11, 16, 32, 0.3)");
+    await opacity.press("End");
+    await shell("rgb(11, 16, 32)");
+    for (let step = 0; step < 6; step++) await opacity.press("ArrowLeft");
+    await shell("rgba(11, 16, 32, 0.7)");
+    console.log("Overlay opacity slider runs from 30% to solid while text stays opaque.");
+    await focus.screenshot({ path: join(output, "focus.png"), animations: "disabled", omitBackground: true });
+    await checkWindow("Overlay");
+    await focus.getByRole("button", { name: "New session" }).click();
+    if (process.env.COPILOT_TEST_WINDOWS_SHELL === "1") {
+      await page.getByText("Show with Ctrl+Alt+I", { exact: true }).waitFor();
+      await checkWindow("Visible");
+      await checkWindow("Close");
+      if (process.env.COPILOT_TEST_WINDOWS_SHORTCUT === "1") {
+        await checkWindow("Shortcut");
+      } else {
+        await relaunch();
+      }
+      await checkWindow("Visible");
+    }
+
+    await page.getByLabel("Session title").fill("Kotlin concurrency practice");
+    await page.getByRole("button", { name: "Save to history" }).click();
+    await page.getByRole("heading", { name: "Saved sessions", exact: true }).waitFor();
+    await page.getByRole("searchbox", { name: "Search saved sessions" }).fill("Kotlin");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await page.getByRole("button", { name: /^Kotlin concurrency practice/ }).click();
+    await page.getByText("Checked answers", { exact: true }).click();
+    await page.locator(".saved-answer").getByText(/without blocking the coroutine thread/).waitFor();
+    await page.getByLabel("Session notes").fill("Review coroutine cancellation.");
+    await page.getByRole("button", { name: "Save notes" }).click();
+    await page.getByRole("status").filter({ hasText: "Notes saved." }).waitFor();
+    await page.getByRole("button", { name: /^Kotlin concurrency practice/ }).click();
+    await page.waitForFunction(() => {
+      const notes = document.querySelector("#saved-notes");
+      return !notes?.disabled && notes?.value === "Review coroutine cancellation.";
+    });
+    assert(await page.getByRole("button", { name: "Export JSON" }).isEnabled());
+    await page.screenshot({ path: join(output, "saved-sessions.png"), animations: "disabled", fullPage: true });
+    await page.getByRole("button", { name: "Delete saved session" }).click();
+    await page.getByRole("button", { name: "Confirm delete" }).click();
+    await page.getByRole("status").filter({ hasText: "Saved session deleted." }).waitFor();
+    console.log("A typed question drove the answer view, overlay, window checks and saved history.");
   }
 
   await audioSettings();

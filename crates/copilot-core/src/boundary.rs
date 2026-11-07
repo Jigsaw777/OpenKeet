@@ -145,9 +145,38 @@ const PROMPTS: &[&str] = &[
 ];
 /// "Have you…", "Did you…", "Is there…": an auxiliary before its subject asks a question.
 const AUXILIARIES: &[&str] = &[
-    "am", "is", "are", "was", "were", "do", "does", "did", "have", "has", "had", "can", "could",
-    "will", "would", "shall", "should", "may", "might", "isn't", "aren't", "wasn't", "weren't",
-    "don't", "doesn't", "didn't", "haven't", "hasn't", "can't", "couldn't", "won't", "wouldn't",
+    "am",
+    "is",
+    "are",
+    "was",
+    "were",
+    "do",
+    "does",
+    "did",
+    "have",
+    "has",
+    "had",
+    "can",
+    "could",
+    "will",
+    "would",
+    "shall",
+    "should",
+    "may",
+    "might",
+    "isn't",
+    "aren't",
+    "wasn't",
+    "weren't",
+    "don't",
+    "doesn't",
+    "didn't",
+    "haven't",
+    "hasn't",
+    "can't",
+    "couldn't",
+    "won't",
+    "wouldn't",
     "shouldn't",
 ];
 const SUBJECTS: &[&str] = &[
@@ -179,9 +208,35 @@ const YOU_REQUESTS: &[&str] = &[
 ];
 /// Openers an interviewer says before the actual question: "Okay, great, so now tell me…".
 const FILLERS: &[&str] = &[
-    "okay", "ok", "so", "and", "now", "alright", "right", "great", "cool", "well", "um", "uh",
-    "yeah", "yes", "perfect", "thanks", "nice", "awesome", "sure", "then", "also", "actually",
-    "please", "but", "good", "excellent", "interesting", "fine", "next",
+    "okay",
+    "ok",
+    "so",
+    "and",
+    "now",
+    "alright",
+    "right",
+    "great",
+    "cool",
+    "well",
+    "um",
+    "uh",
+    "yeah",
+    "yes",
+    "perfect",
+    "thanks",
+    "nice",
+    "awesome",
+    "sure",
+    "then",
+    "also",
+    "actually",
+    "please",
+    "but",
+    "good",
+    "excellent",
+    "interesting",
+    "fine",
+    "next",
 ];
 
 fn normalized(text: &str) -> String {
@@ -248,7 +303,9 @@ fn invites_reply(raw: &str) -> bool {
                 }
             }
             let start = words.join(" ");
-            ASKS.iter().chain(PROMPTS).any(|cue| starts_with(&start, cue))
+            ASKS.iter()
+                .chain(PROMPTS)
+                .any(|cue| starts_with(&start, cue))
                 || (words.len() > 1
                     && AUXILIARIES.contains(&words[0])
                     && SUBJECTS.contains(&words[1]))
@@ -541,7 +598,11 @@ mod tests {
             (None, "I'd love to hear about your last project.", New),
             (None, "Let's talk about system design.", New),
             (None, "I'm curious how you handled the outage.", New),
-            (None, "Thanks for that. My next question is about caching.", New),
+            (
+                None,
+                "Thanks for that. My next question is about caching.",
+                New,
+            ),
             (None, "Talk me through your resume.", New),
             (None, "Give me an overview of your role.", New),
             (

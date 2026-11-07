@@ -9,7 +9,6 @@ flowchart LR
   Desktop --> Audio[copilot-audio]
   Audio -->|"Meter events"| UI
   Audio --> Core
-  Desktop --> Practice[Bundled sample responder]
   Desktop -->|Selected text route| Providers[ChatGPT, Claude API or loopback Ollama]
   Desktop -->|Windows user scope| Vault[DPAPI provider settings]
   Desktop -->|Explicit save and export| Store[SQLite on blocking workers]
@@ -35,7 +34,7 @@ sequenceDiagram
 
 One selected Windows route runs per session. The audio pipeline owns separate capture, segment and decoder workers. `SpeechRecognizer` handles bounded PCM segments and allows the pipeline to test recovery independently of native inference. Full duplex, GPU, process-isolated ASR, and external transcription routing remain open.
 
-The practice responder runs only in the sample session. Live automatic answers are disabled by default. Explicit requests preserve the detected question ID and revision. Short punctuated live questions can settle sooner than long or revised questions. Ongoing speech still prevents automatic commitment. Connected provider requests stream text through the same revision guard. A provider switch cancels active work. Request context contains the current question and an available linked parent question and answer. [Provider authorization audit](../audit/PROVIDER_AUTHORIZATION.md)
+Live automatic answers are disabled by default. Explicit requests preserve the detected question ID and revision. Short punctuated live questions can settle sooner than long or revised questions. Ongoing speech still prevents automatic commitment. Connected provider requests stream text through the same revision guard. A provider switch cancels active work. Request context contains the current question and an available linked parent question and answer. [Provider authorization audit](../audit/PROVIDER_AUTHORIZATION.md)
 
 Windows owns a tray icon and registers the global Ctrl+Shift+I shortcut. The main workspace and Focus use native tool-window styles. Their style callback preserves those bits when the framework changes visibility or pinning.
 

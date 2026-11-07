@@ -23,27 +23,27 @@ Interviews can be stressful. Preparing for them shouldn't be. OpenKeet helps you
 | --- | --- |
 | Explain a technical idea | Ask about a coding concept or a design trade-off. Practice explaining the answer aloud. |
 | Tell a clearer story | Ask for feedback on a behavioral answer. Give the situation, your task, your action, and the result. |
-| Follow a mock interviewer | Select their audio or your microphone. OpenKeet transcribes locally and flags likely questions. |
+| Follow a practice call | Select the call's audio or your microphone. OpenKeet transcribes locally and flags likely questions. |
 | Work through a follow-up | Request a suggestion for the detected question or ask your own. Save the session if you want to revisit it. |
 
-The sample is a good place to start if you're preparing for your first interview. Engineers can work through trade-offs, career switchers can practice describing transferable skills, and experienced candidates can rehearse leadership stories. [Practice guide](docs/interview-preparation.md)
+Typing one question you expect to hear is a good place to start if you're preparing for your first interview. Engineers can work through trade-offs, career switchers can practice describing transferable skills, and experienced candidates can rehearse leadership stories. [Practice guide](docs/interview-preparation.md)
 
 ## From a question to a clearer answer
 
-1. Open OpenKeet and select **Try a sample**. It runs offline with a prepared transcript and example answers.
-2. To practice with your own questions, connect an answer model. You can type a question or set up local transcription for a mock interview.
+1. Connect an answer model in **Settings**, then type a question under **Ask a question**.
+2. To work from audio, choose what to listen to and get a local speech model. OpenKeet transcribes on your PC and flags likely questions.
 3. Review what OpenKeet heard and request a suggestion. Check the reasoning and say the answer in your own words.
 4. When the session ends, choose **Save to history** if you want to keep the transcript and checked answers.
 
 ## See it in action
 
-![OpenKeet running the built-in sample with a transcript and a checked follow-up answer](docs/assets/sample-session.png)
+![OpenKeet start screen with the Listen to, Speech model and Answers steps](docs/assets/first-run.png)
 
-This is the Windows app running its built-in rehearsal with synthetic interview text. [Screenshot gallery](docs/community/screenshots.md)
+This is the Windows app at first launch. [Screenshot gallery](docs/community/screenshots.md)
 
 ## Use AI your way
 
-- **Start offline.** The bundled sample needs no account or model download. For your own audio, install a speech model to transcribe locally.
+- **Start offline.** Install a speech model to transcribe your own audio locally. No account is needed for transcription.
 - **Run answers on your PC.** Connect a local model through Ollama. Download size, memory use, and speed depend on the model and computer.
 - **Connect a service.** The preview implements a Claude Console API-key route with separate usage billing and an experimental **Sign in with ChatGPT** route for eligible plan usage. Account access and usage limits depend on the provider.
 
@@ -57,7 +57,7 @@ For real interviews or assessments, follow the interviewer's rules. Get permissi
 
 ## Common questions
 
-**Is it free? Do I need an AI subscription?** OpenKeet has no app subscription. The offline sample is included and local Ollama models need no AI service account. Connected services may charge for usage. The repository declares MIT for project source. The public distribution review is tracked in [release readiness](docs/release-readiness.md).
+**Is it free? Do I need an AI subscription?** OpenKeet has no app subscription. Local Ollama models need no AI service account. Connected services may charge for usage. The repository declares MIT for project source. The public distribution review is tracked in [release readiness](docs/release-readiness.md).
 
 **Can I install it without programming?** The current preview requires a Windows source build or an installer built by a maintainer. After launch, the sample and regular setup use buttons and menus. Follow the [Windows setup guide](docs/getting-started.md).
 

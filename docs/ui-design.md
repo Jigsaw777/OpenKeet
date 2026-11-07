@@ -11,16 +11,16 @@ Product references inform separate setup and live work, a compact session view, 
 │ ◈ OpenKeet                                  Local mode   Settings │
 ├──────────────┬───────────────────────────────────────────────────┤
 │ Practice     │ YOUR PRACTICE SPACE                               │
-│ Library      │ Start with a rehearsal                            │
-│ Settings     │ Try a guided sample or set up your audio.           │
-│              │ [Try sample session] [Set up audio]               │
+│ Library      │ Finish setup                                      │
+│ Settings     │ Pick what to listen to and get a speech model.    │
+│              │ [Start listening] [Set up audio]                  │
 │              ├──────────────────────┬────────────────────────────┤
 │              │ Recent sessions      │ Setup status               │
 │              │ Empty until saved    │ Audio / model / context    │
 └──────────────┴──────────────────────┴────────────────────────────┘
 ```
 
-First-run wizard steps are **Audio source → Play test → Choose local or connect → Optional context**. Default to explicit system output selection. Show the endpoint and local processing before Start. The sample path opens directly without permission prompts, account creation, or a model download. Setup success requires a meter and sample transcript, with a retry and focused troubleshooting when an endpoint fails.
+First-run wizard steps are **Audio source → Play test → Choose local or connect → Optional context**. Default to explicit system output selection. Show the endpoint and local processing before Start. Setup success requires a meter and a transcript, with a retry and focused troubleshooting when an endpoint fails.
 
 ## 2. Live workspace
 

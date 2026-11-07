@@ -1,6 +1,6 @@
 # Practice with live audio
 
-Use live assistance during a mock interview or another session where everyone has agreed to audio processing and AI assistance. Follow any interview, assessment, and screen-sharing rules.
+Use live assistance during a practice call or another session where everyone has agreed to audio processing and AI assistance. Follow any interview, assessment, and screen-sharing rules.
 
 1. Select one source under **Listen to**. Choose your microphone for solo practice or the Windows playback device carrying the other person's voice.
 2. Set up the **Speech model** and, if you want suggestions, [choose an answer model](ai-providers.md).

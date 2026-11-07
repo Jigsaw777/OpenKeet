@@ -1,6 +1,6 @@
 # OpenKeet brand guide
 
-OpenKeet is an AI interview copilot. It helps candidates understand a question, work out a stronger answer and approach the conversation with composure. This guide covers strategy, identity, voice and reusable copy. Tokens, components and screens are in the [design system](DESIGN_SYSTEM.md). Website copy is in [WEBSITE.md](WEBSITE.md).
+OpenKeet is an AI interview copilot. It helps candidates understand a question, work out a stronger answer and approach the conversation with composure. This guide covers strategy, identity, voice and reusable copy. Tokens, components and screens are in the [design system](DESIGN_SYSTEM.md).
 
 ## A. Strategy
 
@@ -51,15 +51,14 @@ The approved direction is concept three. A Midnight Navy rounded-square tile hol
 
 | Asset | File | Use |
 | --- | --- | --- |
-| Horizontal logo, dark background | `assets/openkeet-logo-on-dark.svg`, `.png` | App header, dark website, README in dark mode |
-| Horizontal logo, light background | `assets/openkeet-logo-on-light.svg`, `.png` | Light website, documents, README in light mode |
+| Horizontal logo, dark background | `assets/openkeet-logo-on-dark.svg`, `.png` | App header, README in dark mode, release notes |
+| Horizontal logo, light background | `assets/openkeet-logo-on-light.svg`, `.png` | Documents, README in light mode |
 | App icon, no wordmark | `assets/openkeet-mark.svg`, `openkeet-mark-1024.png` | Store listings, splash, about |
 | Outlined app icon | `assets/openkeet-mark-outlined.svg` | Navy tile on navy surfaces |
-| Compact monogram, 16–24 px | `assets/openkeet-mark-small.svg` | Tray, favicon, tiny UI |
+| Compact monogram, 16–24 px | `assets/openkeet-mark-small.svg` | Tray and tiny UI |
 | Monochrome light / dark | `assets/openkeet-logo-mono-*.svg`, `openkeet-mark-mono-*.svg` | One-colour print, watermarks, empty states |
 | Windows app and installer icon | `apps/desktop/src-tauri/icons/icon.ico` | 16, 20 and 24 px use the compact mark; 32–256 px use the full mark |
 | Tray icon | `apps/desktop/src-tauri/icons/tray.png` | 32 px compact mark, scaled by Windows |
-| Favicon | `assets/favicon.ico`, `openkeet-mark-small.svg` | Website |
 | GitHub and social avatar | `assets/openkeet-avatar.svg`, `openkeet-avatar-400.png` | Full-bleed navy, mark inside the centre circle for round crops |
 
 The vector mark traces the supplied concept-three artwork on a 64-unit grid. It replaces the earlier upscaled raster icon, which had soft edges and white corners baked in. All files are vector-first with transparent backgrounds outside the tile. The wordmark is outlined from Manrope ExtraBold (SIL Open Font License), so it renders the same without the font installed.
@@ -99,15 +98,13 @@ Teal is for things you can act on and live listening. Lime appears only when som
 | --- | --- | --- |
 | Desktop UI | Segoe UI Variable Text and Display, falling back to Segoe UI | Native Windows rendering, DPI-aware, no bundled font |
 | Code, model IDs, shortcuts | Cascadia Mono, falling back to Consolas | Ships with Windows 11 Terminal; Consolas everywhere |
-| Website headings and logotype | Manrope (OFL) | Matches the wordmark geometry |
-| Website body | Inter (OFL) | High legibility at small sizes |
-| Website code | JetBrains Mono (OFL) | Clear technical identifiers |
+| Logotype only | Manrope ExtraBold, outlined (OFL) | Matches the wordmark geometry. Not a UI font |
 
-The app does not bundle Inter or JetBrains Mono. Segoe UI Variable gives a native feel and avoids roughly 500 KB of font files. Bundle web fonts only on the website, self-hosted, with the OFL text.
+The app bundles no fonts. Segoe UI Variable gives a native feel and avoids roughly 500 KB of font files.
 
 ### Iconography
 
-One family: 24 px grid, 1.6 px rounded strokes, no fills, `currentColor`. The app's inline set (`Icon` in `components.tsx`) follows these rules. Lucide icons match them if more are needed. Do not mix libraries. Sizes: 16 px in dense rows, 18 px in buttons and navigation, 24 px for empty states. Icons inherit text colour, use the muted tone when disabled, and always sit beside a text label or carry an accessible name. The brand mark is identity only, never a functional icon. Suggested mappings for future screens: mock interview `message-square`, live session `radio`, transcription `audio-lines`, technical `code`, system design `network`, behavioural `users`, local processing `cpu`, API provider `plug`, knowledge `book-open`, history `clock`, privacy `lock`, warning `triangle-alert`, error `circle-alert`.
+One family: 24 px grid, 1.6 px rounded strokes, no fills, `currentColor`. The app's inline set (`Icon` in `components.tsx`) follows these rules. Lucide icons match them if more are needed. Do not mix libraries. Sizes: 16 px in dense rows, 18 px in buttons and navigation, 24 px for empty states. Icons inherit text colour, use the muted tone when disabled, and always sit beside a text label or carry an accessible name. The brand mark is identity only, never a functional icon. Suggested mappings if more icons are needed: live session `radio`, transcription `audio-lines`, technical `code`, system design `network`, behavioural `users`, local processing `cpu`, API provider `plug`, knowledge `book-open`, history `clock`, privacy `lock`, warning `triangle-alert`, error `circle-alert`.
 
 ### Imagery
 
@@ -148,9 +145,9 @@ OpenKeet sounds like a thoughtful interview coach who helps you find clarity whe
 
 | Moment | Heading | Supporting text | Primary action | Secondary |
 | --- | --- | --- | --- | --- |
-| First launch | Finish setup | Pick what to listen to, get a speech model, and optionally connect answers. | Start listening | Try a sample |
-| Ready *(shipped)* | Ready to listen | Answers show in a see-through window on top of your call. | Start listening | Try a sample |
-| Welcome | Welcome to OpenKeet | Interview smarter. Answer better. Let's get your audio and answers ready. | Get started | Try a sample first |
+| First launch | Finish setup | Pick what to listen to, get a speech model, and optionally connect answers. | Start listening | — |
+| Ready *(shipped)* | Ready to listen | Answers show in a see-through window on top of your call. | Start listening | — |
+| Welcome | Welcome to OpenKeet | Interview smarter. Answer better. Let's get your audio and answers ready. | Get started | — |
 | Microphone permission | Allow microphone access | OpenKeet listens only while a session is running. You can pause or stop at any time. | Open Windows settings | Use system audio instead |
 | System audio | Choose what to listen to | Pick the speakers or headphones your call plays through. | Refresh | — |
 | Speech model *(shipped)* | Speech model | Runs on this PC. | Download | Choose file |
@@ -184,15 +181,13 @@ OpenKeet sounds like a thoughtful interview coach who helps you find clarity whe
 
 **One line.** OpenKeet is an AI interview copilot that helps you understand each question and shape a stronger answer, live, on your own PC.
 
-**50 words.** OpenKeet listens to your interview call on Windows, transcribes it locally, and spots the questions as they're asked. Connect ChatGPT, Claude or a local Ollama model to get a suggested answer in a see-through window over your call. Practise with a built-in sample, then save sessions to review later.
+**50 words.** OpenKeet listens to your interview call on Windows, transcribes it locally, and spots the questions as they're asked. Connect ChatGPT, Claude or a local Ollama model to get a suggested answer in a see-through window over your call. Save sessions to review later.
 
 **150 words.** Interviews are hard enough without losing the thread of a question. OpenKeet is a Windows desktop copilot that helps you stay clear and composed. It transcribes the other person's audio on your PC with a local speech model. You can choose Whisper or NVIDIA Parakeet. As they speak, OpenKeet tracks the question and shows it settling into shape. When you're ready, it streams a suggested answer from the provider you choose: your ChatGPT account, your Claude Console key, or a model running locally in Ollama. Answers appear in a compact see-through window over your call, with readable lists and code blocks for technical rounds. Start, pause and stop are always visible. Sessions stay in a local library you can search, annotate, export or delete. OpenKeet helps you think. Your experience is still the answer. Interview smarter. Answer better.
 
-**Launch announcement.** OpenKeet is here. It is a Windows interview copilot that hears the question, keeps it in focus and suggests a clear answer while you stay in control. Speech recognition runs on your PC. Answers come from the provider you pick, including fully local Ollama. Try the built-in sample session in a minute, no account needed.
+**Launch announcement.** OpenKeet is here. It is a Windows interview copilot that hears the question, keeps it in focus and suggests a clear answer while you stay in control. Speech recognition runs on your PC. Answers come from the provider you pick, including fully local Ollama.
 
 **GitHub introduction.** OpenKeet is a Windows desktop interview copilot built with Tauri 2 and Rust. It captures system audio or a microphone, transcribes locally with whisper.cpp or sherpa-onnx Parakeet, detects questions, and streams suggested answers from ChatGPT, Claude or Ollama into an overlay window. MIT licensed.
-
-**Meta description (155 characters).** OpenKeet is a Windows AI interview copilot: local transcription, live question detection and suggested answers from ChatGPT, Claude or Ollama.
 
 **Product Hunt.** Interview smarter. Answer better. OpenKeet listens to your interview on Windows, transcribes locally and suggests structured answers in a see-through window. Bring ChatGPT, Claude or local Ollama.
 

@@ -2,10 +2,9 @@
 
 Start with one question you would like to answer more clearly.
 
-1. Select **Try a sample** to see a transcript and a checked follow-up answer.
-2. With an [answer model connected](ai-providers.md), use **Ask a question** to try one of the prompts below.
-3. Answer aloud before reading the suggestion. Compare the reasoning, then try again in your own words.
-4. If you want to review a session later, stop and save it to **History**. Add a note about what to practice next.
+1. With an [answer model connected](ai-providers.md), use **Ask a question** to try one of the prompts below.
+2. Answer aloud before reading the suggestion. Compare the reasoning, then try again in your own words.
+3. If you want to review a session later, stop and save it to **History**. Add a note about what to practice next.
 
 | Interview type | Example prompt |
 | --- | --- |
@@ -15,4 +14,4 @@ Start with one question you would like to answer more clearly.
 
 For behavioral questions, try STAR: **Situation**, **Task**, **Action**, **Result**. Supply real details from your experience. Ask for help making the story clearer or shorter.
 
-If you're practicing with someone else, agree on how to use transcription and AI before starting. [Set up a mock interview](live-assistance.md)
+If you're practicing with someone else, agree on how to use transcription and AI before starting. [Live assistance guide](live-assistance.md)

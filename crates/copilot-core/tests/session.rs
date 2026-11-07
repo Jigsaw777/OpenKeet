@@ -1,7 +1,15 @@
 use copilot_core::{
     AnswerFailure, AnswerMode, AnswerStatus, CaptureState, Policy, QuestionPhase, Session, Source,
-    Span, Stability, Utterance, rehearsal,
+    Span, Stability, Utterance,
 };
+
+/// Answers every due request with its question text, standing in for a provider.
+fn answer_due(session: &mut Session, now_ms: u64) {
+    while let Some(work) = session.next_request(now_ms) {
+        let answer = format!("Answer: {}", work.request.question);
+        session.complete(work.request.key, now_ms, Ok(answer));
+    }
+}
 
 fn setup(mut policy: Policy) -> Session {
     policy.auto_answer = true;
@@ -58,7 +66,7 @@ fn default_policy_detects_without_asking_and_manual_request_keeps_the_same_revis
     assert!(!session.complete(work.request.key, 8_100, Ok("obsolete".into())));
     assert!(session.next_request(8_200).is_none());
     session.request_detected().unwrap();
-    rehearsal::answer_available(&mut session, 8_300);
+    answer_due(&mut session, 8_300);
     let history = session.snapshot().history;
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].answer.key.revision, 2);
@@ -106,7 +114,7 @@ fn repeated_final_is_visible_in_transcript_without_another_answer() {
         900,
         "How does an API rate limiter work?",
     );
-    rehearsal::answer_available(&mut session, 4_200);
+    answer_due(&mut session, 4_200);
     final_text(
         &mut session,
         2,
@@ -114,7 +122,7 @@ fn repeated_final_is_visible_in_transcript_without_another_answer() {
         5_000,
         "how does an API rate limiter work.",
     );
-    rehearsal::answer_available(&mut session, 9_000);
+    answer_due(&mut session, 9_000);
     let snapshot = session.snapshot();
     assert_eq!(snapshot.transcript.len(), 2);
     assert_eq!(snapshot.history.len(), 1);
@@ -195,7 +203,7 @@ fn late_constraints_consolidate_across_the_supported_short_pause_range() {
                 "wait for the delayed final at gap {gap}"
             );
             final_text(&mut session, 2, 800 + gap, 1_200 + gap, tail);
-            rehearsal::answer_available(&mut session, 5_000 + gap);
+            answer_due(&mut session, 5_000 + gap);
             let snapshot = session.snapshot();
             assert_eq!(snapshot.history.len(), 1);
             assert_eq!(snapshot.history[0].question, format!("{head} {tail}"));
@@ -209,7 +217,7 @@ fn a_distinct_question_after_a_short_pause_gets_its_own_answer() {
     let mut session = setup(Policy::default());
     final_text(&mut session, 1, 100, 800, "Why use a mutex?");
     final_text(&mut session, 2, 1_300, 1_800, "Explain an inner join.");
-    rehearsal::answer_available(&mut session, 6_000);
+    answer_due(&mut session, 6_000);
     let history = session.snapshot().history;
     assert_eq!(history.len(), 2);
     assert_ne!(
@@ -296,8 +304,7 @@ fn follow_up_gets_a_new_id_and_the_prior_checked_answer_after_a_long_pause() {
         context.checked_answer.as_deref(),
         Some("Use a suspending mutex.")
     );
-    let answer = rehearsal::practice_answer(&follow.request);
-    assert!(answer.contains("outside the mutex") && answer.contains("Dispatchers.IO"));
+    let answer = "Keep the API call outside the mutex.".to_owned();
     assert!(session.complete(follow.request.key, 40_400, Ok(answer)));
     let history = session.snapshot().history;
     assert_eq!(history.len(), 2);
@@ -342,7 +349,7 @@ fn immediate_follow_up_waits_for_its_parent_checked_revision() {
 fn explicit_correction_revises_after_the_normal_continuation_window() {
     let mut session = setup(Policy::default());
     final_text(&mut session, 1, 100, 800, "When should I use a semaphore?");
-    rehearsal::answer_available(&mut session, 4_100);
+    answer_due(&mut session, 4_100);
     final_text(
         &mut session,
         2,
@@ -350,18 +357,18 @@ fn explicit_correction_revises_after_the_normal_continuation_window() {
         11_900,
         "Actually, I meant a mutex.",
     );
-    rehearsal::answer_available(&mut session, 15_200);
+    answer_due(&mut session, 15_200);
     let history = session.snapshot().history;
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].answer.key.revision, 2);
-    assert!(history[0].answer.text.contains("A mutex protects"));
+    assert!(history[0].answer.text.to_lowercase().contains("mutex"));
 }
 
 #[test]
 fn correction_revises_one_checked_entry_and_keeps_the_literal_transcript() {
     let mut session = setup(Policy::default());
     final_text(&mut session, 1, 100, 800, "When should I use a Semaphore?");
-    rehearsal::answer_available(&mut session, 4_000);
+    answer_due(&mut session, 4_000);
     final_text(
         &mut session,
         2,
@@ -376,11 +383,17 @@ fn correction_revises_one_checked_entry_and_keeps_the_literal_transcript() {
     );
     assert_eq!(before.history[0].answer.key.revision, 1);
     assert_eq!(before.history[0].answer.status, AnswerStatus::Superseded);
-    rehearsal::answer_available(&mut session, 9_000);
+    answer_due(&mut session, 9_000);
     let after = session.snapshot();
     assert_eq!(after.history.len(), 1);
     assert_eq!(after.history[0].answer.key.revision, 2);
-    assert!(after.history[0].answer.text.contains("A mutex protects"));
+    assert!(
+        after.history[0]
+            .answer
+            .text
+            .to_lowercase()
+            .contains("mutex")
+    );
     assert!(
         session
             .full_transcript()
@@ -426,7 +439,7 @@ fn unfinished_clause_can_continue_after_nearly_five_seconds() {
         6_000,
         "multiple processes share the same keys?",
     );
-    rehearsal::answer_available(&mut session, 10_000);
+    answer_due(&mut session, 10_000);
     assert_eq!(session.snapshot().history[0].answer.key.revision, 2);
 }
 
@@ -463,7 +476,7 @@ fn checked_result_waits_for_speech_then_is_rejected_on_revision() {
     assert!(old.is_cancelled());
     assert!(!session.append_answer(old.request.key, "late token"));
     assert!(!session.complete(old.request.key, 5_000, Ok("late answer".into())));
-    rehearsal::answer_available(&mut session, 8_200);
+    answer_due(&mut session, 8_200);
     assert_eq!(session.snapshot().history[0].answer.key.revision, 2);
 }
 
@@ -535,7 +548,7 @@ fn gap_cancels_uncertain_audio_work_and_allows_new_questions() {
     final_text(&mut session, 2, 4_100, 4_200, "without blocking.");
     session.set_capture(CaptureState::Capturing, 5_000);
     final_text(&mut session, 3, 5_100, 5_700, "Why use a mutex?");
-    rehearsal::answer_available(&mut session, 10_000);
+    answer_due(&mut session, 10_000);
     let snapshot = session.snapshot();
     assert_eq!(snapshot.history.len(), 1);
     assert_eq!(snapshot.history[0].question, "Why use a mutex?");

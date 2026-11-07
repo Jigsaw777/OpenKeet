@@ -43,11 +43,6 @@ async fn list_endpoints() -> Result<Vec<Endpoint>, String> {
 }
 
 #[tauri::command]
-fn start_sample(app: AppHandle, state: State<'_, Shared>) -> Result<View, String> {
-    update(&app, &state, Desktop::start_sample)
-}
-
-#[tauri::command]
 fn start_capture(
     app: AppHandle,
     state: State<'_, Shared>,
@@ -58,9 +53,6 @@ fn start_capture(
 
 #[tauri::command]
 fn resume_capture(app: AppHandle, state: State<'_, Shared>) -> Result<View, String> {
-    if let Some(view) = workspace::resume_sample(&app, &state) {
-        return Ok(view);
-    }
     workspace::start_audio(app, Arc::clone(&state), None)
 }
 
@@ -293,7 +285,6 @@ fn main() {
             speech_setup::check_speech_model,
             speech_setup::find_speech_model,
             speech_setup::download_speech_model,
-            start_sample,
             start_capture,
             resume_capture,
             pause_capture,

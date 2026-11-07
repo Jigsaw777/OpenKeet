@@ -44,7 +44,7 @@ export type Session = {
 export type DesktopView = {
   update: number;
   session: Session;
-  mode: "idle" | "sample" | "audio";
+  mode: "idle" | "audio";
   meter: number;
   audio_metrics: {
     frames: number;
@@ -116,7 +116,7 @@ export function unansweredSpeech(session: Session): string {
 }
 
 export function sourceLabel(kind: SourceKind): string {
-  return { system_output: "System audio", microphone: "Microphone", replay: "Sample transcript", typed: "Typed input" }[kind];
+  return { system_output: "System audio", microphone: "Microphone", replay: "Recorded audio", typed: "Typed input" }[kind];
 }
 
 export function providerLabel(provider: ProviderSelection | null): string {
@@ -139,11 +139,10 @@ export function activity(view: DesktopView): Activity {
   if (phase === "ready" || phase === "drafting" || phase === "answering") return { title: "Writing answer…", detail: "Putting together a suggested answer.", tone: "busy" };
   if (speech_active) return { title: "Hearing speech", detail: "Turning speech into text.", tone: "live" };
   if (phase === "candidate" || phase === "waiting" || phase === "incomplete") return { title: "Question heard", tone: "live",
-    detail: !view.provider && view.mode !== "sample" ? "Connect answers in Settings to get replies."
+    detail: !view.provider ? "Connect answers in Settings to get replies."
       : view.auto_answer ? "Waiting for them to finish…" : "Press Get answer when they finish." };
   if (phase === "error") return { title: "Answer failed", detail: "The message above says what to try next.", tone: "warn" };
   if (phase === "cancelled") return { title: "Answer cancelled", detail: "Press Retry answer.", tone: "warn" };
   if (phase === "checked") return { title: "Answer ready", detail: "Still listening for the next question.", tone: "done" };
-  return view.mode === "sample" ? { title: "Playing sample", detail: "A recorded practice question is playing.", tone: "live" }
-    : { title: "Listening", detail: "Listening for the next question.", tone: "live" };
+  return { title: "Listening", detail: "Listening for the next question.", tone: "live" };
 }

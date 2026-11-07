@@ -2,7 +2,7 @@
 
 ## Run the app
 
-1. On the start screen, pick what to **Listen to** (the speakers or headphones your call plays through) and get the **Speech model** (**Download** or **Choose file**). Optionally choose **Connect answers**: **Continue with ChatGPT** for browser sign-in, a Claude Console API key, or a local Ollama model, then **Use**. **Try a sample** plays an offline rehearsal with bundled answers.
+1. On the start screen, pick what to **Listen to** (the speakers or headphones your call plays through) and get the **Speech model** (**Download** or **Choose file**). Optionally choose **Connect answers**: **Continue with ChatGPT** for browser sign-in, a Claude Console API key, or a local Ollama model, then **Use**.
 2. **Start listening** opens a see-through answer window that stays on top of the call, with an **Opacity** slider. Its status line shows each step: Listening, Hearing speech, Question heard, Writing answer, Answer ready. Answers start automatically when **Answer detected questions automatically** is on; otherwise use **Get answer**. **Answer what they said** answers the latest lines when no question was detected.
 3. Use **Pause**, **Resume**, or **Stop** to control capture. **Retry same source** resumes a recoverable device failure in the current session. **Main window** shows the transcript, the full answer and **Ask a question**.
 4. After stopping, choose **Save to history** to retain the available final transcript and checked answers in SQLite. Find it under **History** to add notes, export it, or delete it. **Clear current session** clears the workspace.
@@ -50,7 +50,7 @@ cargo run --release --locked -p copilot --features audio -- devices
 
 | Scenario | Pass condition |
 | --- | --- |
-| Clean install and uninstall | The unsigned installer opens the sample on a clean Windows 11 x64 user account with WebView2. Uninstall removes the app and its shortcuts. |
+| Clean install and uninstall | The unsigned installer opens the start screen on a clean Windows 11 x64 user account with WebView2. Uninstall removes the app and its shortcuts. |
 | Physical audio endpoints | Default and explicit routes work for speakers and a headset. Unplug and default switch produce clear recovery. A chosen microphone stays separate from output. |
 | Long and difficult speech | Run consented or licensed Indian English and meeting-codec fixtures. Report quiet/short utterances, mixed speakers, technical vocabulary, gaps, and latency separately. |
 | Desktop scaling and interaction | Inspect at OS 100% and 150%, with large and small windows. Check keyboard focus, long streams, scroll anchoring, and copied Markdown/code. |

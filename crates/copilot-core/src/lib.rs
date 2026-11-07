@@ -2,7 +2,6 @@
 
 mod boundary;
 mod protocol;
-pub mod rehearsal;
 mod session;
 
 pub use protocol::*;

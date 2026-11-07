@@ -2,7 +2,6 @@
 
 ## In the Windows preview
 
-- Offline rehearsal with prepared questions, answers, and follow-ups.
 - Local transcription from one Windows microphone or playback device, with question detection.
 - Optional answer providers, including local Ollama and Claude Console. ChatGPT plan usage is a preview integration.
 - Local history with search, notes, export, and deletion.
@@ -18,7 +17,7 @@
 
 - Better recognition of technical terms and short follow-up questions.
 - Easier first-run setup and clearer recovery messages.
-- More rehearsal material and accessibility feedback.
+- Accessibility feedback.
 - More local model choices where compatibility and redistribution terms are clear.
 
 See the [feature audit](audit/FEATURE_PARITY_MATRIX.md) for implementation gaps. Share your use case in [Discussions](https://github.com/Jigsaw777/Personal-Interview-Assistant/discussions).

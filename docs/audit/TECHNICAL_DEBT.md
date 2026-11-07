@@ -10,5 +10,5 @@
 | P1 | [emit](../../apps/desktop/src-tauri/src/workspace.rs#L332) serializes the whole transcript and answer history for meter changes. | Measure payload work separately from inference. Batch or split metering without regressing renderer ordering. |
 | P1 | [LocalWhisper::load](../../crates/copilot-audio/src/whisper.rs#L37) reads the pinned weight file into a full buffer before allocation of Whisper context. | Retain byte-level integrity. Profile load and peak commit before changing memory ownership. |
 | P1 | [main.tsx](../../apps/desktop/src/main.tsx#L23) owns app navigation, state and workspace. | Keep the verified answer reading area and compact window. Separate high-traffic views and centralize theme/spacing before new screens. |
-| P1 | [README](../../README.md) describes legacy auth/provider flows. Rust [rehearsal](../../crates/copilot-core/src/rehearsal.rs#L38) is offline practice. | Report these separately. Add a tested local provider before enabling other traffic. |
+| P1 | [README](../../README.md) describes legacy auth/provider flows. Rust `rehearsal` (since removed) was offline practice. | Report these separately. Add a tested local provider before enabling other traffic. |
 | P2 | [preview.yml](../../.github/workflows/preview.yml) is manually dispatched. | Add reproducible checks without dispatching paid or hosted runs. |

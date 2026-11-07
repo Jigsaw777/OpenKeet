@@ -1,8 +1,0 @@
-[
-  {"at_ms":280,"id":1,"revision":1,"start_ms":120,"end_ms":280,"stability":"interim","text":"How would you protect"},
-  {"at_ms":740,"id":1,"revision":2,"start_ms":120,"end_ms":700,"stability":"final","text":"How would you protect shared state"},
-  {"at_ms":2360,"id":2,"revision":1,"start_ms":2300,"end_ms":2360,"stability":"interim","text":"with blocking the"},
-  {"at_ms":3020,"id":2,"revision":2,"start_ms":2300,"end_ms":2970,"stability":"final","text":"without blocking the coroutine thread?"},
-  {"at_ms":7450,"id":3,"revision":1,"start_ms":7200,"end_ms":7450,"stability":"interim","text":"What if the API"},
-  {"at_ms":8270,"id":3,"revision":2,"start_ms":7200,"end_ms":8220,"stability":"final","text":"What if the API call blocks?"}
-]

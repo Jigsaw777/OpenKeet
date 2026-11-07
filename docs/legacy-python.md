@@ -24,8 +24,8 @@ The prototype also contains adapters for installed Claude Code and Codex binarie
 
 ## Select an audio source
 
-- **Windows.** Select the playback output carrying the mock interview. See the [legacy Windows guide](../WINDOWS_QUICKSTART.md).
+- **Windows.** Select the playback output carrying the practice call. See the [legacy Windows guide](../WINDOWS_QUICKSTART.md).
 - **macOS.** Use a virtual input such as [BlackHole](https://github.com/ExistentialAudio/BlackHole). In Audio MIDI Setup, create a Multi-Output Device for BlackHole and your headphones. Send the mock call there and select BlackHole as the input in OpenKeet.
-- **Linux.** Select a PulseAudio or compatible PipeWire monitor for the output that plays the mock call.
+- **Linux.** Select a PulseAudio or compatible PipeWire monitor for the output that plays the practice call.
 
 In **Audio**, load the local `small.en` model and select **Start listening**. The Windows launcher starts model setup automatically. Stop when finished. [Prototype validation](../VALIDATION.md)

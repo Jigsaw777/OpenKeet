@@ -22,4 +22,4 @@
 - [Desktop architecture](architecture/DESKTOP_3_0.md)
 - [Speech benchmark instructions](../benchmarks/README.md) and [results](benchmarks/interview-stress.md)
 - [Roadmap](roadmap.md) and [release readiness](release-readiness.md)
-- [Brand guide](brand/BRAND.md), [design system](brand/DESIGN_SYSTEM.md) and [website copy](brand/WEBSITE.md)
+- [Brand guide](brand/BRAND.md) and [design system](brand/DESIGN_SYSTEM.md)

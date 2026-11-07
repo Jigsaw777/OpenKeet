@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     path::Path,
     sync::{Arc, Mutex},
     thread,
@@ -10,7 +9,6 @@ use copilot_audio::{AudioError, AudioEvent, Engine, Stop, StreamOptions, elapsed
 use copilot_core::{
     AnswerFailure, AnswerKey, CaptureState, MAX_QUESTION_BYTES, Policy, Session, Snapshot, Source,
     SourceKind, Span, Work,
-    rehearsal::{self, Step},
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -23,7 +21,6 @@ pub type Shared = Arc<Mutex<Desktop>>;
 #[serde(rename_all = "snake_case")]
 enum Mode {
     Idle,
-    Sample,
     Audio,
 }
 
@@ -40,14 +37,6 @@ pub struct CaptureConfig {
     short_followups: bool,
     #[serde(default)]
     consent: bool,
-}
-
-struct Replay {
-    steps: VecDeque<Step>,
-    elapsed: u64,
-    finish_at_ms: u64,
-    tick: Instant,
-    paused: bool,
 }
 
 struct AudioRun {
@@ -113,7 +102,6 @@ pub struct Desktop {
     update: u64,
     clock: Instant,
     mode: Mode,
-    replay: Option<Replay>,
     audio: Option<AudioRun>,
     config: Option<CaptureConfig>,
     next_utterance: u64,
@@ -132,7 +120,6 @@ impl Desktop {
             update: 0,
             clock: Instant::now(),
             mode: Mode::Idle,
-            replay: None,
             audio: None,
             config: None,
             next_utterance: 1,
@@ -172,10 +159,7 @@ impl Desktop {
     }
 
     fn reset(&mut self, mode: Mode, source: Source, policy: Policy) -> Result<(), String> {
-        if self.audio.is_some()
-            || self.replay.is_some()
-            || self.session.capture_state() == CaptureState::Paused
-        {
+        if self.audio.is_some() || self.session.capture_state() == CaptureState::Paused {
             return Err("Stop the current session first.".into());
         }
         self.serial += 1;
@@ -187,27 +171,6 @@ impl Desktop {
         self.next_utterance = 1;
         self.meter = 0;
         self.audio_metrics = AudioMetrics::default();
-        Ok(())
-    }
-
-    pub fn start_sample(&mut self) -> Result<(), String> {
-        let steps: VecDeque<Step> = serde_json::from_str(rehearsal::DEMO_JSON)
-            .map_err(|_| "Could not read the bundled sample.")?;
-        let policy = Policy {
-            auto_answer: true,
-            draft_after_ms: Some(600),
-            ..Policy::default()
-        };
-        let finish_at_ms = steps.back().map_or(0, |last| last.at_ms) + policy.debounce_ms + 200;
-        self.reset(Mode::Sample, Source::REPLAY, policy)?;
-        self.session.set_capture(CaptureState::Capturing, 0);
-        self.replay = Some(Replay {
-            steps,
-            elapsed: 0,
-            finish_at_ms,
-            tick: Instant::now(),
-            paused: false,
-        });
         Ok(())
     }
 
@@ -277,15 +240,8 @@ impl Desktop {
             }
             audio.stop.request();
         } else if pause {
-            let replay = self
-                .replay
-                .as_mut()
-                .ok_or("Start a session before pausing it.")?;
-            replay.paused = true;
-            self.session
-                .set_capture(CaptureState::Paused, replay.elapsed);
+            return Err("Start a session before pausing it.".into());
         } else {
-            self.replay = None;
             self.config = None;
             self.session.discard_interim();
             self.session
@@ -299,9 +255,6 @@ impl Desktop {
         if text.trim().is_empty() || text.trim().len() > MAX_QUESTION_BYTES {
             return Err("Enter a question within the length limit.".into());
         }
-        if matches!(self.mode, Mode::Sample) {
-            self.reset(Mode::Idle, Source::TYPED, provider_policy())?;
-        }
         self.session
             .ask(text, elapsed_ms(self.clock))
             .map_err(Into::into)
@@ -312,10 +265,7 @@ impl Desktop {
     }
 
     pub fn archive(&self) -> Result<(String, u64, Snapshot), String> {
-        if self.audio.is_some()
-            || self.replay.is_some()
-            || self.session.capture_state() == CaptureState::Paused
-        {
+        if self.audio.is_some() || self.session.capture_state() == CaptureState::Paused {
             return Err("Stop the session before saving it to history.".into());
         }
         let key = format!("{}:{}", self.instance_id, self.serial);
@@ -323,9 +273,7 @@ impl Desktop {
     }
 
     pub fn request_detected(&mut self) -> Result<(), String> {
-        if !matches!(self.mode, Mode::Sample) {
-            self.require_provider()?;
-        }
+        self.require_provider()?;
         self.session.request_detected().map_err(Into::into)
     }
 
@@ -348,7 +296,7 @@ impl Desktop {
     }
 
     pub fn sync_provider(&mut self, provider: Option<Selection>) {
-        if self.provider != provider && !matches!(self.mode, Mode::Sample) {
+        if self.provider != provider {
             self.session.change_answer_route();
         }
         self.provider = provider;
@@ -363,7 +311,6 @@ impl Desktop {
             .audio
             .as_ref()
             .is_some_and(|audio| audio.stopping.is_none())
-            || self.replay.as_ref().is_some_and(|replay| !replay.paused)
         {
             self.stop(true)?;
         }
@@ -380,49 +327,13 @@ impl Desktop {
 
     pub fn tick(&mut self) -> (Option<View>, Option<Generation>) {
         let before = self.session.sequence();
-        let now = if let Some(replay) = &mut self.replay {
-            if replay.paused {
-                return (None, None);
-            }
-            let instant = Instant::now();
-            replay.elapsed += instant.duration_since(replay.tick).as_millis() as u64;
-            replay.tick = instant;
-            while replay
-                .steps
-                .front()
-                .is_some_and(|step| step.at_ms <= replay.elapsed)
-            {
-                if let Err(message) = replay
-                    .steps
-                    .pop_front()
-                    .expect("due step")
-                    .apply(&mut self.session)
-                {
-                    self.session.audio_gap(Span::at(replay.elapsed), 0, message);
-                    self.replay = None;
-                    return (Some(self.changed()), None);
-                }
-            }
-            let elapsed = replay.elapsed;
-            if replay.steps.is_empty() && elapsed >= replay.finish_at_ms {
-                self.session.set_capture(CaptureState::Stopped, elapsed);
-                self.replay = None;
-            }
-            elapsed
-        } else {
-            elapsed_ms(self.clock)
-        };
-        let generation = if matches!(self.mode, Mode::Sample) {
-            rehearsal::answer_available(&mut self.session, now);
-            None
-        } else {
-            self.provider.as_ref().and_then(|route| {
-                self.session.next_request(now).map(|work| Generation {
-                    route: route.clone(),
-                    work,
-                })
+        let now = elapsed_ms(self.clock);
+        let generation = self.provider.as_ref().and_then(|route| {
+            self.session.next_request(now).map(|work| Generation {
+                route: route.clone(),
+                work,
             })
-        };
+        });
         (
             (self.session.sequence() != before).then(|| self.changed()),
             generation,
@@ -598,22 +509,6 @@ pub fn update(
     };
     emit(app, &view);
     Ok(view)
-}
-
-pub fn resume_sample(app: &AppHandle, state: &Shared) -> Option<View> {
-    let view = {
-        let mut desktop = state.lock().expect("desktop session lock");
-        let replay = desktop.replay.as_mut()?;
-        replay.paused = false;
-        replay.tick = Instant::now();
-        let elapsed = replay.elapsed;
-        desktop
-            .session
-            .set_capture(CaptureState::Capturing, elapsed);
-        desktop.changed()
-    };
-    emit(app, &view);
-    Some(view)
 }
 
 pub fn start_audio(

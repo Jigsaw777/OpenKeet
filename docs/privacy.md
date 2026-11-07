@@ -6,7 +6,7 @@ This guide covers the Windows desktop preview. The older Python prototype has [s
 
 You choose one microphone or one Windows playback device. Windows playback capture can include any sounds playing on that device. Use a consented session and stop unrelated playback. Windows microphone permissions apply when you choose a mic.
 
-A local speech model processes audio in memory. The app keeps a bounded working transcript and answer history for the session. Use **Pause**, **Stop**, or **Clear current session** to control the active workspace. **Try a sample** uses bundled text without opening an audio device.
+A local speech model processes audio in memory. The app keeps a bounded working transcript and answer history for the session. Use **Pause**, **Stop**, or **Clear current session** to control the active workspace.
 
 ## What goes to an answer provider
 

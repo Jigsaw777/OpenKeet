@@ -99,13 +99,12 @@ export function useAudioSetup(enabled: boolean) {
 export type AudioSettings = ReturnType<typeof useAudioSetup>;
 
 /** The whole first-run flow: pick what to hear, get a speech model, optionally connect answers, start. */
-export function StartCard({ view, audio, enabled, starting, start, sample, connect }: {
+export function StartCard({ view, audio, enabled, starting, start, connect }: {
   view: DesktopView;
   audio: AudioSettings;
   enabled: boolean;
   starting: boolean;
   start: () => void;
-  sample: () => void;
   connect: () => void;
 }) {
   const { prefs, selected, modelReady } = audio;
@@ -158,7 +157,6 @@ export function StartCard({ view, audio, enabled, starting, start, sample, conne
     <div className="actions">
       <button className="primary big" disabled={disabled || !ready || view.update < 0} onClick={start}>
         {starting ? "Starting…" : "Start listening"} <Icon name="arrow" /></button>
-      <button className="text-button" disabled={disabled || view.update < 0} onClick={sample}>Try a sample</button>
     </div>
     <p className="subtle">Answers show in a see-through window on top of your call. {view.shortcut_available ? <><kbd>Ctrl+Alt+I</kbd> brings it back if hidden.</> : "Use the tray icon to bring it back if hidden."} Only capture audio you have permission to record.</p>
   </section>;
