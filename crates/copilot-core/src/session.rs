@@ -133,6 +133,11 @@ impl Session {
         }
     }
 
+    /// The newest question, without cloning the whole snapshot.
+    pub fn current_question(&self) -> Option<&QuestionView> {
+        self.questions.back().map(|q| &q.view)
+    }
+
     pub fn sequence(&self) -> u64 {
         self.sequence
     }

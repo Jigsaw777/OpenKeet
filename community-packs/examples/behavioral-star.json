@@ -1,0 +1,90 @@
+{
+  "format": "openkeet.community-pack",
+  "schemaVersion": "1.0.0",
+  "id": "org.openkeet.examples.behavioral-star",
+  "version": "1.0.0",
+  "title": "Behavioral Questions (STAR)",
+  "description": "Common behavioral prompts with follow-ups. There are no reference answers: answer with your own real experiences, using situation, task, action, result and reflection.",
+  "authors": [{ "name": "OpenKeet contributors" }],
+  "license": "CC-BY-4.0",
+  "language": "en",
+  "tags": ["behavioral", "star"],
+  "minimumAppVersion": "0.1.0",
+  "skills": [
+    { "id": "ownership", "name": "Ownership", "behavioral": true },
+    { "id": "collaboration", "name": "Collaboration", "behavioral": true },
+    { "id": "communication", "name": "Communication", "behavioral": true },
+    { "id": "leadership", "name": "Leadership", "behavioral": true },
+    { "id": "problem-solving", "name": "Problem solving", "behavioral": true }
+  ],
+  "questions": [
+    {
+      "id": "b-incident",
+      "skillIds": ["ownership", "problem-solving"],
+      "question": "Tell me about a difficult production incident you handled.",
+      "paraphrases": ["Describe a time you dealt with an outage.", "Tell me about a time production broke on your watch."],
+      "intent": "behavioral",
+      "difficulty": 3,
+      "answerOutline": ["Situation", "Task", "Action you took", "Result", "Reflection"],
+      "followupIds": ["b-incident-role", "b-incident-first", "b-incident-next"]
+    },
+    {
+      "id": "b-incident-role",
+      "skillIds": ["ownership"],
+      "question": "What was your own role in resolving that incident?",
+      "intent": "behavioral",
+      "difficulty": 2,
+      "answerOutline": ["Action you took", "Result"]
+    },
+    {
+      "id": "b-incident-first",
+      "skillIds": ["problem-solving"],
+      "question": "How did you decide what to investigate first during that incident?",
+      "intent": "behavioral",
+      "difficulty": 3,
+      "answerOutline": ["Situation", "Action you took"]
+    },
+    {
+      "id": "b-incident-next",
+      "skillIds": ["ownership"],
+      "question": "What would you change next time after that incident?",
+      "intent": "behavioral",
+      "difficulty": 2,
+      "answerOutline": ["Reflection"]
+    },
+    {
+      "id": "b-disagree",
+      "skillIds": ["collaboration"],
+      "question": "Tell me about a time you disagreed with a teammate.",
+      "paraphrases": ["Describe a conflict with a colleague and how you handled it."],
+      "intent": "behavioral",
+      "difficulty": 2,
+      "answerOutline": ["Situation", "Task", "Action you took", "Result", "Reflection"]
+    },
+    {
+      "id": "b-failure",
+      "skillIds": ["problem-solving"],
+      "question": "Tell me about a time something you built didn't work as planned.",
+      "paraphrases": ["Describe a mistake you made at work and what you learned."],
+      "intent": "behavioral",
+      "difficulty": 3,
+      "answerOutline": ["Situation", "Task", "Action you took", "Result", "Reflection"]
+    },
+    {
+      "id": "b-explain",
+      "skillIds": ["communication"],
+      "question": "Describe a time you explained a technical decision to non-technical stakeholders.",
+      "intent": "behavioral",
+      "difficulty": 2,
+      "answerOutline": ["Situation", "Task", "Action you took", "Result"]
+    },
+    {
+      "id": "b-lead",
+      "skillIds": ["leadership"],
+      "question": "Tell me about a time you took the lead without being the manager.",
+      "intent": "behavioral",
+      "difficulty": 3,
+      "answerOutline": ["Situation", "Task", "Action you took", "Result", "Reflection"]
+    }
+  ]
+}

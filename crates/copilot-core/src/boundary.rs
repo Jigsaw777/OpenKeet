@@ -349,6 +349,16 @@ pub(crate) fn incomplete(text: &str) -> bool {
         "tell me",
         "what if",
         "how about",
+        // A request verb with no object yet: "Can you explain…" (pause) "…thread pools?"
+        "explain",
+        "describe",
+        "compare",
+        "can you explain",
+        "could you explain",
+        "can you describe",
+        "could you describe",
+        "can you tell me",
+        "tell me about",
     ]
     .contains(&text.as_str())
         || scenario_lead(&text, raw)

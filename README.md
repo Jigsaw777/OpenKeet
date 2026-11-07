@@ -28,6 +28,20 @@ Interviews can be stressful. Preparing for them shouldn't be. OpenKeet helps you
 
 Typing one question you expect to hear is a good place to start if you're preparing for your first interview. Engineers can work through trade-offs, career switchers can practice describing transferable skills, and experienced candidates can rehearse leadership stories. [Practice guide](docs/interview-preparation.md)
 
+## Prepare for the questions that matter
+
+Add your resume and the role you're applying for. OpenKeet helps you organize topics, practice tougher follow-ups, and review answers grounded in your own experience. Use local AI or a supported provider you choose. Community-created interview packs make it easy to learn from others.
+
+| Feature | What it does | Status |
+| --- | --- | --- |
+| [Interview packs](docs/features/instantprep.md) | Resume + job description → ranked topics, questions, and 15 s / 45 s / 2 min answer drafts | Available offline. AI drafts need a connected provider |
+| [My experience](docs/features/truestory.md) | Facts from your documents with sources; confirm, correct, reject; conflict checks | Available offline |
+| [Practice](docs/features/challenge-mode.md) | Adaptive follow-ups, transparent feedback, readiness map | Type offline or use voice with a local speech model |
+| [Prepared answers in sessions](docs/features/anticipate.md) | Show approved matches for the current question revision without an AI call | Available |
+| [Community packs](docs/features/community-packs.md) | Install, update and share data-only question packs | Available offline. No online catalog yet |
+
+PDF import, optional local embedding search, AI-suggested facts and AI practice feedback are included. AI help runs only when you press it, with the provider you chose.
+
 ## From a question to a clearer answer
 
 1. To start with a typed question, connect an answer model in **Settings**. Return to **Session** and open **Ask a question**.

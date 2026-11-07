@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useMeter } from "./audio-meter";
 import { Mark } from "./brand";
-import type { DesktopView, Question, Session } from "./protocol";
+import type { Anticipation, DesktopView, Question, Session } from "./protocol";
 import { activity, sourceLabel } from "./protocol";
 
 export type Command = (name: string, args?: Record<string, unknown>) => Promise<boolean>;
@@ -91,9 +91,10 @@ function formatTime(ms: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function AnswerPanel({ question, copy, command, connected, chooseProvider, answerHeard, compact = false, footer }: {
+export function AnswerPanel({ question, copy, command, connected, chooseProvider, answerHeard, compact = false, footer, origin, anticipation }: {
   question: Question | null; copy: (text: string) => void; command: Command;
   connected: boolean; chooseProvider?: () => void; answerHeard?: () => void; compact?: boolean; footer?: ReactNode;
+  origin?: string | null; anticipation?: Anticipation | null;
 }) {
   const answer = question?.answer;
   const retry = question?.phase === "error" || question?.phase === "cancelled";
@@ -122,11 +123,17 @@ export function AnswerPanel({ question, copy, command, connected, chooseProvider
       <div className="meta-line"><p className="eyebrow">{shaping ? "Question taking shape" : question ? "Question" : "Current question"}</p>{question && <span className="soft-label">Revision {question.revision}</span>}</div>
       <p className="question-text">{text}</p>
       {followUp}
+      {shaping && anticipation && anticipation.candidates.length > 0 && <div className="possible" aria-live="polite">
+        <p className="eyebrow">Possible interpretation · not final</p>
+        <ul>{anticipation.candidates.map(c => <li key={c.family_id}>{c.question}{" "}
+          <button className="text-button" onClick={() => void command("use_prepared", { familyId: c.family_id })}>Use this answer</button></li>)}</ul>
+      </div>}
     </div>}
     <div className="card-head"><div>{!compact && <p className="eyebrow">Suggested answer</p>}<h2 id="answer-title">{title}</h2></div>
       <span className={`soft-label answer-${answer?.status ?? "empty"}`}>{label}</span></div>
     <div ref={scroll} className="answer-content" role="region" aria-label={`${title} text`} tabIndex={0}>
-      {answer ? <><div className={answer.status === "superseded" ? "answer-body superseded" : "answer-body"}><AnswerText text={answer.text} /></div>
+      {answer ? <>{origin && answer.status !== "superseded" && <p className="answer-origin"><span className="soft-label">{origin}</span></p>}
+        <div className={answer.status === "superseded" ? "answer-body superseded" : "answer-body"}><AnswerText text={answer.text} /></div>
         {answer.status === "superseded" && <p className="subtle">This answer is from an earlier revision.</p>}</> :
         <Empty label={connected ? (canCancel ? "Waiting for an answer" : "Ready for your question") : "Transcription only"}
           detail={connected

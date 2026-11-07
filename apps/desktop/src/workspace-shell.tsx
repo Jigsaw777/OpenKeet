@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Logo } from "./brand";
 
-export type Page = "session" | "history" | "audio" | "providers";
+export type Page = "session" | "prepare" | "experience" | "practice" | "community" | "history" | "audio" | "providers";
 export type Theme = "dark" | "light" | "system";
 
 export function AppShell({ page, navigate, shortcut, status, hideWindow, children }: {
@@ -18,7 +18,11 @@ export function AppShell({ page, navigate, shortcut, status, hideWindow, childre
     <header className="app-header">
       <div className="brand"><Logo height={30} /></div>
       <nav aria-label="Workspace">
+        <button aria-current={page === "prepare" ? "page" : undefined} onClick={() => navigate("prepare")}>Prepare</button>
+        <button aria-current={page === "experience" ? "page" : undefined} onClick={() => navigate("experience")}>My experience</button>
+        <button aria-current={page === "practice" ? "page" : undefined} onClick={() => navigate("practice")}>Practice</button>
         <button aria-current={page === "session" ? "page" : undefined} onClick={() => navigate("session")}>Session</button>
+        <button aria-current={page === "community" ? "page" : undefined} onClick={() => navigate("community")}>Community</button>
         <button aria-current={settings ? "page" : undefined} onClick={() => navigate("providers")}>Settings</button>
         <button aria-current={page === "history" ? "page" : undefined} onClick={() => navigate("history")}>History</button>
       </nav>

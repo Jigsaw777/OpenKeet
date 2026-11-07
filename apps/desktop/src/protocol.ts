@@ -58,7 +58,18 @@ export type DesktopView = {
   provider: ProviderSelection | null;
   shortcut_available: boolean;
   auto_answer: boolean;
+  /** The interview pack whose approved answers this session uses, if any. */
+  pack: { id: string; name: string; revision: number; paraphrase: string | null } | null;
+  /** Tentative local matches for a question still forming. Never an answer. */
+  anticipation: Anticipation | null;
+  prepared_answers: PreparedAnswer[];
 };
+export type Anticipation = {
+  session_id: number; question_id: number; revision: number; pack_revision: number; forming: boolean;
+  outcome: "prepared" | "community" | "unapproved" | "clarify" | "no_match";
+  candidates: { family_id: string; question: string; score: number }[];
+};
+export type PreparedAnswer = { key: Answer["key"]; label: string; question: string; attribution: string | null; pack_revision: number };
 export type Endpoint = { id: string; name: string; kind: SourceKind; is_default: boolean };
 export type MeterUpdate = { update: number; session_id: number; peak: number; frames: number };
 export type ProviderKind = "chatgpt" | "claude" | "ollama";
@@ -77,6 +88,9 @@ export const emptyView: DesktopView = {
   provider: null,
   shortcut_available: false,
   auto_answer: false,
+  pack: null,
+  anticipation: null,
+  prepared_answers: [],
   session: {
     protocol_version: 1,
     sequence: 0,
@@ -115,6 +129,22 @@ export function unansweredSpeech(session: Session): string {
     .slice(-3).map(line => line.text.trim()).join(" ").slice(-2_000);
 }
 
+/** Where the current answer came from, matched to its exact question revision. */
+export function answerOrigin(view: DesktopView): string | null {
+  const answer = view.session.question?.answer;
+  if (!answer) return null;
+  const same = (a: Answer["key"], b: Answer["key"]) => a.session_id === b.session_id && a.question_id === b.question_id && a.revision === b.revision && a.mode === b.mode;
+  const prepared = view.prepared_answers.find(item => same(item.key, answer.key));
+  if (prepared) return prepared.label + (prepared.attribution ? ` · ${prepared.attribution}` : "");
+  return view.provider ? "AI-generated suggestion" : null;
+}
+
+/** Tentative interpretation, shown only while it matches the current question revision. */
+export function currentAnticipation(view: DesktopView): Anticipation | null {
+  const a = view.anticipation, q = view.session.question;
+  return a && q && view.pack && a.session_id === view.session.session_id && a.question_id === q.id && a.revision === q.revision && a.pack_revision === view.pack.revision ? a : null;
+}
+
 export function sourceLabel(kind: SourceKind): string {
   return { system_output: "System audio", microphone: "Microphone", replay: "Recorded audio", typed: "Typed input" }[kind];
 }
@@ -136,10 +166,11 @@ export function activity(view: DesktopView): Activity {
   if (capture !== "capturing") return { title: "Not listening", detail: "Press Start listening when the interview begins.", tone: "idle" };
   const phase = question?.phase;
   // "ready" means an answer was already requested and is queued.
-  if (phase === "ready" || phase === "drafting" || phase === "answering") return { title: "Writing answer…", detail: "Putting together a suggested answer.", tone: "busy" };
+  if (phase === "ready" || phase === "drafting" || phase === "answering") return { title: view.pack ? "Looking through your prepared answers…" : "Writing answer…", detail: "Putting together a suggested answer.", tone: "busy" };
   if (speech_active) return { title: "Hearing speech", detail: "Turning speech into text.", tone: "live" };
-  if (phase === "candidate" || phase === "waiting" || phase === "incomplete") return { title: "Question heard", tone: "live",
-    detail: !view.provider ? "Connect answers in Settings to get replies."
+  if (phase === "incomplete") return { title: "The question is still taking shape", tone: "live", detail: "We'll wait for a little more context before suggesting an answer." };
+  if (phase === "candidate" || phase === "waiting") return { title: "Question heard", tone: "live",
+    detail: !view.provider && !view.pack ? "Connect answers in Settings to get replies."
       : view.auto_answer ? "Waiting for them to finish…" : "Press Get answer when they finish." };
   if (phase === "error") return { title: "Answer failed", detail: "The message above says what to try next.", tone: "warn" };
   if (phase === "cancelled") return { title: "Answer cancelled", detail: "Press Retry answer.", tone: "warn" };

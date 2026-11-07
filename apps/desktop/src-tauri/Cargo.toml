@@ -24,6 +24,9 @@ tauri-plugin-single-instance = "2"
 tempfile = "3"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "sync", "time"] }
 uuid = { version = "1", features = ["v4"] }
+# DOCX import reads word/document.xml only; Word stores it with deflate.
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+pdf-extract = "0.12.1"
 
 [target.'cfg(windows)'.dependencies]
 # Direct `links` dependency: its build script fetches the DLLs that

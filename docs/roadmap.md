@@ -5,6 +5,7 @@
 - Local transcription from one Windows microphone or playback device, with question detection.
 - Optional answer providers, including local Ollama and Claude Console. ChatGPT plan usage is a preview integration.
 - Local history with search, notes, export, and deletion.
+- Interview prep in source builds: [interview packs](features/instantprep.md), [experience review](features/truestory.md), [prepared answers](features/anticipate.md), [practice](features/challenge-mode.md), and [community packs](features/community-packs.md).
 
 ## Before a public release
 

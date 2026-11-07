@@ -1,0 +1,86 @@
+{
+  "format": "openkeet.community-pack",
+  "schemaVersion": "1.0.0",
+  "id": "org.openkeet.examples.system-design",
+  "version": "1.0.0",
+  "title": "System Design Starter Pack",
+  "description": "Common system design prompts with structured outlines. Real interviews reward clarifying requirements and explaining trade-offs, not reciting one answer.",
+  "authors": [{ "name": "OpenKeet contributors" }],
+  "license": "CC-BY-4.0",
+  "language": "en",
+  "tags": ["system-design", "architecture"],
+  "minimumAppVersion": "0.1.0",
+  "skills": [
+    { "id": "system-design", "name": "System design" },
+    { "id": "kafka", "name": "Kafka" },
+    { "id": "observability", "name": "Observability" }
+  ],
+  "questions": [
+    {
+      "id": "sd-url-shortener",
+      "skillIds": ["system-design"],
+      "question": "How would you design a URL shortener?",
+      "paraphrases": ["Design a service like a link shortener.", "How would you build a short-link service?"],
+      "intent": "design",
+      "difficulty": 3,
+      "answerOutline": ["Requirements and a read/write estimate", "ID generation", "Storage choice", "Caching popular links", "Abuse, expiry and monitoring"],
+      "referenceAnswer": "Start with requirements: create short links, redirect quickly, and estimate reads versus writes; reads usually dominate. Generate IDs from a counter encoded in base62, or use random keys with a collision check. Store mappings in a key-value store or a relational table keyed by the short ID. Cache popular links close to users. Add rate limits against abuse, expiry for old links, and monitoring for redirect latency and errors.",
+      "followupIds": ["sd-scaling-reads"]
+    },
+    {
+      "id": "sd-rate-limiter",
+      "skillIds": ["system-design"],
+      "question": "How would you design a rate limiter for an API?",
+      "paraphrases": ["Design an API rate limiter.", "How would you build rate limiting across several servers?"],
+      "intent": "design",
+      "difficulty": 3,
+      "answerOutline": ["What is limited, and over which window", "Token bucket or sliding window", "Shared counters across servers", "HTTP 429 and Retry-After", "Behaviour when the limiter store is down"],
+      "referenceAnswer": "Clarify the limit first: per user, API key or IP, and over what window. A token bucket allows short bursts while enforcing an average rate; a sliding window gives smoother limits. With several servers, keep counters in a shared store such as Redis using atomic increments with expiry, or run a local limiter per node with a lower limit. Return HTTP 429 with a Retry-After header, and decide whether to fail open or closed if the counter store is unavailable.",
+      "followupIds": []
+    },
+    {
+      "id": "sd-scaling-reads",
+      "skillIds": ["system-design"],
+      "question": "How would you scale a read-heavy service?",
+      "paraphrases": ["How do you handle a big increase in read traffic?"],
+      "intent": "design",
+      "difficulty": 2,
+      "answerOutline": ["Cache frequently read data", "Read replicas and replica lag", "CDN for cacheable responses", "Stateless instances behind a load balancer"],
+      "referenceAnswer": "Cache frequently read data, add read replicas, serve cacheable responses from a CDN, and keep the service stateless so you can add instances behind a load balancer. Watch replica lag, because replicas can return slightly stale data.",
+      "followupIds": []
+    },
+    {
+      "id": "sd-queue",
+      "skillIds": ["kafka", "system-design"],
+      "question": "When would you put a message queue between two services?",
+      "paraphrases": ["Why use a message queue?", "When does Kafka help between services?"],
+      "intent": "explain",
+      "difficulty": 2,
+      "answerOutline": ["Producer shouldn't wait for the consumer", "Absorb bursts", "Several consumers of the same events", "Idempotent consumers and lag monitoring"],
+      "referenceAnswer": "Use a queue when the producer shouldn't wait for the consumer, when traffic arrives in bursts the consumer can't absorb, or when several consumers need the same events. The queue decouples the services and smooths load. Consumers must handle duplicate and out-of-order messages, so make processing idempotent, and monitor queue depth and consumer lag.",
+      "followupIds": []
+    },
+    {
+      "id": "sd-consistency",
+      "skillIds": ["system-design"],
+      "question": "What is the trade-off between consistency and availability in a distributed system?",
+      "paraphrases": ["Explain the CAP theorem.", "Consistency or availability: how do you choose?"],
+      "intent": "tradeoff",
+      "difficulty": 3,
+      "answerOutline": ["Partitions force a choice", "Latency trade-off without partitions", "Choose per feature"],
+      "referenceAnswer": "When a network partition separates nodes, a system must either reject some requests to stay consistent or answer them with possibly stale data to stay available; this is the CAP trade-off. Without a partition there is still a latency trade-off: waiting for more replicas gives stronger consistency but slower responses. Choose per feature: payments usually need strong consistency, while a feed or view counter can be eventually consistent.",
+      "followupIds": []
+    },
+    {
+      "id": "sd-health",
+      "skillIds": ["observability"],
+      "question": "How would you know your service is healthy in production?",
+      "paraphrases": ["What would you monitor for a backend service?", "How do you set up monitoring and alerts?"],
+      "intent": "explain",
+      "difficulty": 2,
+      "answerOutline": ["Latency, traffic, errors and saturation", "Logs, metrics and traces", "Service level objectives", "Alert on user impact"],
+      "referenceAnswer": "Track latency, traffic, errors and saturation. Use structured logs for debugging, metrics with alerts on user-facing symptoms, and distributed tracing to follow a request across services. Define service level objectives so alerts fire on real user impact instead of on every spike.",
+      "followupIds": []
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::Path,
     sync::{Arc, Mutex},
     thread,
@@ -9,6 +10,11 @@ use copilot_audio::{AudioError, AudioEvent, Engine, Stop, StreamOptions, elapsed
 use copilot_core::{
     AnswerFailure, AnswerKey, CaptureState, MAX_QUESTION_BYTES, Policy, Session, Snapshot, Source,
     SourceKind, Span, Work,
+    prep::{
+        Length,
+        resolve::{Anticipation, Resolution, Resolver, anticipate, complete_from},
+        words,
+    },
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -76,8 +82,28 @@ struct Job {
 }
 
 pub struct Generation {
-    route: Selection,
+    route: Option<Selection>,
     work: Work,
+    /// Set when the active pack has paraphrase matching: tried before any provider.
+    semantic: Option<Arc<Resolver>>,
+}
+
+/// Provenance of an answer that came from the active interview pack, keyed to its exact turn.
+#[derive(Clone, Serialize)]
+pub struct PreparedAnswer {
+    key: AnswerKey,
+    label: String,
+    question: String,
+    attribution: Option<String>,
+    pack_revision: u32,
+}
+
+#[derive(Clone, Serialize)]
+struct PackRef {
+    id: String,
+    name: String,
+    revision: u32,
+    paraphrase: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -93,6 +119,9 @@ pub struct View {
     provider: Option<Selection>,
     shortcut_available: bool,
     auto_answer: bool,
+    pack: Option<PackRef>,
+    anticipation: Option<Anticipation>,
+    prepared_answers: Vec<PreparedAnswer>,
 }
 
 pub struct Desktop {
@@ -109,6 +138,12 @@ pub struct Desktop {
     audio_metrics: AudioMetrics,
     provider: Option<Selection>,
     shortcut_available: bool,
+    prepared: Option<Arc<Resolver>>,
+    anticipation: Option<Anticipation>,
+    prepared_answers: Vec<PreparedAnswer>,
+    /// Interpretation the user picked: (question id, revision, family id).
+    chosen: Option<(u64, u64, String)>,
+    query_vectors: HashMap<String, Vec<f32>>,
 }
 
 impl Desktop {
@@ -127,6 +162,11 @@ impl Desktop {
             audio_metrics: AudioMetrics::default(),
             provider: None,
             shortcut_available: false,
+            prepared: None,
+            anticipation: None,
+            prepared_answers: Vec::new(),
+            chosen: None,
+            query_vectors: HashMap::new(),
         }))
     }
 
@@ -150,12 +190,95 @@ impl Desktop {
             provider: self.provider.clone(),
             shortcut_available: self.shortcut_available,
             auto_answer: self.session.auto_answer(),
+            pack: self.prepared.as_ref().map(|r| PackRef {
+                id: r.pack_id.clone(),
+                name: r.pack_name.clone(),
+                revision: r.revision,
+                paraphrase: r.semantic_model().map(String::from),
+            }),
+            anticipation: self.anticipation.clone(),
+            prepared_answers: self.prepared_answers.clone(),
         }
     }
 
     fn changed(&mut self) -> View {
         self.update += 1;
+        self.refresh_anticipation();
         self.view()
+    }
+
+    /// Prefetches local candidates for a forming question; stale revisions are recomputed.
+    fn refresh_anticipation(&mut self) {
+        let (Some(resolver), Some(question)) = (&self.prepared, self.session.current_question())
+        else {
+            self.anticipation = None;
+            return;
+        };
+        if self
+            .anticipation
+            .as_ref()
+            .is_some_and(|a| a.is_current(self.serial, question, resolver.revision))
+        {
+            return;
+        }
+        self.anticipation = anticipate(resolver, self.serial, question);
+    }
+
+    /// Uses an interview pack's approved answers in sessions, or stops using one.
+    pub fn set_prepared(&mut self, resolver: Option<Arc<Resolver>>) -> Option<View> {
+        let unchanged = match (&self.prepared, &resolver) {
+            (None, None) => true,
+            (Some(a), Some(b)) => {
+                a.pack_id == b.pack_id
+                    && a.revision == b.revision
+                    && a.semantic_model() == b.semantic_model()
+            }
+            _ => false,
+        };
+        if unchanged {
+            return None;
+        }
+        self.prepared = resolver;
+        self.anticipation = None;
+        Some(self.changed())
+    }
+
+    pub fn prepared(&self) -> Option<&Arc<Resolver>> {
+        self.prepared.as_ref()
+    }
+
+    /// Answers the forming question with an interpretation the user picked from the list.
+    pub fn choose_candidate(&mut self, family_id: &str) -> Result<(), String> {
+        let question = self
+            .session
+            .current_question()
+            .ok_or("Wait for a question first.")?;
+        let listed = self.anticipation.as_ref().is_some_and(|a| {
+            a.question_id == question.id
+                && a.revision == question.revision
+                && a.candidates.iter().any(|c| c.family_id == family_id)
+        });
+        if !listed {
+            return Err("That suggestion is out of date. Wait for the question to settle.".into());
+        }
+        self.chosen = Some((question.id, question.revision, family_id.into()));
+        self.session.request_detected().map_err(Into::into)
+    }
+
+    fn remember(&mut self, key: AnswerKey, hit: Resolution) {
+        let Some(answer) = hit.answer else {
+            return;
+        };
+        if self.prepared_answers.len() == 32 {
+            self.prepared_answers.remove(0);
+        }
+        self.prepared_answers.push(PreparedAnswer {
+            key,
+            label: answer.label,
+            question: answer.question,
+            attribution: answer.attribution,
+            pack_revision: hit.pack_revision,
+        });
     }
 
     fn reset(&mut self, mode: Mode, source: Source, policy: Policy) -> Result<(), String> {
@@ -171,6 +294,9 @@ impl Desktop {
         self.next_utterance = 1;
         self.meter = 0;
         self.audio_metrics = AudioMetrics::default();
+        self.anticipation = None;
+        self.prepared_answers.clear();
+        self.chosen = None;
         Ok(())
     }
 
@@ -179,8 +305,11 @@ impl Desktop {
             if !config.consent {
                 return Err("Confirm that you have permission to capture this source.".into());
             }
-            if config.auto_answer && self.provider.is_none() {
-                return Err("Choose an answer provider before enabling automatic answers.".into());
+            if config.auto_answer && self.provider.is_none() && self.prepared.is_none() {
+                return Err(
+                    "Choose an answer provider or an interview pack before enabling automatic answers."
+                        .into(),
+                );
             }
             if !matches!(
                 config.source.kind,
@@ -278,10 +407,14 @@ impl Desktop {
     }
 
     fn require_provider(&self) -> Result<(), String> {
-        self.provider
-            .as_ref()
-            .map(|_| ())
-            .ok_or_else(|| "Choose an answer provider in Providers.".into())
+        if self.provider.is_some() || self.prepared.is_some() {
+            Ok(())
+        } else {
+            Err(
+                "Choose an answer provider in Settings, or use an interview pack in this session."
+                    .into(),
+            )
+        }
     }
 
     pub fn select_provider(
@@ -328,12 +461,40 @@ impl Desktop {
     pub fn tick(&mut self) -> (Option<View>, Option<Generation>) {
         let before = self.session.sequence();
         let now = elapsed_ms(self.clock);
-        let generation = self.provider.as_ref().and_then(|route| {
-            self.session.next_request(now).map(|work| Generation {
-                route: route.clone(),
-                work,
-            })
-        });
+        let mut generation = None;
+        if (self.provider.is_some() || self.prepared.is_some())
+            && let Some(work) = self.session.next_request(now)
+        {
+            // An approved prepared answer is used at once, with no model call.
+            let key = work.request.key;
+            let chosen = self
+                .chosen
+                .take()
+                .filter(|c| c.0 == key.question_id && c.1 == key.revision);
+            let resolver = self.prepared.clone();
+            let local = resolver.as_ref().and_then(|r| {
+                let resolution = match &chosen {
+                    Some((_, _, family)) => {
+                        r.choose(&work.request.question, family, Length::Standard)?
+                    }
+                    None => r.resolve(&work.request.question, Length::Standard),
+                };
+                complete_from(&mut self.session, &work, resolution, now)
+            });
+            let semantic = resolver.filter(|r| r.semantic_model().is_some());
+            if let Some(hit) = local {
+                self.remember(key, hit);
+            } else if self.provider.is_some() || semantic.is_some() {
+                generation = Some(Generation {
+                    route: self.provider.clone(),
+                    work,
+                    semantic,
+                });
+            } else {
+                self.session
+                    .complete(key, now, Err(AnswerFailure::NoPreparedMatch));
+            }
+        }
         (
             (self.session.sequence() != before).then(|| self.changed()),
             generation,
@@ -456,6 +617,23 @@ pub fn run_generation(
 ) {
     tauri::async_runtime::spawn(async move {
         let key = generation.work.request.key;
+        if let Some(resolver) = &generation.semantic
+            && let Some(view) =
+                semantic_answer(&state, &providers, resolver, &generation.work).await
+        {
+            emit(&app, &view);
+            return;
+        }
+        let Some(route) = generation.route.clone() else {
+            let view = state
+                .lock()
+                .expect("desktop session lock")
+                .finish_answer(key, Err(AnswerFailure::NoPreparedMatch));
+            if let Some(view) = view {
+                emit(&app, &view);
+            }
+            return;
+        };
         let cancel = async {
             while !generation.work.is_cancelled() {
                 tokio::time::sleep(Duration::from_millis(40)).await;
@@ -464,7 +642,7 @@ pub fn run_generation(
         let result = tokio::select! {
             biased;
             () = cancel => return,
-            answer = providers.answer(&generation.route, &generation.work.request, |delta| {
+            answer = providers.answer(&route, &generation.work.request, |delta| {
                 let view = {
                     let mut desktop = state.lock().expect("desktop session lock");
                     if generation.work.is_cancelled() {
@@ -491,6 +669,46 @@ pub fn run_generation(
             emit(&app, &view);
         }
     });
+}
+
+/// Embeds the question with the pack's local model and retries the pack. Any failure or a
+/// slow embedding falls through to the provider (or to "no prepared match").
+async fn semantic_answer(
+    state: &Shared,
+    providers: &ProviderHub,
+    resolver: &Resolver,
+    work: &Work,
+) -> Option<View> {
+    let model = resolver.semantic_model()?;
+    let question = &work.request.question;
+    let norm = format!("{model}\n{}", words(question).join(" "));
+    let cached = state
+        .lock()
+        .expect("desktop session lock")
+        .query_vectors
+        .get(&norm)
+        .cloned();
+    let vector = match cached {
+        Some(v) => v,
+        None => tokio::time::timeout(
+            Duration::from_millis(1_500),
+            providers.embed(model, std::slice::from_ref(question)),
+        )
+        .await
+        .ok()?
+        .ok()?
+        .pop()?,
+    };
+    let resolution = resolver.resolve_with(question, Length::Standard, Some(&vector));
+    let mut desktop = state.lock().expect("desktop session lock");
+    if desktop.query_vectors.len() >= 64 {
+        desktop.query_vectors.clear();
+    }
+    desktop.query_vectors.insert(norm, vector);
+    let now = elapsed_ms(desktop.clock);
+    let hit = complete_from(&mut desktop.session, work, resolution, now)?;
+    desktop.remember(work.request.key, hit);
+    Some(desktop.changed())
 }
 
 pub fn emit(app: &AppHandle, view: &View) {
@@ -687,6 +905,70 @@ mod tests {
         println!("Meter JSON {meter_size} bytes, full snapshot JSON {view_size} bytes.");
         assert_eq!(desktop.view().audio_metrics.frames, 200);
         assert!(meter_size * 10 < view_size);
+    }
+
+    #[test]
+    fn prepared_pack_answers_a_typed_question_without_a_provider() {
+        use copilot_core::prep::{PackSettings, Workspace, community};
+        let mut ws = Workspace::default();
+        let pack = include_str!("../../../../community-packs/examples/java-backend.json");
+        ws.install_community(community::parse(pack.as_bytes()).unwrap(), "java.json", 1)
+            .unwrap();
+        let settings = PackSettings {
+            name: "Java".into(),
+            community_ids: vec!["org.openkeet.examples.java-backend".into()],
+            ..PackSettings::default()
+        };
+        let id = ws.compile_pack(None, settings, 2).unwrap();
+        let shared = Desktop::shared();
+        let mut desktop = shared.lock().unwrap();
+        assert!(desktop.ask("When should I avoid Redis?").is_err());
+        desktop.set_prepared(Resolver::build(&ws, &id).map(Arc::new));
+        desktop.ask("When should I avoid Redis?").unwrap();
+        let (view, generation) = desktop.tick();
+        assert!(
+            generation.is_none(),
+            "no provider request for a prepared hit"
+        );
+        let view = view.unwrap();
+        let answer = view.session.question.unwrap().answer.unwrap();
+        assert!(answer.text.starts_with("Avoid a cache"));
+        assert_eq!(view.prepared_answers[0].key, answer.key);
+        assert_eq!(view.prepared_answers[0].label, "Community concept");
+        // A heard question still taking shape: the user picks a listed interpretation.
+        desktop.clear().unwrap();
+        let job = begin(&mut desktop);
+        desktop.audio_event(AudioEvent::Ready {
+            source: job.config.source,
+        });
+        desktop.audio_event(AudioEvent::Transcript {
+            utterance: Utterance {
+                id: 1,
+                revision: 1,
+                span: Span::at(200),
+                stability: Stability::Final,
+                text: "Can you explain when to use Redis".into(),
+            },
+            at_ms: 300,
+            decode_ms: 100,
+            queue_ms: 0,
+        });
+        let pick = desktop
+            .anticipation
+            .as_ref()
+            .expect("candidates while forming")
+            .candidates[0]
+            .family_id
+            .clone();
+        assert!(desktop.choose_candidate("not-listed").is_err());
+        desktop.choose_candidate(&pick).unwrap();
+        let (view, generation) = desktop.tick();
+        assert!(generation.is_none());
+        let question = view.unwrap().session.question.unwrap();
+        assert_eq!(
+            question.answer.unwrap().status,
+            copilot_core::AnswerStatus::Checked
+        );
     }
 
     #[test]
