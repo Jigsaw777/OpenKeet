@@ -2,11 +2,13 @@
 
 ## Personal Copilot 3.0 Windows preview
 
-The Rust preview runs on Windows 11 x64. Start with **Run sample session** in the matte workspace. In **Audio setup**, choose one Windows source and a verified local Whisper model, then confirm capture permission. Automatic suggestions are off for live capture until you enable them. The bundled answer engine provides offline practice examples.
+The Rust preview runs on Windows 11 x64. In **Providers**, connect ChatGPT, Claude Console, or local Ollama and choose a model. **Run sample session** plays an offline practice example. In **Audio setup**, choose one Windows source and a verified local Whisper model, then confirm capture permission. Automatic answers are off for live capture until you enable them.
+
+Use **Ctrl+Shift+I** or the Personal Copilot tray icon to show the workspace. **Answer view** expands the answer inside the workspace. **Focus window** opens a resizable reading panel.
 
 Stop a session before saving its retained transcript and checked answers to the local SQLite library. **Saved sessions** supports transcript search, notes, Markdown/JSON/TXT export, and deletion.
 
-See the [build and test guide](docs/desktop-slice.md), [3.0 validation report](docs/validation/DESKTOP_3_0.md), [paired performance comparison](docs/performance/PERFORMANCE_COMPARISON.md), and [feature parity matrix](docs/audit/FEATURE_PARITY_MATRIX.md).
+See the [build and test guide](docs/desktop-slice.md), [provider authorization audit](docs/audit/PROVIDER_AUTHORIZATION.md), [3.0 validation report](docs/validation/DESKTOP_3_0.md), [paired performance comparison](docs/performance/PERFORMANCE_COMPARISON.md), and [feature parity matrix](docs/audit/FEATURE_PARITY_MATRIX.md).
 
 ## Legacy Python app
 

@@ -1,6 +1,6 @@
 # Windows preview validation
 
-The private 3.0 work produced a Windows x64 installer at `target/release/bundle/nsis/Personal Copilot_0.1.0_x64-setup.exe`. The 0.1.0 package version is the preview line. SHA-256 `089065be34b0de2a614d45585d020e4b0a3159774ec4a5a531d85c5b660852df`. The final installer is 3,371,412 bytes, versus 2,528,704 bytes for the baseline. The desktop binary is 12,973,568 bytes, versus 10,754,560 bytes. Bundled SQLite adds native code to the desktop build.
+The original private 3.0 preview at `6337948` produced a Windows x64 installer at `target/release/bundle/nsis/Personal Copilot_0.1.0_x64-setup.exe`. The 0.1.0 package version is the preview line. Its SHA-256 was `089065be34b0de2a614d45585d020e4b0a3159774ec4a5a531d85c5b660852df`. That installer was 3,371,412 bytes, versus 2,528,704 bytes for the baseline. The desktop binary was 12,973,568 bytes, versus 10,754,560 bytes. Bundled SQLite adds native code to the desktop build.
 
 ## Executed checks
 
@@ -28,4 +28,19 @@ See the [UI report](../ux/VALIDATION.md) for screenshots and the [performance co
 
 ## Release scope
 
-This is an unsigned private Windows preview. The current Rust app uses one selected route, local Whisper and a bundled practice responder. The exact legacy Python ZIP, simultaneous dual-route capture, physical microphone and Bluetooth recovery, one-hour sessions, real external AI generation, OS scaling across physical monitors, crash journaling, and the remaining feature parity work need separate evidence. The CI installer check is available through the opt-in manual workflow input. Checks for this preview ran locally.
+The original unsigned preview used one selected audio route, local Whisper and a bundled practice responder. The exact legacy Python ZIP, simultaneous dual-route capture, physical microphone and Bluetooth recovery, one-hour sessions, OS scaling across physical monitors, and crash journaling need separate evidence. The CI installer check is available through the opt-in manual workflow input. Checks for this preview ran locally.
+
+## Provider and Windows companion update
+
+The rebuilt x64 installer from `beaf969` is 4,160,796 bytes. Its SHA-256 is `c08efb31344a9ef61f2184e30aa07ec2906da10117b194aa95ba67152df1c6b7`. The temporary install, WebView2 smoke and uninstall passed. The desktop executable is 15,765,504 bytes.
+
+- `cargo fmt --all --check`, release Clippy with warnings denied, 35 workspace Rust tests, four frontend tests, four benchmark Python tests, and the locked Tauri/NSIS build passed.
+- Rust tests cover ChatGPT callback state and scope validation, Windows credential protection, cloud consent, Ollama catalog filtering, and fragmented streams with each provider's completion signal.
+- The installed WebView2 smoke loads an Ollama catalog from a local HTTP test server. Windows WASAPI captures a synthetic question. **Get answer** sends that question to the server. **Why?** sends the previous question and complete answer in the follow-up request. The answer panel renders list and code blocks from the stream.
+- Both native windows retain `WS_EX_TOOLWINDOW` without `WS_EX_APPWINDOW` after pin/unpin and hide/reopen. Shortcut registration succeeded. Windows returned `Access is denied` when the test shell sent keyboard input, so chord-driven foreground activation still needs an unlocked Windows desktop. The same workspace reveal function passed via **Open workspace** from Focus.
+- The separately invoked WASAPI test recognized both fixture terms and a nonzero meter on the default and explicit Windows loopback routes. The fixtures and screenshots are local. [UI review and validation](../ux/VALIDATION.md)
+- The provider tests exercise local HTTP fixtures. Live sign-in, ChatGPT plan entitlement, Claude billing and answer quality from a real Ollama model remain unverified. [Provider authorization](../audit/PROVIDER_AUTHORIZATION.md)
+
+The optional short follow-up decoder lowered word errors from 55 to 47 on the 60-clip matched pack. The test includes fast short utterances, acknowledgements and controls. The 116-clip stress report continues to describe the standard path. [Audio results and limitations](../benchmarks/interview-stress.md#short-follow-up-mode)
+
+Production npm and RustSec audits reported zero vulnerabilities. RustSec flagged the same two informational advisories in the cross-platform lockfile as in the original preview.

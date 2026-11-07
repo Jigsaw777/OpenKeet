@@ -31,7 +31,7 @@ Normal tongue twisters had 11/176 errors and fast tongue twisters had 64/320. Th
 | Other metrics | Status and reproduction |
 | --- | --- |
 | GUI launch and idle memory tree | See the separate Windows desktop probe below. Interactive startup, active tree CPU/RAM and GPU remain unmeasured. |
-| End-to-end answer time, time to first token and rate limits | N/A. This preview uses the local practice responder. |
+| End-to-end answer time, time to first token and rate limits | Unmeasured. The original preview used the practice responder. The new provider protocol and local loopback path have fixture coverage. |
 | Audio ready, decode, queue and loss | Available in Audio Setup during capture. Run the [WASAPI integration test](../../crates/copilot-audio/tests/wasapi.rs) for synthetic playback on the two loopback selection paths. |
 | Queue saturation and failure tail | Unit and integration regressions cover explicit loss and valid queued PCM after failure. |
 | One-hour drift, overlapping speakers, Bluetooth, hardware reconnect | N/A. Requires consented fixtures, devices and long-session instrumentation. |

@@ -2,12 +2,16 @@
 
 ## Run the preview
 
-1. Run the Windows build and choose **Run sample session**. It replays a question with a 1.6-second pause and a late constraint. The Rust engine checks the consolidated question, then uses it as context for a separate “what if” follow-up. The answers come from a bundled practice responder.
-2. For live local transcription, get a verified speech model and open **Audio setup**. Choose an output or microphone, select the model file, confirm capture permission, and select **Start local capture**. Play a known fixture or speak into the selected source. Confirm the meter and transcript. Use **Suggest answer** on a detected question, or explicitly enable automatic suggestions in Audio Setup.
-3. Use **Pause**, **Resume**, or **Stop** to control capture. **Retry same source** resumes a recoverable device failure in the current session. **Use full transcript** puts finalized text in the question field. **Answer view** uses the workspace width for the current answer. **Focus window** opens a normal, pinnable window with a scrollable answer, an expandable question, and a fixed copy button.
+1. Open **Providers**. Select **Continue with ChatGPT** for browser sign-in, **Open Claude Console** to get and save an Anthropic API key, or **Find installed models** under **Ollama** when the local service is running. Pick a model, confirm the data route for cloud providers, and choose **Use**. **Run sample session** is also available as an offline rehearsal with bundled answers.
+2. In **Audio setup**, choose an output or microphone, select a verified speech model, confirm capture permission, and select **Start local capture**. Confirm the meter and transcript. Use **Get answer** on a detected question or enter your own. Automatic requests are an explicit option in Audio Setup.
+3. Use **Pause**, **Resume**, or **Stop** to control capture. **Retry same source** resumes a recoverable device failure in the current session. **Use full transcript** puts finalized text in the question field. **Answer view** uses the workspace width for the current answer. **Focus window** is a pinnable companion window with a scrollable answer, an expandable question, and a fixed copy button.
 4. After stopping, choose **Save to history** to retain the available final transcript and checked answers in SQLite. Find it under **Saved sessions** to add notes, export it, or delete it. **Clear current session** clears the workspace.
 
-The preview uses local Whisper and bundled example responses. Audio stays in memory. Context import, general model answers, and provider sign-in remain open in Rust. The existing Python launchers provide the legacy provider and profile workflows.
+**Hide window** leaves the workspace running. **Ctrl+Shift+I** or **Show Personal Copilot** in the Windows tray restores it. The tray also offers **Quit**. If Windows rejects the shortcut registration, the sidebar shows the tray fallback.
+
+Whisper decodes audio locally in memory. The selected answer provider receives the current question and linked question/answer context when you request a response. Choosing **Transcription only** disconnects the active route. [Provider authorization and account setup](audit/PROVIDER_AUTHORIZATION.md)
+
+**Short follow-up mode** in Audio Setup enables a faster decoder for very short utterances. This is optional. The measured synthetic pack still had errors on short prompts such as “Why?”. [Short speech results](benchmarks/interview-stress.md#short-follow-up-mode)
 
 ## Build and test
 
@@ -31,7 +35,7 @@ The repository has a manually dispatched GitHub Actions workflow for portable co
 
 See the [3.0 validation report](validation/DESKTOP_3_0.md) for the Windows installer, real loopback, history, and visual results. The host's OS scale and the in-app text size are separate settings.
 
-For a hardware smoke run, stop unrelated playback and set `COPILOT_TEST_MODEL` and `COPILOT_TEST_WAV` as described in the [audio comparator](benchmarks/audio.md). The native smoke test then also plays the synthetic fixture and checks the resulting transcript and question in the desktop workspace.
+For a hardware smoke run, stop unrelated playback and set `COPILOT_TEST_MODEL` and `COPILOT_TEST_WAV` as described in the [audio comparator](benchmarks/audio.md). The native smoke test then also plays the synthetic fixture and checks the resulting transcript and question in the desktop workspace. Set `COPILOT_TEST_PROVIDER_FIXTURE=1` with port 11434 free to test the Rust HTTP path against a local test server. Set `COPILOT_TEST_WINDOWS_SHELL=1` to check native window styles and hide/show. On an unlocked Windows desktop, also set `COPILOT_TEST_WINDOWS_SHORTCUT=1` to verify that the system chord restores and focuses the workspace.
 
 Get speech weights explicitly from the repository root. The script checks the pinned SHA-256 before accepting a model. The Rust engine independently verifies the exact bytes before loading them. Use the file chooser to select the result. Remove a model from the local `models/` folder to reclaim disk space. [Upstream model files](https://huggingface.co/ggerganov/whisper.cpp/tree/5359861c739e955e79d9a303bcbc70fb988958b1)
 
