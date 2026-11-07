@@ -97,9 +97,9 @@ function formatTime(ms: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function AnswerPanel({ question, copy, command, sample, connected, chooseProvider, compact = false, footer }: {
+export function AnswerPanel({ question, copy, command, sample, connected, chooseProvider, answerHeard, compact = false, footer }: {
   question: Question | null; copy: (text: string) => void; command: Command; sample: boolean;
-  connected: boolean; chooseProvider?: () => void; compact?: boolean; footer?: ReactNode;
+  connected: boolean; chooseProvider?: () => void; answerHeard?: () => void; compact?: boolean; footer?: ReactNode;
 }) {
   const answer = question?.answer;
   const retry = question?.phase === "error" || question?.phase === "cancelled";
@@ -139,7 +139,9 @@ export function AnswerPanel({ question, copy, command, sample, connected, choose
     <div className="card-foot">{canCancel ? <button onClick={() => void command("cancel_answer")}>Cancel answer</button>
       : canRequest && (connected || sample) ? <button className="primary" onClick={() => void command("request_detected")}>{retry ? "Retry answer" : sample ? "Suggest answer" : "Get answer"}</button>
       : !sample && !connected && chooseProvider && !answer ? <button onClick={chooseProvider}>Choose provider</button>
-      : <button disabled={answer?.status !== "checked"} onClick={() => answer && copy(answer.text)}>Copy answer</button>}{footer}</div>
+      : <button disabled={answer?.status !== "checked"} onClick={() => answer && copy(answer.text)}>Copy answer</button>}
+      {answerHeard && <button title="Answer the interviewer's latest lines, even if no question was detected" onClick={answerHeard}>Answer what they said</button>}
+      {footer}</div>
   </section>;
 }
 

@@ -8,7 +8,7 @@ import { AudioSetup, StartCard, useAudioSetup } from "./audio-setup";
 import { AnswerPanel, CaptureControls, Empty, Icon, LiveStatus, Status, Transcript } from "./components";
 import { ProviderSetup } from "./provider-setup";
 import { SaveSession, SavedSessions } from "./saved-sessions";
-import { acceptView, emptyView, providerLabel, sourceLabel } from "./protocol";
+import { acceptView, emptyView, providerLabel, sourceLabel, unansweredSpeech } from "./protocol";
 import type { DesktopView, Session } from "./protocol";
 import { AppShell } from "./workspace-shell";
 import type { Page, Theme } from "./workspace-shell";
@@ -165,6 +165,8 @@ function App() {
   const engine = isSample ? "Bundled rehearsal" : providerLabel(view.provider);
   const showTranscript = transcriptOpen ?? (!isSample && !view.provider);
   const hasSession = running || view.mode !== "idle" || Boolean(session.question);
+  const heard = view.provider && !isSample ? unansweredSpeech(session) : "";
+  const answerHeard = heard ? () => void command("ask", { question: heard }) : undefined;
   const notice = error || session.notice;
   const feedback = <>{notice && <p className="notice" role="alert">{notice}{session.dropped_ms > 0 && " Reported audio loss: " + session.dropped_ms + " ms."}</p>}
     {copied && <p className="toast" role="status">Answer copied</p>}</>;
@@ -176,7 +178,7 @@ function App() {
     <div className="focus-route"><CaptureControls view={view} command={command} />
       <label className="opacity">Opacity <input type="range" min={30} max={100} step={5} value={opacity} aria-label="Window opacity"
         onChange={event => setOpacity(Number(event.target.value))} /></label></div>
-    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} sample={isSample} connected={Boolean(view.provider)} compact
+    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} sample={isSample} connected={Boolean(view.provider)} compact answerHeard={answerHeard}
       footer={<button onClick={() => void command("show_workspace")}>{running ? "Main window" : "New session"} <Icon name="arrow" /></button>} />
   </main>;
 
@@ -200,7 +202,7 @@ function App() {
         <div className={"live-grid " + (showTranscript ? "" : "answer-view")}>
           <Transcript session={session} useTranscript={() => void useTranscript()} hidden={!showTranscript} />
           <AnswerPanel question={session.question} copy={text => void copy(text)} command={command} sample={isSample}
-            connected={Boolean(view.provider)} chooseProvider={() => setPage("providers")} />
+            connected={Boolean(view.provider)} chooseProvider={() => setPage("providers")} answerHeard={answerHeard} />
         </div>
       </>}
       {(hasSession || view.provider) && <details className="card history" open={promptOpen} onToggle={event => setPromptOpen(event.currentTarget.open)}>

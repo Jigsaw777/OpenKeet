@@ -125,7 +125,7 @@ impl AnswerFailure {
                 "The answer provider refused this connection. Reconnect in Settings → Answers."
             }
             Self::UsageLimit => {
-                "The provider reached its usage or rate limit. Check your account or choose another provider."
+                "Your answer provider's usage limit is used up. Try again after it resets, or pick another provider in Settings → Answers."
             }
         }
     }

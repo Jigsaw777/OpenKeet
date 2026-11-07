@@ -68,6 +68,121 @@ const RESTARTS: &[&str] = &[
     "another question",
     "switching topics",
 ];
+const ASKS: &[&str] = &[
+    "what",
+    "why",
+    "when",
+    "where",
+    "how",
+    "who",
+    "which",
+    "can you",
+    "could you",
+    "would you",
+    "would that",
+    "do you",
+    "is it",
+    "is that",
+    "are there",
+    "does",
+    "explain",
+    "describe",
+    "compare",
+    "design",
+    "tell me",
+    "walk me through",
+    "give an example",
+    "define",
+];
+/// Requests that invite an answer without a question word. Kept multi-word to avoid statements.
+const PROMPTS: &[&str] = &[
+    "tell us",
+    "talk me through",
+    "talk us through",
+    "take me through",
+    "run me through",
+    "walk us through",
+    "talk about",
+    "share",
+    "give me",
+    "give us",
+    "show me",
+    "elaborate",
+    "summarize",
+    "discuss",
+    "outline",
+    "introduce yourself",
+    "help me understand",
+    "go over",
+    "go through",
+    "let's talk about",
+    "let's discuss",
+    "let's dive into",
+    "let's go over",
+    "let's walk through",
+    "i'd like to hear",
+    "i'd like to know",
+    "i'd like to understand",
+    "i'd like you to",
+    "i would like to hear",
+    "i would like to know",
+    "i would like you to",
+    "i'd love to hear",
+    "i want to hear",
+    "i want to know",
+    "i want to understand",
+    "i want you to",
+    "i'm curious",
+    "i am curious",
+    "i was wondering",
+    "i wonder",
+    "my question is",
+    "my next question",
+    "the question is",
+    "the next question",
+    "one more question",
+    "quick question",
+];
+/// "Have you…", "Did you…", "Is there…": an auxiliary before its subject asks a question.
+const AUXILIARIES: &[&str] = &[
+    "am", "is", "are", "was", "were", "do", "does", "did", "have", "has", "had", "can", "could",
+    "will", "would", "shall", "should", "may", "might", "isn't", "aren't", "wasn't", "weren't",
+    "don't", "doesn't", "didn't", "haven't", "hasn't", "can't", "couldn't", "won't", "wouldn't",
+    "shouldn't",
+];
+const SUBJECTS: &[&str] = &[
+    "you", "we", "they", "he", "she", "it", "i", "there", "this", "that", "these", "those", "your",
+    "any", "anyone", "anybody", "someone", "somebody", "everyone",
+];
+/// Direct requests to the listener that count wherever they appear in a turn.
+const YOU_REQUESTS: &[&str] = &[
+    "can you",
+    "could you",
+    "would you",
+    "will you",
+    "do you",
+    "did you",
+    "have you",
+    "are you",
+    "were you",
+    "tell me",
+    "tell us",
+    "walk me through",
+    "talk me through",
+    "take me through",
+    "i'd like you to",
+    "i want you to",
+    "i'd love to hear",
+    "i'd like to hear",
+    "i'd like to know",
+    "i'm curious",
+];
+/// Openers an interviewer says before the actual question: "Okay, great, so now tell me…".
+const FILLERS: &[&str] = &[
+    "okay", "ok", "so", "and", "now", "alright", "right", "great", "cool", "well", "um", "uh",
+    "yeah", "yes", "perfect", "thanks", "nice", "awesome", "sure", "then", "also", "actually",
+    "please", "but", "good", "excellent", "interesting", "fine", "next",
+];
 
 fn normalized(text: &str) -> String {
     text.replace('’', "'")
@@ -108,6 +223,36 @@ fn starts_with(text: &str, prefix: &str) -> bool {
         || text
             .strip_prefix(prefix)
             .is_some_and(|tail| tail.starts_with(' '))
+}
+
+/// Questions rarely sit at the start of a turn ("We use Go a lot. Have you used it?"), so look at
+/// every sentence after its filler words, any question mark, and direct requests anywhere
+/// ("I see you were at Google, can you tell me…"). Commas are not split: "…, which was hard"
+/// is a relative clause, not a question.
+fn invites_reply(raw: &str) -> bool {
+    let anywhere = format!(" {} ", normalized(raw));
+    raw.contains('?')
+        || YOU_REQUESTS
+            .iter()
+            .any(|cue| anywhere.contains(&format!(" {cue} ")))
+        || raw.split(['.', '!', ';', ':']).any(|sentence| {
+            let sentence = normalized(sentence);
+            let mut words: Vec<&str> = sentence.split(' ').collect();
+            loop {
+                if words.len() > 2 && words[..2] == ["thank", "you"] {
+                    words.drain(..2);
+                } else if words.len() > 1 && FILLERS.contains(&words[0]) {
+                    words.remove(0);
+                } else {
+                    break;
+                }
+            }
+            let start = words.join(" ");
+            ASKS.iter().chain(PROMPTS).any(|cue| starts_with(&start, cue))
+                || (words.len() > 1
+                    && AUXILIARIES.contains(&words[0])
+                    && SUBJECTS.contains(&words[1]))
+        })
 }
 
 pub(crate) fn incomplete(text: &str) -> bool {
@@ -195,34 +340,7 @@ pub(crate) fn relation(
     if RESTARTS.iter().any(|prefix| starts_with(ask, prefix)) {
         return Relation::New;
     }
-    let asks = [
-        "what",
-        "why",
-        "when",
-        "where",
-        "how",
-        "who",
-        "which",
-        "can you",
-        "could you",
-        "would you",
-        "would that",
-        "do you",
-        "is it",
-        "is that",
-        "are there",
-        "does",
-        "explain",
-        "describe",
-        "compare",
-        "design",
-        "tell me",
-        "walk me through",
-        "give an example",
-        "define",
-    ]
-    .iter()
-    .any(|prefix| starts_with(ask, prefix));
+    let asks = ASKS.iter().any(|prefix| starts_with(ask, prefix));
     let follow_up = ask == "why" || FOLLOW_UPS.iter().any(|prefix| starts_with(ask, prefix));
     let scenario = scenario_prompt(&text);
     if let Some((prior, gap)) = previous {
@@ -245,7 +363,7 @@ pub(crate) fn relation(
             return Relation::FollowUp;
         }
     }
-    if asks || follow_up || scenario || next.trim_end().ends_with('?') {
+    if asks || follow_up || scenario || invites_reply(next) {
         Relation::New
     } else {
         Relation::Ignore
@@ -410,8 +528,39 @@ mod tests {
                 "Switching topics, explain TLS.",
                 New,
             ),
+            // Real interview turns rarely open with the question word.
+            (None, "Okay, great. Tell me about a time you failed.", New),
+            (None, "Have you worked with Kafka", New),
+            (None, "Did you lead that migration", New),
+            (None, "Is there anything you would change", New),
+            (
+                None,
+                "So we use Go a lot. What is your experience with it? Just curious.",
+                New,
+            ),
+            (None, "I'd love to hear about your last project.", New),
+            (None, "Let's talk about system design.", New),
+            (None, "I'm curious how you handled the outage.", New),
+            (None, "Thanks for that. My next question is about caching.", New),
+            (None, "Talk me through your resume.", New),
+            (None, "Give me an overview of your role.", New),
+            (
+                None,
+                "I see you worked at Google, can you tell me about your team",
+                New,
+            ),
+            (None, "Thank you, so how did you scale it", New),
+            (
+                None,
+                "We moved to Kubernetes last year, which was a big change.",
+                Ignore,
+            ),
+            (None, "I joined in 2019, when the team was small.", Ignore),
+            (None, "Okay, thank you.", Ignore),
+            (None, "Have a great day.", Ignore),
+            (None, "We will get back to you soon.", Ignore),
         ];
-        assert_eq!(cases.len(), 50);
+        assert_eq!(cases.len(), 68);
         for (previous, next, expected) in cases {
             assert_eq!(relation(previous, next, 5_000, 120_000), expected, "{next}");
         }

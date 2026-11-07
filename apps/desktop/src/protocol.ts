@@ -107,6 +107,13 @@ export function meterForView(view: DesktopView, update: MeterUpdate | null): { p
   return { peak: view.meter, frames: view.audio_metrics.frames };
 }
 
+/** Final speech heard after the current question: what to answer when no question was detected in it. */
+export function unansweredSpeech(session: Session): string {
+  const after = session.question?.span.end_ms ?? -1;
+  return session.transcript.filter(line => line.stability === "final" && line.span.start_ms > after)
+    .slice(-3).map(line => line.text.trim()).join(" ").slice(-2_000);
+}
+
 export function sourceLabel(kind: SourceKind): string {
   return { system_output: "System audio", microphone: "Microphone", replay: "Sample transcript", typed: "Typed input" }[kind];
 }
@@ -133,7 +140,8 @@ export function activity(view: DesktopView): Activity {
   if (phase === "candidate" || phase === "waiting" || phase === "incomplete") return { title: "Question heard", tone: "live",
     detail: !view.provider && view.mode !== "sample" ? "Connect answers in Settings to get replies."
       : view.auto_answer ? "Waiting for them to finish…" : "Press Get answer when they finish." };
-  if (phase === "error" || phase === "cancelled") return { title: phase === "error" ? "Answer failed" : "Answer cancelled", detail: "Press Retry answer.", tone: "warn" };
+  if (phase === "error") return { title: "Answer failed", detail: "The red message says why.", tone: "warn" };
+  if (phase === "cancelled") return { title: "Answer cancelled", detail: "Press Retry answer.", tone: "warn" };
   if (phase === "checked") return { title: "Answer ready", detail: "Still listening for the next question.", tone: "done" };
   return view.mode === "sample" ? { title: "Playing sample", detail: "A recorded practice question is playing.", tone: "live" }
     : { title: "Listening", detail: "Waiting for someone to speak.", tone: "live" };

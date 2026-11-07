@@ -376,9 +376,10 @@ impl ProviderHub {
                 self.client
                     .post(format!("{OPENAI}/responses"))
                     .bearer_auth(access)
+                    // Low effort keeps the first words of a live answer within a few seconds.
                     .json(&json!({
                         "model": route.model, "input": context, "instructions": INSTRUCTIONS,
-                        "store": false, "stream": true,
+                        "store": false, "stream": true, "reasoning": { "effort": "low" },
                     }))
             }
             ProviderKind::Claude => {
@@ -563,11 +564,16 @@ fn event(kind: ProviderKind, data: &Value) -> Result<StreamEvent<'_>, AnswerFail
         ProviderKind::Chatgpt => match kind_name {
             "response.completed" => return Ok(StreamEvent::Done),
             "response.failed" | "response.incomplete" | "error" => {
+                // A plan limit arrives as {"type":"error","error":{"code":…}} before response.failed.
                 let code = data["response"]["error"]["code"]
                     .as_str()
+                    .or(data["error"]["code"].as_str())
                     .or(data["code"].as_str());
                 return Err(
-                    if code.is_some_and(|code| code.starts_with("subscription_sharing_usage_")) {
+                    if code.is_some_and(|code| {
+                        code.starts_with("subscription_sharing_usage_")
+                            || ["rate_limit_exceeded", "insufficient_quota"].contains(&code)
+                    }) {
                         AnswerFailure::UsageLimit
                     } else {
                         AnswerFailure::InvalidOutput
@@ -745,6 +751,12 @@ mod tests {
         assert_eq!(
             stream_fixture(ProviderKind::Chatgpt, openai).await.unwrap(),
             "Café"
+        );
+        // Shape observed from a ChatGPT plan whose connected-app allowance is used up.
+        let limited = "data: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"code\":\"subscription_sharing_usage_limit_exceeded\"}}\n\n";
+        assert_eq!(
+            stream_fixture(ProviderKind::Chatgpt, limited).await,
+            Err(AnswerFailure::UsageLimit)
         );
         let claude = "event: content_block_delta\r\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\r\n\r\ndata: {\"type\":\"message_stop\"}\r\n\r\n";
         assert_eq!(

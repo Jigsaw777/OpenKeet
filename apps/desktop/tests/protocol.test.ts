@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
-import { acceptView, activity, emptyView, meterForView } from "../src/protocol.ts";
+import { acceptView, activity, emptyView, meterForView, unansweredSpeech } from "../src/protocol.ts";
 import type { DesktopView, QuestionPhase } from "../src/protocol.ts";
 
 function update(serial: number, session: number, sequence: number): DesktopView {
@@ -35,6 +35,18 @@ test("standalone meter events cannot override a stopped or newer session", () =>
 test("active sample never displays hardware recording status", () => {
   const view: DesktopView = { ...emptyView, mode: "sample", session: { ...emptyView.session, capture: "capturing" } };
   assert.equal(activity(view).title, "Playing sample");
+});
+
+test("only final speech after the current question can be answered on demand", () => {
+  const line = (id: number, start_ms: number, text: string, stability: "interim" | "final" = "final") =>
+    ({ id, revision: 1, span: { start_ms, end_ms: start_ms + 500 }, stability, text });
+  const session = { ...emptyView.session, transcript: [line(1, 0, "Why Rust?"), line(2, 2_000, "We use Go here."),
+    line(3, 3_000, "Our team is small."), line(4, 4_000, "half a thought", "interim")] };
+  assert.equal(unansweredSpeech(session), "Why Rust? We use Go here. Our team is small.");
+  const asked = { ...session, question: { id: 1, revision: 1, phase: "checked" as const, span: { start_ms: 0, end_ms: 500 },
+    source: { kind: "system_output" as const, endpoint_id: "out" }, text: "Why Rust?", answer: null } };
+  assert.equal(unansweredSpeech(asked), "We use Go here. Our team is small.");
+  assert.equal(unansweredSpeech({ ...asked, transcript: asked.transcript.slice(0, 1) }), "");
 });
 
 test("activity names each step from silence to a finished answer", () => {
