@@ -55,10 +55,14 @@ export type DesktopView = {
   loading: boolean;
   stopping: boolean;
   retryable: boolean;
+  provider: ProviderSelection | null;
+  shortcut_available: boolean;
 };
 export type Endpoint = { id: string; name: string; kind: SourceKind; is_default: boolean };
 export type MeterUpdate = { update: number; session_id: number; peak: number; frames: number };
-export type CaptureConfig = { source: Source; model_path: string; vocabulary: string; auto_answer: boolean; consent: boolean };
+export type ProviderKind = "chatgpt" | "claude" | "ollama";
+export type ProviderSelection = { kind: ProviderKind; model: string };
+export type CaptureConfig = { source: Source; model_path: string; vocabulary: string; auto_answer: boolean; short_followups: boolean; consent: boolean };
 
 export const emptyView: DesktopView = {
   update: -1,
@@ -68,6 +72,8 @@ export const emptyView: DesktopView = {
   loading: false,
   stopping: false,
   retryable: false,
+  provider: null,
+  shortcut_available: false,
   session: {
     protocol_version: 1,
     sequence: 0,
@@ -101,6 +107,10 @@ export function meterForView(view: DesktopView, update: MeterUpdate | null): { p
 
 export function sourceLabel(kind: SourceKind): string {
   return { system_output: "System output", microphone: "Microphone", replay: "Sample transcript", typed: "Typed input" }[kind];
+}
+
+export function providerLabel(provider: ProviderSelection | null): string {
+  return provider ? `${{ chatgpt: "ChatGPT / Codex", claude: "Claude", ollama: "Ollama" }[provider.kind]} · ${provider.model}` : "Choose an answer provider";
 }
 
 export function statusLabel(view: DesktopView): string {

@@ -147,8 +147,10 @@ meter::-webkit-meter-optimum-value { background: var(--focus); }
 .answer-view .answer-content { min-height: min(16rem, 30dvh); max-height: max(16rem, 55dvh); }
 .answer-body { display: grid; gap: .6rem; }
 .answer-body p { white-space: pre-wrap; }
-.answer-body ol { margin: 0; padding-inline-start: 1.45em; }
+.answer-body :is(ol, ul) { margin: 0; padding-inline-start: 1.45em; }
 .answer-body li + li { margin-top: .48em; }
+.answer-body pre { margin: 0; min-width: 0; overflow-x: auto; background: var(--soft); border-radius: .4rem; padding: .55em .7em; }
+.answer-body pre code { padding: 0; }
 .line { position: relative; padding: .55rem 0 .68rem .65rem; border-left: 2px solid var(--rule); }
 .line.interim, .line.stable { border-left: 2px dashed var(--rule); color: var(--muted); }
 .line-meta, .meta-line { display: flex; justify-content: space-between; align-items: center; gap: .4rem; }
@@ -224,4 +226,12 @@ meter::-webkit-meter-optimum-value { background: var(--focus); }
 .saved-answer { padding-block: var(--space-2); border-top: 1px solid var(--rule); }
 .saved-answer p { white-space: pre-wrap; }
 .notes-editor { display: grid; justify-items: start; gap: var(--space-2); }
+.provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--space-4); align-items: start; }
+.provider-card { display: grid; gap: var(--space-2); padding: var(--space-4); }
+.provider-card .field-row > button { flex-shrink: 0; }
+.provider-card .checkbox { display: flex; gap: var(--space-2); align-items: flex-start; }
+.provider-card label { font-weight: 600; font-size: .87rem; }
+.provider-account { overflow-wrap: anywhere; }
+.focus-engine { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.workspace-tools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
 @media (max-width: 980px) { .library-layout { grid-template-columns: minmax(0, 1fr); } }

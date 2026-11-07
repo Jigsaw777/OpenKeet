@@ -12,7 +12,7 @@ export function Mark({ size = 35 }: { size?: number }) {
   </svg>;
 }
 
-export function Icon({ name }: { name: "home" | "wave" | "settings" | "focus" | "arrow" | "sun" | "lock" | "clock" }) {
+export function Icon({ name }: { name: "home" | "wave" | "settings" | "focus" | "arrow" | "sun" | "lock" | "clock" | "plug" }) {
   const paths = {
     home: "M3 11l9-7 9 7v8a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
     wave: "M3 12h4l2-6 4 12 2-8 2 2h4",
@@ -22,6 +22,7 @@ export function Icon({ name }: { name: "home" | "wave" | "settings" | "focus" | 
     sun: "M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z",
     lock: "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v9H5zM12 14v3",
     clock: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM12 7v5l3 2",
+    plug: "M9 3v5m6-5v5M7 8h10v3a5 5 0 0 1-10 0V8zm5 8v5",
   };
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
 }
@@ -81,8 +82,9 @@ const phases: Record<Question["phase"], string> = {
   error: "Needs attention",
 };
 
-export function AnswerPanel({ question, copy, command, compact = false, footer }: {
-  question: Question | null; copy: (text: string) => void; command: Command; compact?: boolean; footer?: ReactNode;
+export function AnswerPanel({ question, copy, command, sample, connected, chooseProvider, compact = false, footer }: {
+  question: Question | null; copy: (text: string) => void; command: Command; sample: boolean;
+  connected: boolean; chooseProvider?: () => void; compact?: boolean; footer?: ReactNode;
 }) {
   const answer = question?.answer;
   const canRequest = question && question.source.kind !== "typed" &&
@@ -90,7 +92,10 @@ export function AnswerPanel({ question, copy, command, compact = false, footer }
   const canCancel = question && ["answering", "drafting"].includes(question.phase);
   const scroll = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = 0; }, [question?.id, question?.revision]);
-  const label = answer?.status === "checked" ? "Checked" : answer?.status === "provisional" ? "Draft" : answer?.status === "superseded" ? "Superseded" : "Awaiting question";
+  const label = answer?.status === "checked" ? (sample ? "Checked" : "Complete")
+    : answer?.status === "provisional" ? (sample ? "Draft" : "Writing")
+    : answer?.status === "superseded" ? "Superseded" : "Awaiting question";
+  const title = sample ? "Practice answer" : "Answer";
   const text = question?.text || "A question will appear here.";
   const followUp = question?.follow_up_to && <p className="follow-up">Follow-up to question {question.follow_up_to}</p>;
   const phase = question && question.phase !== "checked" && <p className="subtle">{phases[question.phase]}</p>;
@@ -106,27 +111,42 @@ export function AnswerPanel({ question, copy, command, compact = false, footer }
       <p className="question-text">{text}</p>
       {followUp}{phase}
     </div>}
-    <div className="card-head"><div>{!compact && <p className="eyebrow">Response</p>}<h2 id="answer-title">Practice answer</h2></div>
+    <div className="card-head"><div>{!compact && <p className="eyebrow">Response</p>}<h2 id="answer-title">{title}</h2></div>
       <span className={`soft-label answer-${answer?.status ?? "empty"}`}>{label}</span></div>
-    <div ref={scroll} className="answer-content" role="region" aria-label="Practice answer text" tabIndex={0}>
+    <div ref={scroll} className="answer-content" role="region" aria-label={`${title} text`} tabIndex={0}>
       {answer ? <><div className={answer.status === "superseded" ? "answer-body superseded" : "answer-body"}><AnswerText text={answer.text} /></div>
         {answer.status === "superseded" && <p className="subtle">This answer is from an earlier revision.</p>}</> :
-        <Empty label="An outline when you need it" detail="The offline practice responder supplies example answers." />}
+        <Empty label={connected || sample ? "Ready for your question" : "Choose an answer provider"}
+          detail={sample ? "The bundled rehearsal supplies example answers." : connected
+            ? "Request an answer for a detected question or type your own." : "Connect ChatGPT, Claude, or Ollama in Providers."} />}
     </div>
     <div className="card-foot">{canCancel ? <button onClick={() => void command("cancel_answer")}>Cancel answer</button>
-      : canRequest ? <button onClick={() => void command("request_detected")}>Suggest answer</button>
+      : canRequest && (connected || sample) ? <button onClick={() => void command("request_detected")}>{sample ? "Suggest answer" : "Get answer"}</button>
+      : !sample && !connected && chooseProvider && !answer ? <button onClick={chooseProvider}>Choose provider</button>
       : <button disabled={answer?.status !== "checked"} onClick={() => answer && copy(answer.text)}>Copy answer</button>}{footer}</div>
   </section>;
 }
 
 function AnswerText({ text }: { text: string }) {
-  return text.split(/\n\s*\n/).filter(Boolean).map((block, index) => {
-    const lines = block.split("\n");
-    const steps = lines.map(line => /^(\d+)\.\s+(.+)$/.exec(line));
-    if (steps.every(step => step !== null)) {
-      return <ol key={index} start={Number(steps[0][1])}>{steps.map((step, i) => <li key={i}><InlineCode text={step[2]} /></li>)}</ol>;
+  return text.split(/^```[^\n]*$/m).map((part, partIndex) => {
+    if (partIndex % 2 === 1) {
+      return <pre key={partIndex} tabIndex={0} aria-label="Code example"><code>{part.replace(/^\r?\n|\r?\n$/g, "")}</code></pre>;
     }
-    return <p key={index}><InlineCode text={block} /></p>;
+    return part.trim().split(/\n\s*\n/).filter(Boolean).map((block, index) => {
+      const key = `${partIndex}:${index}`;
+      const lines = block.split("\n");
+      const steps = lines.map(line => /^(\d+)\.\s+(.+)$/.exec(line));
+      if (steps.every(step => step !== null)) {
+        return <ol key={key} start={Number(steps[0][1])}>{steps.map((step, i) => <li key={i}><InlineCode text={step[2]} /></li>)}</ol>;
+      }
+      const bullets = lines.map(line => /^[-*]\s+(.+)$/.exec(line));
+      if (bullets.every(bullet => bullet !== null)) {
+        return <ul key={key}>{bullets.map((bullet, i) => <li key={i}><InlineCode text={bullet[1]} /></li>)}</ul>;
+      }
+      const heading = /^#{1,6}\s+(.+)$/.exec(block);
+      if (heading) return <h3 key={key}><InlineCode text={heading[1]} /></h3>;
+      return <p key={key}><InlineCode text={block} /></p>;
+    });
   });
 }
 

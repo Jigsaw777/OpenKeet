@@ -22,6 +22,7 @@ export function AudioSetup({ view, enabled, visible, start, showError, zoom, set
   const [refreshing, setRefreshing] = useState(false);
   const [consent, setConsent] = useState(false);
   const [autoAnswer, setAutoAnswer] = useState(false);
+  const [shortFollowups, setShortFollowups] = useState(false);
   const selectedDevice = endpoints.find(device => device.id === selected);
   const busy = view.loading || view.stopping || ["paused", "capturing"].includes(view.session.capture);
   const metrics = view.audio_metrics;
@@ -84,21 +85,24 @@ export function AudioSetup({ view, enabled, visible, start, showError, zoom, set
         <p className="subtle">Start with the verified <code>ggml-small.en.bin</code> model. The repository setup guide lists downloads and the experimental turbo comparison.</p>
         <label htmlFor="vocabulary">Optional vocabulary</label>
         <input id="vocabulary" value={vocabulary} maxLength={300} placeholder="Kotlin, WASAPI, PostgreSQL" disabled={busy} onChange={event => setVocabulary(event.target.value)} />
+        <label className="checkbox"><input type="checkbox" checked={shortFollowups} disabled={busy} onChange={event => setShortFollowups(event.target.checked)} /> Short follow-up mode</label>
+        <p className="subtle">Uses a faster decoder for very short utterances. Recognition varies by phrase.</p>
       </section>
       <section className="card setup-card" aria-labelledby="test-heading">
         <p className="eyebrow">03 / Test</p><h2 id="test-heading">Test your input</h2>
         <p>After starting, play a test clip on the selected output or speak into your chosen microphone. The workspace shows the meter and transcript.</p>
         <label className="checkbox"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} /> I have permission to capture this source.</label>
-        <label className="checkbox"><input type="checkbox" checked={autoAnswer} disabled={busy} onChange={event => setAutoAnswer(event.target.checked)} /> Automatically suggest practice answers</label>
+        <label className="checkbox"><input type="checkbox" checked={autoAnswer && Boolean(view.provider)} disabled={busy || !view.provider} onChange={event => setAutoAnswer(event.target.checked)} /> Automatically request answers</label>
+        {!view.provider && <p className="subtle">Connect an answer provider in Providers to enable answers.</p>}
         <button className="primary" disabled={!enabled || busy || !selectedDevice || !model.trim() || !consent} onClick={() => {
-          if (selectedDevice) void start({ source: { kind: selectedDevice.kind, endpoint_id: selectedDevice.id }, model_path: model.trim(), vocabulary: vocabulary.trim(), auto_answer: autoAnswer, consent }).then(started => {
+          if (selectedDevice) void start({ source: { kind: selectedDevice.kind, endpoint_id: selectedDevice.id }, model_path: model.trim(), vocabulary: vocabulary.trim(), auto_answer: autoAnswer && Boolean(view.provider), short_followups: shortFollowups, consent }).then(started => {
             if (started) { setConsent(false); setAutoAnswer(false); }
           });
         }}>Start local capture <Icon name="arrow" /></button>
       </section>
       <section className="card setup-card" aria-labelledby="local-heading">
         <p className="eyebrow">04 / Preferences</p><h2 id="local-heading">Local workspace</h2>
-        <p>Audio and text stay on this device. The practice responder uses built-in examples and requires no account.</p>
+        <p>Speech recognition runs locally. A connected answer provider receives your question and relevant prior turns when you request an answer.</p>
         <label htmlFor="text-scale">Text size</label>
         <select id="text-scale" value={zoom} onChange={event => setZoom(event.target.value)}>
           {["100", "125", "150", "175", "200"].map(scale => <option key={scale} value={scale}>{scale}%</option>)}

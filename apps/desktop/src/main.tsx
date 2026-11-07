@@ -8,8 +8,9 @@ import { AudioSetup } from "./audio-setup";
 import { LiveMeter } from "./audio-meter";
 import { AnswerPanel, CaptureControls, Empty, Icon, Mark, Status, Transcript } from "./components";
 import { Overview } from "./overview";
+import { ProviderSetup } from "./provider-setup";
 import { SaveSession, SavedSessions } from "./saved-sessions";
-import { acceptView, emptyView, sourceLabel } from "./protocol";
+import { acceptView, emptyView, providerLabel, sourceLabel } from "./protocol";
 import type { DesktopView, Session } from "./protocol";
 import { AppShell } from "./workspace-shell";
 import type { Page, Theme } from "./workspace-shell";
@@ -27,6 +28,7 @@ function App() {
   const [page, setPage] = useState<Page>("overview");
   const [layout, setLayout] = useState<"split" | "answer">("split");
   const [audioOpened, setAudioOpened] = useState(false);
+  const [providersOpened, setProvidersOpened] = useState(false);
   const [theme, setTheme] = useState<Theme>(storedTheme);
   const [zoom, setZoom] = useState(localStorage.getItem("text-scale") || "100");
   const [error, setError] = useState("");
@@ -82,6 +84,7 @@ function App() {
 
   useEffect(() => { setCopied(false); }, [page, view.session.session_id, view.session.question?.id, view.session.question?.revision]);
   useEffect(() => { if (page === "audio") setAudioOpened(true); }, [page]);
+  useEffect(() => { if (page === "providers") setProvidersOpened(true); }, [page]);
 
   async function command(name: string, args?: Record<string, unknown>) {
     setError("");
@@ -117,6 +120,8 @@ function App() {
 
   const session = view.session;
   const running = view.loading || view.stopping || ["paused", "capturing"].includes(session.capture);
+  const isSample = view.mode === "sample";
+  const engine = isSample ? "Bundled rehearsal" : providerLabel(view.provider);
   const notice = error || session.notice;
   const feedback = <>{notice && <p className="notice" role="alert">{notice}{session.dropped_ms > 0 && ` Reported audio loss: ${session.dropped_ms} ms.`}</p>}
     {copied && <p className="toast" role="status">Answer copied</p>}</>;
@@ -125,37 +130,43 @@ function App() {
     <header className="focus-top"><div className="brand"><Mark size={25} /><h1>Focus</h1></div>
       <div className="focus-status"><Status view={view} />
         <button aria-pressed={pinned} onClick={async () => { if (await command("pin_focus", { pinned: !pinned })) setPinned(!pinned); }}>{pinned ? "Unpin" : "Pin"}</button></div></header>
-    <div className="focus-route"><p className="subtle">{sourceLabel(session.source.kind)} · Local practice</p><CaptureControls view={view} command={command} /></div>
-    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} compact
+    <div className="focus-route"><p className="subtle focus-engine" title={engine}>{engine}</p><CaptureControls view={view} command={command} /></div>
+    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} sample={isSample} connected={Boolean(view.provider)} compact
       footer={<button onClick={() => void command("show_workspace")}>Open workspace <Icon name="arrow" /></button>} />
   </main>;
 
-  return <AppShell page={page} navigate={setPage} theme={theme} setTheme={setTheme}>
+  return <AppShell page={page} navigate={setPage} theme={theme} setTheme={setTheme} shortcut={desktop && view.update >= 0 ? view.shortcut_available : null}
+      hideWindow={desktop ? () => void command("hide_workspace") : undefined}>
       {feedback}
       {!desktop && <p className="notice" role="status">Open the desktop app to run the Rust engine.</p>}
       {page === "overview" && <Overview view={view} navigate={setPage} sample={() => void sample()} canStart={desktop && !running} />}
       {page === "session" && <div className="page-stack live-page">
-        <div className="page-title live-title"><div><p className="eyebrow">Practice session</p><h1>Live workspace</h1></div>
+        <div className="page-title live-title"><div><p className="eyebrow">{isSample ? "Sample session" : "Current session"}</p><h1>Live workspace</h1></div>
           <div className="live-controls"><Status view={view} /><CaptureControls view={view} command={command} />
             {!running && <button onClick={() => setPage("audio")}>Set up audio</button>}
             <button disabled={!desktop} onClick={() => void command("open_focus")}><Icon name="focus" /> Focus window</button></div></div>
-        <div className="session-meta"><span><Icon name="wave" />{sourceLabel(session.source.kind)}</span><span><Icon name="lock" />{view.mode === "audio" ? "Local Whisper" : "Offline practice responder"}</span>
+        <div className="session-meta"><span><Icon name="wave" />{sourceLabel(session.source.kind)}</span><span className="provider-account"><Icon name="plug" />{engine}</span>
           {view.mode === "audio" && <LiveMeter view={view} />}
           <div className="layout-switch" role="group" aria-label="Workspace layout">
             <button aria-pressed={layout === "split"} onClick={() => setLayout("split")}>Split view</button>
             <button aria-pressed={layout === "answer"} onClick={() => setLayout("answer")}>Answer view</button>
           </div></div>
         <div className={`live-grid ${layout === "answer" ? "answer-view" : ""}`}><Transcript session={session} useTranscript={() => void useTranscript()} hidden={layout === "answer"} />
-          <AnswerPanel question={session.question} copy={text => void copy(text)} command={command} /></div>
-        <form className="card prompt" onSubmit={submit}><label htmlFor="manual-question">Ask a practice question</label>
+          <AnswerPanel question={session.question} copy={text => void copy(text)} command={command}
+            sample={isSample} connected={Boolean(view.provider)} chooseProvider={() => setPage("providers")} /></div>
+        <form className="card prompt" onSubmit={submit}><label htmlFor="manual-question">Ask a question</label>
           <div className="prompt-row"><textarea id="manual-question" ref={promptInput} rows={2} maxLength={64000} value={prompt} placeholder="Type or review a question…" onChange={event => setPrompt(event.target.value)} />
-            <button className="primary" disabled={!desktop || !prompt.trim()} type="submit">Suggest <Icon name="arrow" /></button></div></form>
+            {view.provider ? <button className="primary" disabled={!desktop || !prompt.trim() || (isSample && running)} type="submit">Ask <Icon name="arrow" /></button>
+              : <button type="button" onClick={() => setPage("providers")}>Set up answers</button>}</div></form>
         <History session={session} />
         {desktop && !running && (session.history.length > 0 || session.transcript.some(line => line.stability === "final")) &&
           <SaveSession key={session.session_id} onSaved={() => setPage("history")} />}
         {!running && (session.session_id > 0 || session.question) && <button className="text-button erase" onClick={async () => { if (await command("clear_session")) setPrompt(""); }}>Clear current session</button>}
       </div>}
       {page === "history" && <SavedSessions enabled={desktop} />}
+      {(page === "providers" || providersOpened) && <div hidden={page !== "providers"}>
+        <ProviderSetup view={view} enabled={desktop} command={command} />
+      </div>}
       {(page === "audio" || audioOpened) && <div hidden={page !== "audio"}>
         <AudioSetup view={view} enabled={desktop} visible={page === "audio"} zoom={zoom} setZoom={setZoom} showError={setError}
           start={async config => { if (!await command("start_capture", { config })) return false; setPrompt(""); setPage("session"); return true; }} />

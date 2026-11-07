@@ -1,5 +1,5 @@
 import { Empty, Icon, Status } from "./components";
-import { sourceLabel } from "./protocol";
+import { providerLabel, sourceLabel } from "./protocol";
 import type { DesktopView } from "./protocol";
 import type { Page } from "./workspace-shell";
 
@@ -19,10 +19,11 @@ export function Overview({ view, navigate, sample, canStart }: {
       <section className="card start-card" aria-labelledby="start-title">
         <div className="card-symbol"><Icon name="wave" /></div>
         <h2 id="start-title">Start a session</h2>
-        <p>Try a sample conversation or select an audio source you have permission to use.</p>
+        <p>Run the bundled rehearsal or connect a provider for live questions.</p>
         <div className="actions">
           <button className="primary" disabled={!canStart} onClick={sample}>Run sample session <Icon name="arrow" /></button>
           <button onClick={() => navigate("audio")}>Set up audio</button>
+          <button onClick={() => navigate("providers")}>Set up providers</button>
         </div>
       </section>
       <section className="card status-card" aria-labelledby="readiness-title">
@@ -31,7 +32,7 @@ export function Overview({ view, navigate, sample, canStart }: {
           <dt>Session</dt><dd><Status view={view} /></dd>
           <dt>Audio source</dt><dd>{view.mode === "audio" ? sourceLabel(session.source.kind) : "Choose in Audio setup"}</dd>
           <dt>Speech engine</dt><dd>Local Whisper</dd>
-          <dt>Answer engine</dt><dd>Offline practice</dd>
+          <dt>Answer provider</dt><dd className="provider-account">{providerLabel(view.provider)}</dd>
         </dl>
       </section>
     </div>

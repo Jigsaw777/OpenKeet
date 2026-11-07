@@ -109,6 +109,8 @@ pub enum AnswerFailure {
     TimedOut,
     Unavailable,
     InvalidOutput,
+    AuthenticationRequired,
+    UsageLimit,
 }
 
 impl AnswerFailure {
@@ -119,6 +121,12 @@ impl AnswerFailure {
                 "Answer provider is unavailable. Check its connection and try again."
             }
             Self::InvalidOutput => "Answer provider returned an incomplete or oversized response.",
+            Self::AuthenticationRequired => {
+                "Reconnect or select your answer provider in Providers."
+            }
+            Self::UsageLimit => {
+                "The provider reached its usage or rate limit. Check your account or choose another provider."
+            }
         }
     }
 }

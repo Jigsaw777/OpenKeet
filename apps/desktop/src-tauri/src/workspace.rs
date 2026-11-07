@@ -3,16 +3,19 @@ use std::{
     path::Path,
     sync::{Arc, Mutex},
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use copilot_audio::{AudioError, AudioEvent, LocalWhisper, Stop, StreamOptions, elapsed_ms};
 use copilot_core::{
-    CaptureState, Policy, Session, Snapshot, Source, SourceKind, Span,
+    AnswerFailure, AnswerKey, CaptureState, MAX_QUESTION_BYTES, Policy, Session, Snapshot, Source,
+    SourceKind, Span, Work,
     rehearsal::{self, Step},
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+
+use crate::providers::{ANSWER_TIMEOUT_MS, ProviderHub, Selection};
 
 pub type Shared = Arc<Mutex<Desktop>>;
 
@@ -31,6 +34,8 @@ pub struct CaptureConfig {
     vocabulary: String,
     #[serde(default)]
     auto_answer: bool,
+    #[serde(default)]
+    short_followups: bool,
     #[serde(default)]
     consent: bool,
 }
@@ -79,6 +84,11 @@ struct Job {
     stop: Stop,
 }
 
+pub struct Generation {
+    route: Selection,
+    work: Work,
+}
+
 #[derive(Clone, Serialize)]
 pub struct View {
     update: u64,
@@ -89,6 +99,8 @@ pub struct View {
     loading: bool,
     stopping: bool,
     retryable: bool,
+    provider: Option<Selection>,
+    shortcut_available: bool,
 }
 
 pub struct Desktop {
@@ -104,12 +116,14 @@ pub struct Desktop {
     next_utterance: u64,
     meter: u16,
     audio_metrics: AudioMetrics,
+    provider: Option<Selection>,
+    shortcut_available: bool,
 }
 
 impl Desktop {
     pub fn shared() -> Shared {
         Arc::new(Mutex::new(Self {
-            session: Session::new(0, Source::TYPED, Policy::default()),
+            session: Session::new(0, Source::TYPED, provider_policy()),
             instance_id: uuid::Uuid::new_v4(),
             serial: 0,
             update: 0,
@@ -121,6 +135,8 @@ impl Desktop {
             next_utterance: 1,
             meter: 0,
             audio_metrics: AudioMetrics::default(),
+            provider: None,
+            shortcut_available: false,
         }))
     }
 
@@ -141,6 +157,8 @@ impl Desktop {
             retryable: self.audio.is_none()
                 && self.config.is_some()
                 && self.session.capture_state() == CaptureState::Recovery,
+            provider: self.provider.clone(),
+            shortcut_available: self.shortcut_available,
         }
     }
 
@@ -158,6 +176,7 @@ impl Desktop {
         }
         self.serial += 1;
         self.clock = Instant::now();
+        self.session.cancel_answer();
         self.session = Session::new(self.serial, source, policy);
         self.mode = mode;
         self.config = None;
@@ -193,6 +212,9 @@ impl Desktop {
             if !config.consent {
                 return Err("Confirm that you have permission to capture this source.".into());
             }
+            if config.auto_answer && self.provider.is_none() {
+                return Err("Choose an answer provider before enabling automatic answers.".into());
+            }
             if !matches!(
                 config.source.kind,
                 SourceKind::SystemOutput | SourceKind::Microphone
@@ -208,7 +230,7 @@ impl Desktop {
             }
             let policy = Policy {
                 auto_answer: config.auto_answer,
-                ..Policy::default()
+                ..provider_policy()
             };
             self.reset(Mode::Audio, config.source.clone(), policy)?;
             self.config = Some(config);
@@ -269,13 +291,16 @@ impl Desktop {
     }
 
     pub fn ask(&mut self, text: &str) -> Result<(), String> {
-        let now = self
-            .replay
-            .as_ref()
-            .map_or_else(|| elapsed_ms(self.clock), |r| r.elapsed);
-        self.session.ask(text, now)?;
-        rehearsal::answer_available(&mut self.session, now);
-        Ok(())
+        self.require_provider()?;
+        if text.trim().is_empty() || text.trim().len() > MAX_QUESTION_BYTES {
+            return Err("Enter a question within the length limit.".into());
+        }
+        if matches!(self.mode, Mode::Sample) {
+            self.reset(Mode::Idle, Source::TYPED, provider_policy())?;
+        }
+        self.session
+            .ask(text, elapsed_ms(self.clock))
+            .map_err(Into::into)
     }
 
     pub fn full_transcript(&self) -> Result<String, String> {
@@ -294,7 +319,42 @@ impl Desktop {
     }
 
     pub fn request_detected(&mut self) -> Result<(), String> {
+        if !matches!(self.mode, Mode::Sample) {
+            self.require_provider()?;
+        }
         self.session.request_detected().map_err(Into::into)
+    }
+
+    fn require_provider(&self) -> Result<(), String> {
+        self.provider
+            .as_ref()
+            .map(|_| ())
+            .ok_or_else(|| "Choose an answer provider in Providers.".into())
+    }
+
+    pub fn select_provider(
+        &mut self,
+        hub: &ProviderHub,
+        route: Selection,
+        consent: bool,
+    ) -> Result<(), String> {
+        if self.audio.is_some() || self.session.capture_state() == CaptureState::Paused {
+            return Err("Stop capture before changing the answer provider.".into());
+        }
+        hub.select(route, consent)?;
+        self.sync_provider(hub.selection());
+        Ok(())
+    }
+
+    pub fn sync_provider(&mut self, provider: Option<Selection>) {
+        if self.provider != provider && !matches!(self.mode, Mode::Sample) {
+            self.session.cancel_answer();
+        }
+        self.provider = provider;
+    }
+
+    pub fn set_shortcut_available(&mut self, available: bool) {
+        self.shortcut_available = available;
     }
 
     pub fn cancel_answer(&mut self) {
@@ -302,14 +362,14 @@ impl Desktop {
     }
 
     pub fn clear(&mut self) -> Result<(), String> {
-        self.reset(Mode::Idle, Source::TYPED, Policy::default())
+        self.reset(Mode::Idle, Source::TYPED, provider_policy())
     }
 
-    pub fn tick(&mut self) -> Option<View> {
+    pub fn tick(&mut self) -> (Option<View>, Option<Generation>) {
         let before = self.session.sequence();
         let now = if let Some(replay) = &mut self.replay {
             if replay.paused {
-                return None;
+                return (None, None);
             }
             let instant = Instant::now();
             replay.elapsed += instant.duration_since(replay.tick).as_millis() as u64;
@@ -327,7 +387,7 @@ impl Desktop {
                 {
                     self.session.audio_gap(Span::at(replay.elapsed), 0, message);
                     self.replay = None;
-                    return Some(self.changed());
+                    return (Some(self.changed()), None);
                 }
             }
             let elapsed = replay.elapsed;
@@ -339,8 +399,37 @@ impl Desktop {
         } else {
             elapsed_ms(self.clock)
         };
-        rehearsal::answer_available(&mut self.session, now);
-        (self.session.sequence() != before).then(|| self.changed())
+        let generation = if matches!(self.mode, Mode::Sample) {
+            rehearsal::answer_available(&mut self.session, now);
+            None
+        } else {
+            self.provider.as_ref().and_then(|route| {
+                self.session.next_request(now).map(|work| Generation {
+                    route: route.clone(),
+                    work,
+                })
+            })
+        };
+        (
+            (self.session.sequence() != before).then(|| self.changed()),
+            generation,
+        )
+    }
+
+    fn answer_delta(&mut self, key: AnswerKey, delta: &str) -> Option<View> {
+        self.session
+            .append_answer(key, delta)
+            .then(|| self.changed())
+    }
+
+    fn finish_answer(
+        &mut self,
+        key: AnswerKey,
+        answer: Result<String, AnswerFailure>,
+    ) -> Option<View> {
+        self.session
+            .complete(key, elapsed_ms(self.clock), answer)
+            .then(|| self.changed())
     }
 
     fn audio_event(&mut self, event: AudioEvent) -> Option<AudioUpdate> {
@@ -428,6 +517,49 @@ impl Desktop {
     }
 }
 
+fn provider_policy() -> Policy {
+    Policy {
+        answer_timeout_ms: ANSWER_TIMEOUT_MS,
+        ..Policy::default()
+    }
+}
+
+pub fn run_generation(
+    app: AppHandle,
+    state: Shared,
+    providers: Arc<ProviderHub>,
+    generation: Generation,
+) {
+    tauri::async_runtime::spawn(async move {
+        let key = generation.work.request.key;
+        let cancel = async {
+            while !generation.work.is_cancelled() {
+                tokio::time::sleep(Duration::from_millis(40)).await;
+            }
+        };
+        let result = tokio::select! {
+            biased;
+            () = cancel => return,
+            answer = providers.answer(&generation.route, &generation.work.request, |delta| {
+                let view = state.lock().expect("desktop session lock").answer_delta(key, delta);
+                if let Some(view) = view {
+                    emit(&app, &view);
+                    true
+                } else {
+                    false
+                }
+            }) => answer,
+        };
+        let view = state
+            .lock()
+            .expect("desktop session lock")
+            .finish_answer(key, result);
+        if let Some(view) = view {
+            emit(&app, &view);
+        }
+    });
+}
+
 pub fn emit(app: &AppHandle, view: &View) {
     let _ = app.emit("copilot-snapshot", view);
 }
@@ -484,6 +616,9 @@ pub fn start_audio(
                 return Ok(());
             }
             model.and_then(|mut model| {
+                if job.config.short_followups {
+                    model.enable_short_followups();
+                }
                 copilot_audio::capture(
                     &mut model,
                     job.config.source,
@@ -537,6 +672,7 @@ mod tests {
                 model_path: "ggml-small.en.bin".into(),
                 vocabulary: String::new(),
                 auto_answer: false,
+                short_followups: false,
                 consent: true,
             }))
             .unwrap()

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:net";
 import { join, sep } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
@@ -49,7 +50,40 @@ async function checkContrast(page, theme) {
 }
 
 let browser;
+let fixture;
+const requests = [];
+const fixtureModel = "copilot-smoke:local";
+const fixtureText = "Loopback fixture answer.\n\n- Ground the answer in the question.\n- State assumptions.\n\n```rust\nlet answer = 42;\n```";
+async function fixtureAnswer(req, res) {
+  if (req.url === "/api/tags") {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ models: [{ name: fixtureModel, size: 1024 }] }));
+    return;
+  }
+  if (req.url !== "/api/chat") { res.writeHead(404).end(); return; }
+  let body = "";
+  for await (const chunk of req) {
+    body += chunk;
+    if (body.length > 128_000) { res.writeHead(413).end(); return; }
+  }
+  requests.push(JSON.parse(body));
+  res.setHeader("content-type", "application/x-ndjson");
+  res.write(`${JSON.stringify({ message: { content: fixtureText }, done: false })}\n`);
+  await wait(80);
+  res.end('{"done":true}\n');
+}
+
 try {
+  if (process.env.COPILOT_TEST_PROVIDER_FIXTURE === "1") {
+    fixture = createHttpServer((req, res) => {
+      void fixtureAnswer(req, res).catch(() => {
+        if (!res.headersSent) res.writeHead(400);
+        res.end();
+      });
+    });
+    fixture.listen(11434, "127.0.0.1");
+    await once(fixture, "listening");
+  }
   const endpoint = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
@@ -97,7 +131,7 @@ try {
   await page.screenshot({ path: join(output, "live-long-question.png"), animations: "disabled" });
   await page.getByRole("button", { name: "Use full transcript" }).click();
   await page.waitForFunction(() => document.querySelector("#manual-question")?.value.includes("without blocking the coroutine thread"));
-  assert.match(await page.getByRole("textbox", { name: "Ask a practice question" }).inputValue(), /shared state\nwithout blocking the coroutine thread/);
+  assert.match(await page.getByRole("textbox", { name: "Ask a question" }).inputValue(), /shared state\nwithout blocking the coroutine thread/);
   await page.getByRole("button", { name: "Copy answer" }).click();
   await page.getByText("Answer copied", { exact: true }).waitFor();
 
@@ -123,6 +157,24 @@ try {
   await focus.getByRole("button", { name: "Pin", exact: true }).click();
   await focus.getByRole("button", { name: "Unpin", exact: true }).click();
   await focus.getByRole("button", { name: "Open workspace" }).click();
+  if (process.env.COPILOT_TEST_WINDOWS_SHELL === "1") {
+    await page.getByText("Show with Ctrl+Shift+I", { exact: true }).waitFor();
+    const script = fileURLToPath(new URL("./window-smoke.ps1", import.meta.url));
+    async function checkWindow(check) {
+      const probe = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-AppPid", String(child.pid), "-Check", check],
+        { windowsHide: true, stdio: "inherit" });
+      const [code] = await once(probe, "exit");
+      assert.equal(code, 0, `Native Windows check failed for ${check}.`);
+    }
+    await page.getByRole("button", { name: "Hide window" }).click();
+    await checkWindow("Hidden");
+    if (process.env.COPILOT_TEST_WINDOWS_SHORTCUT === "1") {
+      await checkWindow("Shortcut");
+    } else {
+      await focus.getByRole("button", { name: "Open workspace" }).click();
+      await checkWindow("Visible");
+    }
+  }
 
   await page.getByLabel("Session title").fill("SQL practice smoke");
   await page.getByRole("button", { name: "Save to history" }).click();
@@ -145,9 +197,25 @@ try {
   await page.getByRole("button", { name: "Confirm delete" }).click();
   await page.getByRole("status").filter({ hasText: "Saved session deleted." }).waitFor();
 
+  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await page.getByRole("heading", { name: "Providers", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Continue with ChatGPT" }).waitFor();
+  await page.getByRole("button", { name: "Open Claude Console" }).waitFor();
+  assert.equal(await page.getByLabel("Claude Console API key").getAttribute("type"), "password");
+  await page.getByRole("button", { name: "Find installed models" }).waitFor();
+  await page.screenshot({ path: join(output, "providers.png"), fullPage: true, animations: "disabled" });
+  if (fixture) {
+    await page.getByRole("button", { name: "Find installed models" }).click();
+    await page.getByRole("status").filter({ hasText: "Loaded 1 model." }).waitFor();
+    await page.getByLabel("Ollama model", { exact: true }).selectOption(fixtureModel);
+    await page.getByRole("button", { name: "Use Ollama", exact: true }).click();
+    await page.getByRole("region", { name: "Active answer provider" }).getByText(/Ollama.*copilot-smoke/).waitFor();
+  }
+
   await page.getByRole("button", { name: "Audio setup", exact: true }).click();
   const select = page.getByLabel("Input route");
   await select.locator("option").nth(1).waitFor({ state: "attached" });
+  assert.equal(await page.getByRole("checkbox", { name: "Short follow-up mode" }).isChecked(), false);
   await page.screenshot({ path: join(output, "audio-setup.png"), animations: "disabled" });
   await select.selectOption({ index: 1 });
   await page.getByLabel("Speech model file").fill(join(output, "missing", "ggml-small.en.bin"));
@@ -165,7 +233,7 @@ try {
     await select.selectOption(await output.getAttribute("value"));
     await page.getByLabel("Speech model file").fill(process.env.COPILOT_TEST_MODEL);
     await page.getByLabel("Optional vocabulary").fill("LRU cache, Java");
-    assert.equal(await page.getByRole("checkbox", { name: "Automatically suggest practice answers" }).isChecked(), false);
+    assert.equal(await page.getByRole("checkbox", { name: "Automatically request answers" }).isChecked(), false);
     await page.getByRole("checkbox", { name: "I have permission to capture this source." }).check();
     await page.getByRole("button", { name: "Start local capture" }).click();
     await page.getByRole("status").filter({ hasText: /^Listening$/ }).waitFor();
@@ -176,9 +244,30 @@ try {
     assert.equal(exit, 0, "Synthetic system playback must finish.");
     await page.getByRole("region", { name: "Transcript timeline" }).locator(".line.final").filter({ hasText: /cache.*java/i }).waitFor();
     await wait(3_400);
-    assert.equal(await page.getByText("Checked", { exact: true }).count(), 0);
-    await page.getByRole("button", { name: "Suggest answer", exact: true }).click();
-    await page.getByText("Checked", { exact: true }).waitFor();
+    assert.equal(await page.getByText("Complete", { exact: true }).count(), 0);
+    assert.equal(requests.length, 0);
+    if (fixture) {
+      await page.getByRole("button", { name: "Get answer", exact: true }).click();
+      await page.getByText("Complete", { exact: true }).waitFor();
+      const streamedAnswer = page.getByRole("region", { name: "Answer text" });
+      await streamedAnswer.getByText("Loopback fixture answer.").waitFor();
+      assert.equal(await streamedAnswer.getByRole("listitem").count(), 2);
+      assert.equal(await streamedAnswer.locator("pre code").textContent(), "let answer = 42;");
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].model, fixtureModel);
+      assert.match(requests[0].messages.at(-1).content, /cache.*java/i);
+      await page.getByRole("textbox", { name: "Ask a question" }).fill("Why?");
+      await page.getByRole("button", { name: "Ask", exact: true }).click();
+      await page.getByText("Follow-up to question 1", { exact: true }).waitFor();
+      await page.getByText("Complete", { exact: true }).waitFor();
+      assert.equal(requests.length, 2);
+      assert.deepEqual(requests[1].messages.map(item => item.role), ["system", "user", "assistant", "user"]);
+      assert.equal(requests[1].messages[2].content, fixtureText);
+      assert.equal(requests[1].messages.at(-1).content, "Why?");
+      console.log("Live ASR text and linked follow-up reached the selected loopback provider fixture.");
+    } else {
+      await page.getByRole("button", { name: "Choose provider", exact: true }).waitFor();
+    }
     await page.getByRole("button", { name: "Pause", exact: true }).click();
     await page.getByRole("status").filter({ hasText: /^Paused$/ }).waitFor();
     await page.getByRole("button", { name: "Resume", exact: true }).click();
@@ -186,7 +275,7 @@ try {
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await page.getByRole("status").filter({ hasText: /^Session ended$/ }).waitFor();
     await page.getByRole("button", { name: "Clear current session" }).click();
-    console.log("Desktop captured WASAPI playback, respected manual answer mode, and paused and resumed capture.");
+    console.log("Desktop captured WASAPI playback, left automatic answers off, and paused and resumed capture.");
   }
 
   await page.getByRole("button", { name: "Audio setup", exact: true }).click();
@@ -195,6 +284,9 @@ try {
   await page.setViewportSize({ width: 650, height: 780 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: join(output, "first-run-narrow-150.png"), animations: "disabled" });
+  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Providers overflow at 650 px and 150% text.");
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
   const theme = page.getByLabel("Appearance");
   await theme.selectOption("light");
   await page.locator('html[data-theme="light"]').waitFor({ state: "attached" });
@@ -219,6 +311,10 @@ try {
   console.log("Native WebView2 smoke passed. Screenshots in target/ui-smoke.");
 } finally {
   await browser?.close().catch(() => {});
+  if (fixture?.listening) {
+    fixture.closeAllConnections();
+    await new Promise(resolve => fixture.close(resolve));
+  }
   if (child.exitCode === null && !spawnError) {
     child.kill();
     await Promise.race([once(child, "exit"), wait(3_000)]);

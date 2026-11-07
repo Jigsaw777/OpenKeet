@@ -11,7 +11,7 @@
   },
   "app": {
     "windows": [
-      { "label": "main", "title": "Personal Copilot", "theme": "Dark", "width": 1150, "height": 790, "minWidth": 600, "minHeight": 530 }
+      { "label": "main", "title": "Personal Copilot", "theme": "Dark", "width": 1150, "height": 790, "minWidth": 600, "minHeight": 530, "skipTaskbar": true, "visible": false }
     ],
     "security": {
       "csp": "default-src 'self'; style-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
