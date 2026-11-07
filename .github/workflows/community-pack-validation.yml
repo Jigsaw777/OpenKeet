@@ -1,0 +1,21 @@
+name: Validate community packs
+
+on:
+  pull_request:
+    paths:
+      - community-packs/**
+      - schemas/**
+      - crates/copilot-core/src/prep/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable
+      - run: cargo +stable run --locked -p copilot -- validate-packs community-packs/examples
+      - run: cargo +stable test --locked -p copilot-core --test prep

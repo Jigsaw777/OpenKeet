@@ -1,0 +1,182 @@
+{
+  "format": "openkeet.community-pack",
+  "schemaVersion": "1.0.0",
+  "id": "org.openkeet.examples.java-backend",
+  "version": "1.0.0",
+  "title": "Java Backend Interview Pack",
+  "description": "Concurrency, caching, databases and API questions for backend Java roles. Reference answers are starting points; check them and use your own words.",
+  "authors": [{ "name": "OpenKeet contributors" }],
+  "license": "CC-BY-4.0",
+  "language": "en",
+  "tags": ["java", "backend", "concurrency", "databases"],
+  "minimumAppVersion": "0.1.0",
+  "skills": [
+    { "id": "concurrency", "name": "Concurrency" },
+    { "id": "caching", "name": "Caching" },
+    { "id": "redis", "name": "Redis" },
+    { "id": "databases", "name": "Databases and SQL" },
+    { "id": "postgresql", "name": "PostgreSQL" },
+    { "id": "mongodb", "name": "MongoDB" },
+    { "id": "apis", "name": "API design" }
+  ],
+  "questions": [
+    {
+      "id": "q-concurrent-map",
+      "skillIds": ["concurrency"],
+      "question": "When would you use ConcurrentHashMap instead of a synchronized HashMap?",
+      "paraphrases": [
+        "ConcurrentHashMap vs a synchronized map: which would you pick?",
+        "Why not just wrap a HashMap with Collections.synchronizedMap?",
+        "What is the difference between ConcurrentHashMap and a synchronized HashMap?"
+      ],
+      "intent": "compare",
+      "difficulty": 3,
+      "answerOutline": [
+        "Fine-grained locking instead of one global lock",
+        "Atomic methods such as putIfAbsent, compute and merge",
+        "Compound check-then-act code still needs care",
+        "Iterators are weakly consistent"
+      ],
+      "referenceAnswer": "ConcurrentHashMap lets many threads read and update the map at the same time without one global lock, so it scales better under contention than a map wrapped with Collections.synchronizedMap. It also offers atomic operations such as putIfAbsent, compute and merge. Check-then-act logic written as a separate get and put is still not atomic, so use those atomic methods instead. Its iterators are weakly consistent: they never throw ConcurrentModificationException, but they may not show updates made during iteration. It also rejects null keys and values. A synchronized map is simpler when contention is low or when you need to lock the whole map for a multi-step operation.",
+      "followupIds": ["q-compute-if-absent", "q-simple-lock"],
+      "references": [{ "title": "Java SE API: java.util.concurrent.ConcurrentHashMap", "url": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ConcurrentHashMap.html" }]
+    },
+    {
+      "id": "q-compute-if-absent",
+      "skillIds": ["concurrency"],
+      "question": "What pitfalls should you watch for with computeIfAbsent on a ConcurrentHashMap?",
+      "paraphrases": ["What can go wrong inside a computeIfAbsent mapping function?", "What are the pitfalls of computeIfAbsent?"],
+      "intent": "tradeoff",
+      "difficulty": 4,
+      "answerOutline": ["Keep the mapping function short", "No side effects or updates to the same map", "Slow functions block other writers", "Returning null stores nothing"],
+      "referenceAnswer": "The mapping function runs while part of the map is locked, so keep it short and free of side effects. Don't update the same map from inside the function: depending on the Java version it can throw IllegalStateException or hang. Slow work inside the function blocks other writers to the same part of the map. If the function returns null, nothing is stored and the call returns null.",
+      "followupIds": []
+    },
+    {
+      "id": "q-simple-lock",
+      "skillIds": ["concurrency"],
+      "question": "When would a simple lock be better than a concurrent collection?",
+      "paraphrases": ["When is a single lock a better choice than ConcurrentHashMap?"],
+      "intent": "compare",
+      "difficulty": 3,
+      "answerOutline": ["Several values must change together", "Low contention", "Holding a lock across a multi-step operation"],
+      "referenceAnswer": "A single lock is simpler when several fields or collections must change together as one atomic step, when contention is low, or when you need to hold the lock across a multi-step operation. Concurrent collections make individual operations thread-safe, but they don't make a sequence of operations atomic.",
+      "followupIds": []
+    },
+    {
+      "id": "q-race-condition",
+      "skillIds": ["concurrency", "caching"],
+      "question": "How would you avoid race conditions when several threads update a shared cache in Java?",
+      "paraphrases": [
+        "How do you make a shared cache thread-safe?",
+        "Multiple threads write to a shared cache. How do you prevent race conditions?",
+        "How would you handle multiple threads writing to a shared cache without race conditions?"
+      ],
+      "intent": "explain",
+      "difficulty": 3,
+      "answerOutline": ["Identify the shared mutable state", "Atomic operations or a concurrent map", "Locks for multi-step updates", "Immutability or thread confinement", "Test under concurrent load"],
+      "referenceAnswer": "First identify the shared mutable state and every code path that reads or writes it. For single-key updates, use a ConcurrentHashMap and its atomic methods such as computeIfAbsent or merge instead of a separate get and put. When several values must change together, guard the whole update with one lock. Where possible, avoid sharing mutable state at all: use immutable values or keep data confined to one thread. Then test under concurrent load, because race conditions often appear only under contention.",
+      "followupIds": ["q-concurrent-map"]
+    },
+    {
+      "id": "q-thread-pools-vs-virtual",
+      "skillIds": ["concurrency"],
+      "question": "How do thread pools compare with virtual threads in Java?",
+      "paraphrases": ["Thread pools versus virtual threads: when would you use each?", "What is the difference between a thread pool and virtual threads?"],
+      "intent": "compare",
+      "difficulty": 4,
+      "answerOutline": ["Virtual threads are cheap and suit blocking I/O", "Platform thread pools are sized carefully", "Limit scarce resources with semaphores or connection pools"],
+      "referenceAnswer": "Virtual threads, final since Java 21, are lightweight threads scheduled by the JVM, so you can run a very large number of blocking tasks such as I/O calls with simple thread-per-task code. Pools of platform threads are limited by operating-system threads, so you size them carefully. Pools still make sense to bound CPU-bound work. With virtual threads, cap access to scarce resources such as database connections with a semaphore or a connection pool instead of pooling the threads.",
+      "followupIds": []
+    },
+    {
+      "id": "q-cache-when",
+      "skillIds": ["caching", "redis"],
+      "question": "When should you add a cache like Redis to a backend service?",
+      "paraphrases": ["Why would you use Redis for caching?", "When does caching help a backend?", "What is Redis used for in a backend?"],
+      "intent": "explain",
+      "difficulty": 2,
+      "answerOutline": ["Faster reads for hot data", "Cache invalidation strategy", "Eviction policy and TTL", "Behaviour when the cache fails"],
+      "referenceAnswer": "Add a cache when the same data is read far more often than it changes and reading it from the source is slow or expensive. Redis keeps data in memory, so reads inside a data center typically take well under a millisecond. Before adding it, decide how entries are invalidated when the source data changes, which eviction policy and TTL fit, and what the service does when the cache is unavailable, usually falling back to the database with protection against a sudden load spike.",
+      "followupIds": ["q-cache-invalidation", "q-cache-failure", "q-cache-avoid"]
+    },
+    {
+      "id": "q-cache-avoid",
+      "skillIds": ["caching", "redis"],
+      "question": "When would you avoid using Redis as a cache?",
+      "paraphrases": ["When should you not use Redis?", "What are the downsides of adding Redis?", "Why not use Redis for strongly consistent writes?"],
+      "intent": "tradeoff",
+      "difficulty": 3,
+      "answerOutline": ["Data changes too often for good hit rates", "Reads must see the latest write", "Extra system to operate", "A better index or query may be simpler"],
+      "referenceAnswer": "Avoid a cache when data changes so often that hit rates stay low, when every read must see the latest write, such as balances or inventory reservations, or when the database is already fast enough. A cache adds another system to operate, another failure mode, and the risk of serving stale data. Measure first: an index or a better query is often the simpler fix.",
+      "followupIds": []
+    },
+    {
+      "id": "q-cache-invalidation",
+      "skillIds": ["caching"],
+      "question": "How do you handle cache invalidation when the underlying data changes?",
+      "paraphrases": ["How do you keep a cache in sync with the database?", "What cache invalidation strategies do you know?"],
+      "intent": "explain",
+      "difficulty": 3,
+      "answerOutline": ["Time to live", "Delete the entry after the write commits", "Change events", "Accept bounded staleness"],
+      "referenceAnswer": "Common approaches are a time to live, so entries expire on their own; deleting the cache entry after the source write commits; or publishing change events that consumers use to evict entries. Deleting the key is usually safer than writing the new value into the cache, because racing writers can otherwise leave an old value behind. Some staleness is still possible, so choose the TTL to match how fresh the data must be.",
+      "followupIds": []
+    },
+    {
+      "id": "q-cache-failure",
+      "skillIds": ["caching"],
+      "question": "What happens to your system if the cache fails?",
+      "paraphrases": ["What if Redis goes down?", "How do you protect the database when the cache is unavailable?"],
+      "intent": "explain",
+      "difficulty": 3,
+      "answerOutline": ["Reads fall through to the database", "Timeouts and a circuit breaker", "Request coalescing for hot keys", "Plan for a cold cache"],
+      "referenceAnswer": "Reads fall through to the database, which may suddenly receive far more traffic than it was sized for. Protect it with short timeouts on cache calls, a circuit breaker, request coalescing so only one caller reloads a hot key, and rate limits. Plan capacity for a cold cache after a restart, and monitor hit rate and latency so you notice problems early.",
+      "followupIds": []
+    },
+    {
+      "id": "q-db-index",
+      "skillIds": ["databases"],
+      "question": "How does a database index speed up queries, and what does it cost?",
+      "paraphrases": ["What is a database index?", "Why do indexes make queries faster?", "What are the downsides of adding an index?"],
+      "intent": "explain",
+      "difficulty": 2,
+      "answerOutline": ["A separate sorted structure such as a B-tree", "Avoids full table scans", "Extra storage and slower writes", "Check the query plan"],
+      "referenceAnswer": "An index is a separate sorted structure, usually a B-tree, that lets the database find matching rows without scanning the whole table. It speeds up lookups, range queries and sorting on the indexed columns. The cost is extra storage and slower writes, because every insert, update or delete must also update the index. Choose indexes from real query patterns and check the query plan, for example with EXPLAIN.",
+      "followupIds": ["q-postgres-index"]
+    },
+    {
+      "id": "q-postgres-index",
+      "skillIds": ["postgresql", "databases"],
+      "question": "How would you index a PostgreSQL table for a slow query?",
+      "paraphrases": ["A PostgreSQL query is slow. Which index would you add?", "How do you speed up a slow PostgreSQL query with an index?"],
+      "intent": "explain",
+      "difficulty": 3,
+      "answerOutline": ["Read the plan with EXPLAIN ANALYZE", "B-tree on filter and join columns", "Column order in composite indexes", "Covering index with INCLUDE", "Confirm the plan changed"],
+      "referenceAnswer": "Start with EXPLAIN ANALYZE to see whether the planner scans the whole table and where the time goes. Add a B-tree index on the columns used in the WHERE clause and joins, with equality-filtered columns first in a composite index. When a query reads only a few columns, a covering index with INCLUDE can avoid visiting the table. Run EXPLAIN ANALYZE again to confirm the plan changed, and keep an eye on the write cost of each new index.",
+      "followupIds": []
+    },
+    {
+      "id": "q-mongo-index",
+      "skillIds": ["mongodb", "databases"],
+      "question": "How would you index a MongoDB collection for a slow query?",
+      "paraphrases": ["A MongoDB query is slow. Which index would you add?"],
+      "intent": "explain",
+      "difficulty": 3,
+      "answerOutline": ["Check explain output for a collection scan", "Equality, then sort, then range fields", "Documents examined close to documents returned", "Remove unused indexes"],
+      "referenceAnswer": "Run the query with explain(\"executionStats\") to see whether it scans the whole collection. Create a compound index with equality fields first, then sort fields, then range fields. Check that the query uses the index and that the number of documents examined drops close to the number returned. Every index adds write and memory cost, so remove indexes that no query uses.",
+      "followupIds": []
+    },
+    {
+      "id": "q-idempotency",
+      "skillIds": ["apis"],
+      "question": "What makes a REST API endpoint idempotent, and why does it matter?",
+      "paraphrases": ["What is idempotency in REST APIs?", "Why should API retries be safe?"],
+      "intent": "explain",
+      "difficulty": 2,
+      "answerOutline": ["Same request repeated leaves the same state", "GET, PUT and DELETE are idempotent; POST is not", "Clients and proxies retry", "Idempotency keys for payments"],
+      "referenceAnswer": "An operation is idempotent when repeating the same request leaves the system in the same state as sending it once. HTTP defines GET, PUT and DELETE as idempotent; POST is not. It matters because clients and proxies retry after timeouts. For non-idempotent operations such as payments, accept an idempotency key from the client and store the result, so a retry returns the first outcome instead of charging twice.",
+      "followupIds": [],
+      "references": [{ "title": "RFC 9110, section 9.2.2: Idempotent Methods", "url": "https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2" }]
+    }
+  ]
+}

@@ -111,6 +111,8 @@ pub enum AnswerFailure {
     InvalidOutput,
     AuthenticationRequired,
     UsageLimit,
+    /// No provider is connected and the active interview pack has no safe prepared answer.
+    NoPreparedMatch,
 }
 
 impl AnswerFailure {
@@ -126,6 +128,9 @@ impl AnswerFailure {
             }
             Self::UsageLimit => {
                 "Your answer provider's usage limit is used up. Try again after it resets, or pick another provider in Settings → Answers."
+            }
+            Self::NoPreparedMatch => {
+                "We couldn't find a reliable prepared answer. Try another wording, or connect an answer provider in Settings."
             }
         }
     }

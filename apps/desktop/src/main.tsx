@@ -8,7 +8,8 @@ import { AudioSetup, StartCard, useAudioSetup } from "./audio-setup";
 import { AnswerPanel, CaptureControls, Empty, Icon, LiveStatus, Status, Transcript } from "./components";
 import { ProviderSetup } from "./provider-setup";
 import { SaveSession, SavedSessions } from "./saved-sessions";
-import { acceptView, emptyView, providerLabel, sourceLabel, unansweredSpeech } from "./protocol";
+import { acceptView, answerOrigin, currentAnticipation, emptyView, providerLabel, sourceLabel, unansweredSpeech } from "./protocol";
+import { CommunityPage, ExperiencePage, PracticePage, PreparePage, usePrep } from "./prep";
 import type { DesktopView, Session } from "./protocol";
 import { AppShell } from "./workspace-shell";
 import type { Page, Theme } from "./workspace-shell";
@@ -48,6 +49,8 @@ function App() {
   const [promptOpen, setPromptOpen] = useState(false);
   const promptInput = useRef<HTMLTextAreaElement>(null);
   const audio = useAudioSetup(desktop && !focusWindow);
+  const prep = usePrep(desktop && !focusWindow);
+  const [presetCommunity, setPresetCommunity] = useState<string | null>(null);
 
   const receive = useCallback((incoming: DesktopView) => {
     if (incoming.session.protocol_version !== 1) {
@@ -125,7 +128,7 @@ function App() {
       if (await command("start_capture", { config: {
         source: { kind: selected.kind, endpoint_id: selected.id }, engine: prefs.engine,
         model_path: prefs.model.trim(), vocabulary: prefs.vocabulary.trim(),
-        short_followups: prefs.shortFollowups, auto_answer: prefs.autoAnswer && Boolean(view.provider),
+        short_followups: prefs.shortFollowups, auto_answer: prefs.autoAnswer && Boolean(view.provider || view.pack),
         consent: true,
       } })) {
         setPrompt("");
@@ -158,7 +161,10 @@ function App() {
   const engine = providerLabel(view.provider);
   const showTranscript = transcriptOpen ?? !view.provider;
   const hasSession = running || view.mode !== "idle" || Boolean(session.question);
-  const heard = view.provider ? unansweredSpeech(session) : "";
+  const answers = Boolean(view.provider || view.pack);
+  const heard = answers ? unansweredSpeech(session) : "";
+  const origin = answerOrigin(view);
+  const anticipation = currentAnticipation(view);
   const answerHeard = heard ? () => void command("ask", { question: heard }) : undefined;
   const notice = error || session.notice;
   const feedback = <>{notice && <p className="notice" role="alert">{notice}{session.dropped_ms > 0 && " Reported audio loss: " + session.dropped_ms + " ms."}</p>}
@@ -171,7 +177,8 @@ function App() {
     <div className="focus-route"><CaptureControls view={view} command={command} />
       <label className="opacity">Opacity <input type="range" min={30} max={100} step={5} value={opacity} aria-label="Window opacity"
         onChange={event => setOpacity(Number(event.target.value))} /></label></div>
-    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} connected={Boolean(view.provider)} compact answerHeard={answerHeard}
+    {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} connected={answers} compact answerHeard={answerHeard}
+      origin={origin} anticipation={anticipation}
       footer={<button onClick={() => void command("show_workspace")}>{running ? "Main window" : "New session"} <Icon name="arrow" /></button>} />
   </main>;
 
@@ -190,20 +197,29 @@ function App() {
             <button disabled={!desktop} onClick={() => void command("open_focus")}><Icon name="focus" /> Overlay</button></div>
         </div>
         <div className="session-meta"><span>{sourceLabel(session.source.kind)}</span><span className="provider-account">{engine}</span>
+          {view.pack && <span className="soft-label">Interview pack: {view.pack.name}</span>}
           <button className="text-button" aria-pressed={showTranscript} onClick={() => setTranscriptOpen(!showTranscript)}>{showTranscript ? "Hide transcript" : "Show transcript"}</button>
         </div>
         <div className={"live-grid " + (showTranscript ? "" : "answer-view")}>
           <Transcript session={session} useTranscript={() => void useTranscript()} hidden={!showTranscript} />
           <AnswerPanel question={session.question} copy={text => void copy(text)} command={command}
-            connected={Boolean(view.provider)} chooseProvider={() => setPage("providers")} answerHeard={answerHeard} />
+            connected={answers} chooseProvider={() => setPage("providers")} answerHeard={answerHeard} origin={origin} anticipation={anticipation} />
         </div>
       </>}
-      {(hasSession || view.provider) && <details className="card history" open={promptOpen} onToggle={event => setPromptOpen(event.currentTarget.open)}>
+      {!running && prep.data && prep.data.packs.length > 0 && <div className="card setup-card">
+        <label htmlFor="session-pack">Interview pack for this session</label>
+        <select id="session-pack" value={view.pack?.id ?? ""} onChange={event => void prep.run({ action: "use_in_session", pack_id: event.target.value || null })}>
+          <option value="">None: use only the answer provider</option>
+          {prep.data.packs.map(p => <option key={p.id} value={p.id}>{p.settings.name}</option>)}
+        </select>
+        <p className="subtle">Approved answers from the pack appear at once, labeled "From your prepared pack", with no AI call. Use live help only where the interview allows it.</p>
+      </div>}
+      {(hasSession || answers) && <details className="card history" open={promptOpen} onToggle={event => setPromptOpen(event.currentTarget.open)}>
         <summary>Ask a question</summary>
         <form className="prompt" onSubmit={submit}><label htmlFor="manual-question">Question</label>
           <div className="prompt-row"><textarea id="manual-question" ref={promptInput} rows={2} maxLength={64000} value={prompt}
             placeholder="Type your question…" onChange={event => setPrompt(event.target.value)} />
-            {view.provider ? <button className="primary" disabled={!desktop || !prompt.trim()} type="submit">Ask <Icon name="arrow" /></button> :
+            {answers ? <button className="primary" disabled={!desktop || !prompt.trim()} type="submit">Ask <Icon name="arrow" /></button> :
               <button type="button" onClick={() => setPage("providers")}>Connect answers</button>}</div>
         </form>
       </details>}
@@ -213,6 +229,11 @@ function App() {
       {!running && hasSession && <button className="text-button erase" onClick={async () => { if (await command("clear_session")) setPrompt(""); }}>Clear current session</button>}
     </div>}
     {page === "history" && <SavedSessions enabled={desktop} />}
+    {page === "prepare" && <PreparePage prep={prep} enabled={desktop} aiReady={Boolean(view.provider)} review={() => setPage("experience")}
+      startPractice={() => setPage("practice")} presetCommunity={presetCommunity} />}
+    {page === "experience" && <ExperiencePage prep={prep} />}
+    {page === "practice" && <PracticePage prep={prep} />}
+    {page === "community" && <CommunityPage prep={prep} enabled={desktop} prepare={id => { setPresetCommunity(id); setPage("prepare"); }} />}
     {(page === "audio" || page === "providers") && <div className="settings-heading">
       <h1>Settings</h1>
       <nav className="settings-nav" aria-label="Settings">

@@ -2966,6 +2966,7 @@ dependencies = [
  "tokio",
  "uuid",
  "windows",
+ "zip",
 ]
 
 [[package]]

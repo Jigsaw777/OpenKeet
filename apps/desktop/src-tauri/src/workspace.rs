@@ -9,6 +9,7 @@ use copilot_audio::{AudioError, AudioEvent, Engine, Stop, StreamOptions, elapsed
 use copilot_core::{
     AnswerFailure, AnswerKey, CaptureState, MAX_QUESTION_BYTES, Policy, Session, Snapshot, Source,
     SourceKind, Span, Work,
+    prep::resolve::{Anticipation, Resolution, Resolver, answer_from_pack, anticipate},
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -80,6 +81,23 @@ pub struct Generation {
     work: Work,
 }
 
+/// Provenance of an answer that came from the active interview pack, keyed to its exact turn.
+#[derive(Clone, Serialize)]
+pub struct PreparedAnswer {
+    key: AnswerKey,
+    label: String,
+    question: String,
+    attribution: Option<String>,
+    pack_revision: u32,
+}
+
+#[derive(Clone, Serialize)]
+struct PackRef {
+    id: String,
+    name: String,
+    revision: u32,
+}
+
 #[derive(Clone, Serialize)]
 pub struct View {
     update: u64,
@@ -93,6 +111,9 @@ pub struct View {
     provider: Option<Selection>,
     shortcut_available: bool,
     auto_answer: bool,
+    pack: Option<PackRef>,
+    anticipation: Option<Anticipation>,
+    prepared_answers: Vec<PreparedAnswer>,
 }
 
 pub struct Desktop {
@@ -109,6 +130,9 @@ pub struct Desktop {
     audio_metrics: AudioMetrics,
     provider: Option<Selection>,
     shortcut_available: bool,
+    prepared: Option<Arc<Resolver>>,
+    anticipation: Option<Anticipation>,
+    prepared_answers: Vec<PreparedAnswer>,
 }
 
 impl Desktop {
@@ -127,6 +151,9 @@ impl Desktop {
             audio_metrics: AudioMetrics::default(),
             provider: None,
             shortcut_available: false,
+            prepared: None,
+            anticipation: None,
+            prepared_answers: Vec::new(),
         }))
     }
 
@@ -150,12 +177,68 @@ impl Desktop {
             provider: self.provider.clone(),
             shortcut_available: self.shortcut_available,
             auto_answer: self.session.auto_answer(),
+            pack: self.prepared.as_ref().map(|r| PackRef {
+                id: r.pack_id.clone(),
+                name: r.pack_name.clone(),
+                revision: r.revision,
+            }),
+            anticipation: self.anticipation.clone(),
+            prepared_answers: self.prepared_answers.clone(),
         }
     }
 
     fn changed(&mut self) -> View {
         self.update += 1;
+        self.refresh_anticipation();
         self.view()
+    }
+
+    /// Prefetches local candidates for a forming question; stale revisions are recomputed.
+    fn refresh_anticipation(&mut self) {
+        let (Some(resolver), Some(question)) = (&self.prepared, self.session.current_question())
+        else {
+            self.anticipation = None;
+            return;
+        };
+        if self
+            .anticipation
+            .as_ref()
+            .is_some_and(|a| a.is_current(self.serial, question, resolver.revision))
+        {
+            return;
+        }
+        self.anticipation = anticipate(resolver, self.serial, question);
+    }
+
+    /// Uses an interview pack's approved answers in sessions, or stops using one.
+    pub fn set_prepared(&mut self, resolver: Option<Arc<Resolver>>) -> Option<View> {
+        let unchanged = match (&self.prepared, &resolver) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.pack_id == b.pack_id && a.revision == b.revision,
+            _ => false,
+        };
+        if unchanged {
+            return None;
+        }
+        self.prepared = resolver;
+        self.anticipation = None;
+        Some(self.changed())
+    }
+
+    fn remember(&mut self, key: AnswerKey, hit: Resolution) {
+        let Some(answer) = hit.answer else {
+            return;
+        };
+        if self.prepared_answers.len() == 32 {
+            self.prepared_answers.remove(0);
+        }
+        self.prepared_answers.push(PreparedAnswer {
+            key,
+            label: answer.label,
+            question: answer.question,
+            attribution: answer.attribution,
+            pack_revision: hit.pack_revision,
+        });
     }
 
     fn reset(&mut self, mode: Mode, source: Source, policy: Policy) -> Result<(), String> {
@@ -171,6 +254,8 @@ impl Desktop {
         self.next_utterance = 1;
         self.meter = 0;
         self.audio_metrics = AudioMetrics::default();
+        self.anticipation = None;
+        self.prepared_answers.clear();
         Ok(())
     }
 
@@ -179,8 +264,11 @@ impl Desktop {
             if !config.consent {
                 return Err("Confirm that you have permission to capture this source.".into());
             }
-            if config.auto_answer && self.provider.is_none() {
-                return Err("Choose an answer provider before enabling automatic answers.".into());
+            if config.auto_answer && self.provider.is_none() && self.prepared.is_none() {
+                return Err(
+                    "Choose an answer provider or an interview pack before enabling automatic answers."
+                        .into(),
+                );
             }
             if !matches!(
                 config.source.kind,
@@ -278,10 +366,14 @@ impl Desktop {
     }
 
     fn require_provider(&self) -> Result<(), String> {
-        self.provider
-            .as_ref()
-            .map(|_| ())
-            .ok_or_else(|| "Choose an answer provider in Providers.".into())
+        if self.provider.is_some() || self.prepared.is_some() {
+            Ok(())
+        } else {
+            Err(
+                "Choose an answer provider in Settings, or use an interview pack in this session."
+                    .into(),
+            )
+        }
     }
 
     pub fn select_provider(
@@ -328,12 +420,27 @@ impl Desktop {
     pub fn tick(&mut self) -> (Option<View>, Option<Generation>) {
         let before = self.session.sequence();
         let now = elapsed_ms(self.clock);
-        let generation = self.provider.as_ref().and_then(|route| {
-            self.session.next_request(now).map(|work| Generation {
-                route: route.clone(),
-                work,
-            })
-        });
+        let mut generation = None;
+        if (self.provider.is_some() || self.prepared.is_some())
+            && let Some(work) = self.session.next_request(now)
+        {
+            // An approved prepared answer is used at once, with no model call.
+            let local = self
+                .prepared
+                .clone()
+                .and_then(|r| answer_from_pack(&mut self.session, &work, &r, now));
+            if let Some(hit) = local {
+                self.remember(work.request.key, hit);
+            } else if let Some(route) = &self.provider {
+                generation = Some(Generation {
+                    route: route.clone(),
+                    work,
+                });
+            } else {
+                self.session
+                    .complete(work.request.key, now, Err(AnswerFailure::NoPreparedMatch));
+            }
+        }
         (
             (self.session.sequence() != before).then(|| self.changed()),
             generation,
@@ -687,6 +794,36 @@ mod tests {
         println!("Meter JSON {meter_size} bytes, full snapshot JSON {view_size} bytes.");
         assert_eq!(desktop.view().audio_metrics.frames, 200);
         assert!(meter_size * 10 < view_size);
+    }
+
+    #[test]
+    fn prepared_pack_answers_a_typed_question_without_a_provider() {
+        use copilot_core::prep::{PackSettings, Workspace, community};
+        let mut ws = Workspace::default();
+        let pack = include_str!("../../../../community-packs/examples/java-backend.json");
+        ws.install_community(community::parse(pack.as_bytes()).unwrap(), "java.json", 1)
+            .unwrap();
+        let settings = PackSettings {
+            name: "Java".into(),
+            community_ids: vec!["org.openkeet.examples.java-backend".into()],
+            ..PackSettings::default()
+        };
+        let id = ws.compile_pack(None, settings, 2).unwrap();
+        let shared = Desktop::shared();
+        let mut desktop = shared.lock().unwrap();
+        assert!(desktop.ask("When should I avoid Redis?").is_err());
+        desktop.set_prepared(Resolver::build(&ws, &id).map(Arc::new));
+        desktop.ask("When should I avoid Redis?").unwrap();
+        let (view, generation) = desktop.tick();
+        assert!(
+            generation.is_none(),
+            "no provider request for a prepared hit"
+        );
+        let view = view.unwrap();
+        let answer = view.session.question.unwrap().answer.unwrap();
+        assert!(answer.text.starts_with("Avoid a cache"));
+        assert_eq!(view.prepared_answers[0].key, answer.key);
+        assert_eq!(view.prepared_answers[0].label, "Community concept");
     }
 
     #[test]

@@ -24,3 +24,13 @@ The provider notice appears before you activate a cloud route. If automatic answ
 - **Models and settings.** Downloaded speech weights and app settings are stored locally. Ollama manages its own downloaded models.
 
 Use **History** to delete saved sessions. This removes the entry from the app library. Use **Clear current session** to reset the workspace. [Technical data boundaries](architecture/DESKTOP_3_0.md)
+
+## Interview packs, facts and practice
+
+- **Where.** Documents you add, the facts found in them, stories, interview packs, answers and practice history are stored in a separate local database, `prep.sqlite3`, in the app data folder. Nothing is uploaded.
+- **What leaves your PC.** Nothing, unless you press **Draft with AI** on one answer. That sends the question, its outline and your confirmed facts for that topic to the answer provider you connected. Prepared answers in sessions never call a provider.
+- **Community packs.** Installing a pack copies public questions into a separate table. Exporting a shareable pack uses a field allowlist and never includes your documents, facts, stories, answers, names or file names. Pack links are never opened automatically.
+- **Logs.** Prep features write no logs. Their in-memory change list holds identifiers only, never document, transcript or answer text.
+- **Delete.** Remove a document in **Prepare**, a pack in **Manage this pack**, practice history in **Practice**, or everything with **Delete all my prep data** in **My experience**. **Save private backup** writes a JSON file you control; it contains your private data.
+
+Feature details: [InstantPrep](features/instantprep.md), [Anticipate](features/anticipate.md), [TrueStory](features/truestory.md), [Challenge Mode](features/challenge-mode.md), [Community Packs](features/community-packs.md).

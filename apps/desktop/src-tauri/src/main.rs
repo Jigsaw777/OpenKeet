@@ -3,6 +3,7 @@
 mod auth;
 mod history;
 mod platform;
+mod prep;
 mod provider_commands;
 mod providers;
 mod speech_setup;
@@ -241,6 +242,7 @@ fn main() {
                 providers::ProviderHub::new(directory.clone()).map_err(std::io::Error::other)?,
             );
             app.manage(speech_setup::SpeechSetup::new(directory.clone()));
+            app.manage(prep::PrepState::new(directory.clone()));
             app.manage(history::HistoryStore::new(directory));
             app.manage(Arc::clone(&providers));
             install_tray(app)?;
@@ -308,6 +310,8 @@ fn main() {
             history::delete_saved_session,
             history::save_session_notes,
             history::export_saved_session,
+            prep::prep,
+            prep::prep_draft_with_ai,
             use_transcript,
             clear_session,
             open_focus,
