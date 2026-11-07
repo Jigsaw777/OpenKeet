@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
-import { acceptView, emptyView, meterForView, statusLabel } from "../src/protocol.ts";
-import type { DesktopView } from "../src/protocol.ts";
+import { acceptView, activity, emptyView, meterForView } from "../src/protocol.ts";
+import type { DesktopView, QuestionPhase } from "../src/protocol.ts";
 
 function update(serial: number, session: number, sequence: number): DesktopView {
   return { ...emptyView, update: serial, session: { ...emptyView.session, session_id: session, sequence } };
@@ -34,5 +34,27 @@ test("standalone meter events cannot override a stopped or newer session", () =>
 
 test("active sample never displays hardware recording status", () => {
   const view: DesktopView = { ...emptyView, mode: "sample", session: { ...emptyView.session, capture: "capturing" } };
-  assert.equal(statusLabel(view), "Playing sample");
+  assert.equal(activity(view).title, "Playing sample");
+});
+
+test("activity names each step from silence to a finished answer", () => {
+  const live: DesktopView = { ...emptyView, mode: "audio", session: { ...emptyView.session, capture: "capturing" } };
+  const asking = (phase: QuestionPhase): DesktopView => ({ ...live, session: { ...live.session, question: {
+    id: 1, revision: 1, phase, span: { start_ms: 0, end_ms: 1 }, source: { kind: "system_output", endpoint_id: "out" }, text: "Why?", answer: null,
+  } } });
+  assert.equal(activity(emptyView).title, "Not listening");
+  assert.equal(activity({ ...live, loading: true }).title, "Starting…");
+  assert.equal(activity(live).title, "Listening");
+  assert.equal(activity({ ...live, session: { ...live.session, speech_active: true } }).title, "Hearing speech");
+  assert.equal(activity(asking("candidate")).title, "Question heard");
+  assert.equal(activity(asking("candidate")).detail, "Connect answers in Settings to get replies.");
+  const connected = { ...asking("candidate"), provider: { kind: "ollama" as const, model: "m" } };
+  assert.equal(activity(connected).detail, "Press Get answer when they finish.");
+  assert.equal(activity({ ...connected, auto_answer: true }).detail, "Waiting for them to finish…");
+  assert.equal(activity(asking("ready")).title, "Writing answer…");
+  assert.equal(activity(asking("answering")).title, "Writing answer…");
+  assert.equal(activity(asking("checked")).title, "Answer ready");
+  assert.equal(activity(asking("error")).tone, "warn");
+  assert.equal(activity({ ...live, session: { ...live.session, capture: "paused" } }).title, "Paused");
+  assert.equal(activity({ ...live, session: { ...live.session, capture: "stopped" } }).title, "Session ended");
 });

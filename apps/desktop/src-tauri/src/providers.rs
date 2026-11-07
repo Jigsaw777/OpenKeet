@@ -10,7 +10,7 @@ use std::{
 };
 
 use copilot_core::{AnswerFailure, AnswerRequest, MAX_ANSWER_BYTES};
-use reqwest::{Client, Response, StatusCode};
+use reqwest::{Client, RequestBuilder, Response, StatusCode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -61,7 +61,7 @@ pub struct Connections {
 
 #[derive(Serialize)]
 pub struct Model {
-    id: String,
+    pub id: String,
     name: String,
 }
 
@@ -202,10 +202,7 @@ impl ProviderHub {
     }
 
     pub fn save_claude(&self, key: String) -> Result<(), String> {
-        let key = key.trim();
-        if !(16..=512).contains(&key.len()) || !key.bytes().all(|byte| byte.is_ascii_graphic()) {
-            return Err("Enter a valid Claude Console API key.".into());
-        }
+        let key = valid_claude_key(&key)?;
         self.change(|settings| {
             settings.claude_key = Some(key.to_owned());
             deselect(settings, ProviderKind::Claude);
@@ -310,13 +307,28 @@ impl ProviderHub {
                 .client
                 .get(format!("{OPENAI}/models"))
                 .bearer_auth(self.bearer().await?),
-            ProviderKind::Claude => self
-                .client
-                .get(format!("{CLAUDE}/models"))
-                .header("anthropic-version", "2023-06-01")
-                .header("x-api-key", self.claude_key()?),
+            ProviderKind::Claude => self.claude_catalog(&self.claude_key()?),
             ProviderKind::Ollama => self.client.get(format!("{}/api/tags", self.ollama_origin)),
         };
+        Self::read_catalog(request, kind).await
+    }
+
+    pub async fn validate_claude(&self, key: &str) -> Result<Vec<Model>, String> {
+        let request = self.claude_catalog(valid_claude_key(key)?);
+        Self::read_catalog(request, ProviderKind::Claude).await
+    }
+
+    fn claude_catalog(&self, key: &str) -> RequestBuilder {
+        self.client
+            .get(format!("{CLAUDE}/models"))
+            .header("anthropic-version", "2023-06-01")
+            .header("x-api-key", key)
+    }
+
+    async fn read_catalog(
+        request: RequestBuilder,
+        kind: ProviderKind,
+    ) -> Result<Vec<Model>, String> {
         let response = request
             .timeout(Duration::from_secs(12))
             .send()
@@ -329,7 +341,17 @@ impl ProviderHub {
                 }
             })?;
         if !response.status().is_success() {
-            return Err(status_failure(response.status()).message().into());
+            let failure = status_failure(response.status());
+            return Err(match (kind, failure) {
+                (ProviderKind::Claude, AnswerFailure::AuthenticationRequired) => {
+                    "Claude rejected this API key. Check the key in Claude Console."
+                }
+                (ProviderKind::Chatgpt, AnswerFailure::AuthenticationRequired) => {
+                    "ChatGPT did not grant access to models. Reconnect and allow plan usage."
+                }
+                (_, failure) => failure.message(),
+            }
+            .into());
         }
         let response: Value = json_body(response).await?;
         Ok(model_catalog(kind, &response))
@@ -400,6 +422,14 @@ impl ProviderHub {
         }
         consume(response, route.kind, emit).await
     }
+}
+
+fn valid_claude_key(key: &str) -> Result<&str, String> {
+    let key = key.trim();
+    if !(16..=512).contains(&key.len()) || !key.bytes().all(|byte| byte.is_ascii_graphic()) {
+        return Err("Enter a valid Claude Console API key.".into());
+    }
+    Ok(key)
 }
 
 fn deselect(settings: &mut Settings, kind: ProviderKind) {

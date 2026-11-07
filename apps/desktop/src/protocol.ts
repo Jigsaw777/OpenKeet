@@ -57,6 +57,7 @@ export type DesktopView = {
   retryable: boolean;
   provider: ProviderSelection | null;
   shortcut_available: boolean;
+  auto_answer: boolean;
 };
 export type Endpoint = { id: string; name: string; kind: SourceKind; is_default: boolean };
 export type MeterUpdate = { update: number; session_id: number; peak: number; frames: number };
@@ -74,6 +75,7 @@ export const emptyView: DesktopView = {
   retryable: false,
   provider: null,
   shortcut_available: false,
+  auto_answer: false,
   session: {
     protocol_version: 1,
     sequence: 0,
@@ -106,18 +108,33 @@ export function meterForView(view: DesktopView, update: MeterUpdate | null): { p
 }
 
 export function sourceLabel(kind: SourceKind): string {
-  return { system_output: "System output", microphone: "Microphone", replay: "Sample transcript", typed: "Typed input" }[kind];
+  return { system_output: "System audio", microphone: "Microphone", replay: "Sample transcript", typed: "Typed input" }[kind];
 }
 
 export function providerLabel(provider: ProviderSelection | null): string {
-  return provider ? `${{ chatgpt: "ChatGPT / Codex", claude: "Claude", ollama: "Ollama" }[provider.kind]} · ${provider.model}` : "Choose an answer provider";
+  return provider ? `${{ chatgpt: "ChatGPT / Codex", claude: "Claude", ollama: "Ollama" }[provider.kind]} · ${provider.model}` : "Transcription only";
 }
 
-export function statusLabel(view: DesktopView): string {
-  if (view.loading) return "Loading speech model";
-  if (view.stopping) return "Finishing capture";
-  if (view.session.capture === "capturing") {
-    return view.mode === "sample" ? "Playing sample" : view.session.speech_active ? "Transcribing" : "Listening";
-  }
-  return { idle: "Ready", paused: "Paused", stopped: "Session ended", recovery: "Needs attention" }[view.session.capture];
+export type Activity = { title: string; detail: string; tone: "idle" | "live" | "busy" | "done" | "warn" };
+
+/** One plain-language answer to "what is the app doing right now?" */
+export function activity(view: DesktopView): Activity {
+  const { capture, speech_active, question } = view.session;
+  if (view.loading) return { title: "Starting…", detail: "Loading the speech model. This takes a few seconds.", tone: "busy" };
+  if (view.stopping) return { title: "Stopping…", detail: "Finishing the last words.", tone: "busy" };
+  if (capture === "recovery") return { title: "Audio stopped", detail: view.retryable ? "The audio device stopped. Press Retry." : "Start a new session.", tone: "warn" };
+  if (capture === "paused") return { title: "Paused", detail: "Not listening. Press Resume to continue.", tone: "idle" };
+  if (capture === "stopped") return { title: "Session ended", detail: "Start a new session when you are ready.", tone: "idle" };
+  if (capture !== "capturing") return { title: "Not listening", detail: "Press Start listening when the interview begins.", tone: "idle" };
+  const phase = question?.phase;
+  // "ready" means an answer was already requested and is queued.
+  if (phase === "ready" || phase === "drafting" || phase === "answering") return { title: "Writing answer…", detail: "The answer appears as it is written.", tone: "busy" };
+  if (speech_active) return { title: "Hearing speech", detail: "Turning speech into text.", tone: "live" };
+  if (phase === "candidate" || phase === "waiting" || phase === "incomplete") return { title: "Question heard", tone: "live",
+    detail: !view.provider && view.mode !== "sample" ? "Connect answers in Settings to get replies."
+      : view.auto_answer ? "Waiting for them to finish…" : "Press Get answer when they finish." };
+  if (phase === "error" || phase === "cancelled") return { title: phase === "error" ? "Answer failed" : "Answer cancelled", detail: "Press Retry answer.", tone: "warn" };
+  if (phase === "checked") return { title: "Answer ready", detail: "Still listening for the next question.", tone: "done" };
+  return view.mode === "sample" ? { title: "Playing sample", detail: "A recorded practice question is playing.", tone: "live" }
+    : { title: "Listening", detail: "Waiting for someone to speak.", tone: "live" };
 }

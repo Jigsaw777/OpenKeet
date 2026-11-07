@@ -4,10 +4,8 @@ import { createRoot } from "react-dom/client";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AudioSetup } from "./audio-setup";
-import { LiveMeter } from "./audio-meter";
-import { AnswerPanel, CaptureControls, Empty, Icon, Mark, Status, Transcript } from "./components";
-import { Overview } from "./overview";
+import { AudioSetup, StartCard, useAudioSetup } from "./audio-setup";
+import { AnswerPanel, CaptureControls, Empty, Icon, LiveStatus, Status, Transcript } from "./components";
 import { ProviderSetup } from "./provider-setup";
 import { SaveSession, SavedSessions } from "./saved-sessions";
 import { acceptView, emptyView, providerLabel, sourceLabel } from "./protocol";
@@ -18,24 +16,33 @@ import "./style.css";
 
 const focusWindow = new URLSearchParams(location.search).has("focus");
 const desktop = isTauri();
+if (focusWindow) document.documentElement.classList.add("overlay-window");
+
 function storedTheme(): Theme {
   const theme = localStorage.getItem("copilot-theme");
   return theme === "light" || theme === "system" ? theme : "dark";
 }
 
+function storedOpacity() {
+  const value = Number(localStorage.getItem("overlay-opacity"));
+  return value >= 30 && value <= 100 ? value : 70;
+}
+
 function App() {
   const [view, setView] = useState(emptyView);
-  const [page, setPage] = useState<Page>("overview");
-  const [layout, setLayout] = useState<"split" | "answer">("split");
-  const [audioOpened, setAudioOpened] = useState(false);
+  const [page, setPage] = useState<Page>("session");
+  const [transcriptOpen, setTranscriptOpen] = useState<boolean>();
   const [providersOpened, setProvidersOpened] = useState(false);
   const [theme, setTheme] = useState<Theme>(storedTheme);
   const [zoom, setZoom] = useState(localStorage.getItem("text-scale") || "100");
+  const [opacity, setOpacity] = useState(storedOpacity);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [pinned, setPinned] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [promptOpen, setPromptOpen] = useState(false);
   const promptInput = useRef<HTMLTextAreaElement>(null);
+  const audio = useAudioSetup(desktop && !focusWindow);
 
   const receive = useCallback((incoming: DesktopView) => {
     if (incoming.session.protocol_version !== 1) {
@@ -63,27 +70,32 @@ function App() {
 
   useEffect(() => {
     const system = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => { document.documentElement.dataset.theme = theme === "system" ? (system.matches ? "dark" : "light") : theme; };
+    const apply = () => {
+      document.documentElement.dataset.theme = focusWindow ? "dark" : theme === "system" ? (system.matches ? "dark" : "light") : theme;
+    };
     apply();
-    localStorage.setItem("copilot-theme", theme);
-    if (desktop) void getCurrentWindow().setTheme(theme === "system" ? null : theme).catch(problem => setError(String(problem)));
+    if (!focusWindow) localStorage.setItem("copilot-theme", theme);
+    if (desktop) void getCurrentWindow().setTheme(focusWindow ? "dark" : theme === "system" ? null : theme).catch(problem => setError(String(problem)));
     if (theme === "system") system.addEventListener("change", apply);
     return () => system.removeEventListener("change", apply);
   }, [theme]);
 
   useEffect(() => {
-    const syncTheme = (event: StorageEvent) => { if (event.key === "copilot-theme") setTheme(storedTheme()); };
-    window.addEventListener("storage", syncTheme);
-    return () => window.removeEventListener("storage", syncTheme);
+    const sync = (event: StorageEvent) => {
+      if (event.key === "copilot-theme") setTheme(storedTheme());
+      if (event.key === "text-scale" && event.newValue) setZoom(event.newValue);
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
   }, []);
 
   useEffect(() => {
     document.documentElement.dataset.zoom = zoom;
-    localStorage.setItem("text-scale", zoom);
+    if (!focusWindow) localStorage.setItem("text-scale", zoom);
   }, [zoom]);
 
+  useEffect(() => { if (focusWindow) localStorage.setItem("overlay-opacity", String(opacity)); }, [opacity]);
   useEffect(() => { setCopied(false); }, [page, view.session.session_id, view.session.question?.id, view.session.question?.revision]);
-  useEffect(() => { if (page === "audio") setAudioOpened(true); }, [page]);
   useEffect(() => { if (page === "providers") setProvidersOpened(true); }, [page]);
 
   async function command(name: string, args?: Record<string, unknown>) {
@@ -103,14 +115,43 @@ function App() {
     catch { setError("Clipboard access failed. Select the answer text to copy it manually."); }
   }
 
+  async function startSession() {
+    const { prefs, selected } = audio;
+    if (!selected || !audio.modelReady || starting) return;
+    setStarting(true);
+    try {
+      if (await command("start_capture", { config: {
+        source: { kind: selected.kind, endpoint_id: selected.id },
+        model_path: prefs.model.trim(), vocabulary: prefs.vocabulary.trim(),
+        short_followups: prefs.shortFollowups, auto_answer: prefs.autoAnswer && Boolean(view.provider),
+        consent: true,
+      } })) {
+        setPrompt("");
+        setPromptOpen(false);
+        setTranscriptOpen(undefined);
+        // The see-through overlay is the live surface: answers float over the call.
+        await command("open_focus");
+      }
+    } finally {
+      setStarting(false);
+    }
+  }
+
   async function sample() {
-    if (await command("start_sample")) { setPrompt(""); setPage("session"); }
+    if (await command("start_sample")) {
+      setPrompt("");
+      setPromptOpen(false);
+      setTranscriptOpen(undefined);
+    }
   }
 
   async function useTranscript() {
     setError("");
-    try { setPrompt(await invoke<string>("use_transcript")); promptInput.current?.focus(); }
-    catch (problem) { setError(String(problem)); }
+    try {
+      setPrompt(await invoke<string>("use_transcript"));
+      setPromptOpen(true);
+      requestAnimationFrame(() => promptInput.current?.focus());
+    } catch (problem) { setError(String(problem)); }
   }
 
   async function submit(event: FormEvent) {
@@ -122,62 +163,80 @@ function App() {
   const running = view.loading || view.stopping || ["paused", "capturing"].includes(session.capture);
   const isSample = view.mode === "sample";
   const engine = isSample ? "Bundled rehearsal" : providerLabel(view.provider);
+  const showTranscript = transcriptOpen ?? (!isSample && !view.provider);
+  const hasSession = running || view.mode !== "idle" || Boolean(session.question);
   const notice = error || session.notice;
-  const feedback = <>{notice && <p className="notice" role="alert">{notice}{session.dropped_ms > 0 && ` Reported audio loss: ${session.dropped_ms} ms.`}</p>}
+  const feedback = <>{notice && <p className="notice" role="alert">{notice}{session.dropped_ms > 0 && " Reported audio loss: " + session.dropped_ms + " ms."}</p>}
     {copied && <p className="toast" role="status">Answer copied</p>}</>;
 
-  if (focusWindow) return <main className="focus-shell">
-    <header className="focus-top"><div className="brand"><Mark size={25} /><h1>Focus</h1></div>
-      <div className="focus-status"><Status view={view} />
-        <button aria-pressed={pinned} onClick={async () => { if (await command("pin_focus", { pinned: !pinned })) setPinned(!pinned); }}>{pinned ? "Unpin" : "Pin"}</button></div></header>
-    <div className="focus-route"><p className="subtle focus-engine" title={engine}>{engine}</p><CaptureControls view={view} command={command} /></div>
+  if (focusWindow) return <main className="focus-shell" style={{ backgroundColor: `rgba(17, 18, 20, ${opacity / 100})` }}>
+    <header className="focus-top"><LiveStatus view={view} />
+      <button onClick={() => void command("hide_workspace")}
+        title={view.shortcut_available ? "Hide and pause listening. Ctrl+Alt+I brings it back." : "Hide and pause listening. Use the tray icon to bring it back."}>Hide</button></header>
+    <div className="focus-route"><CaptureControls view={view} command={command} />
+      <label className="opacity">Opacity <input type="range" min={30} max={100} step={5} value={opacity} aria-label="Window opacity"
+        onChange={event => setOpacity(Number(event.target.value))} /></label></div>
     {feedback}<AnswerPanel question={session.question} copy={text => void copy(text)} command={command} sample={isSample} connected={Boolean(view.provider)} compact
-      footer={<button onClick={() => void command("show_workspace")}>Open workspace <Icon name="arrow" /></button>} />
+      footer={<button onClick={() => void command("show_workspace")}>{running ? "Main window" : "New session"} <Icon name="arrow" /></button>} />
   </main>;
 
-  return <AppShell page={page} navigate={setPage} theme={theme} setTheme={setTheme} shortcut={desktop && view.update >= 0 ? view.shortcut_available : null}
-      hideWindow={desktop ? () => void command("hide_workspace") : undefined}>
-      {feedback}
-      {!desktop && <p className="notice" role="status">Open the desktop app to run the Rust engine.</p>}
-      {page === "overview" && <Overview view={view} navigate={setPage} sample={() => void sample()} canStart={desktop && !running} />}
-      {page === "session" && <div className="page-stack live-page">
-        <div className="page-title live-title"><div><p className="eyebrow">{isSample ? "Sample session" : "Current session"}</p><h1>Live workspace</h1></div>
-          <div className="live-controls"><Status view={view} /><CaptureControls view={view} command={command} />
-            {!running && <button onClick={() => setPage("audio")}>Set up audio</button>}
-            <button disabled={!desktop} onClick={() => void command("open_focus")}><Icon name="focus" /> Focus window</button></div></div>
-        <div className="session-meta"><span><Icon name="wave" />{sourceLabel(session.source.kind)}</span><span className="provider-account"><Icon name="plug" />{engine}</span>
-          {view.mode === "audio" && <LiveMeter view={view} />}
-          <div className="layout-switch" role="group" aria-label="Workspace layout">
-            <button aria-pressed={layout === "split"} onClick={() => setLayout("split")}>Split view</button>
-            <button aria-pressed={layout === "answer"} onClick={() => setLayout("answer")}>Answer view</button>
-          </div></div>
-        <div className={`live-grid ${layout === "answer" ? "answer-view" : ""}`}><Transcript session={session} useTranscript={() => void useTranscript()} hidden={layout === "answer"} />
-          <AnswerPanel question={session.question} copy={text => void copy(text)} command={command}
-            sample={isSample} connected={Boolean(view.provider)} chooseProvider={() => setPage("providers")} /></div>
-        <form className="card prompt" onSubmit={submit}><label htmlFor="manual-question">Ask a question</label>
-          <div className="prompt-row"><textarea id="manual-question" ref={promptInput} rows={2} maxLength={64000} value={prompt} placeholder="Type or review a question…" onChange={event => setPrompt(event.target.value)} />
-            {view.provider ? <button className="primary" disabled={!desktop || !prompt.trim() || (isSample && running)} type="submit">Ask <Icon name="arrow" /></button>
-              : <button type="button" onClick={() => setPage("providers")}>Set up answers</button>}</div></form>
-        <History session={session} />
-        {desktop && !running && (session.history.length > 0 || session.transcript.some(line => line.stability === "final")) &&
-          <SaveSession key={session.session_id} onSaved={() => setPage("history")} />}
-        {!running && (session.session_id > 0 || session.question) && <button className="text-button erase" onClick={async () => { if (await command("clear_session")) setPrompt(""); }}>Clear current session</button>}
-      </div>}
-      {page === "history" && <SavedSessions enabled={desktop} />}
-      {(page === "providers" || providersOpened) && <div hidden={page !== "providers"}>
-        <ProviderSetup view={view} enabled={desktop} command={command} />
-      </div>}
-      {(page === "audio" || audioOpened) && <div hidden={page !== "audio"}>
-        <AudioSetup view={view} enabled={desktop} visible={page === "audio"} zoom={zoom} setZoom={setZoom} showError={setError}
-          start={async config => { if (!await command("start_capture", { config })) return false; setPrompt(""); setPage("session"); return true; }} />
-      </div>}
+  return <AppShell page={page} navigate={setPage} status={page === "session" && hasSession ? null : <Status view={view} />}
+    shortcut={desktop && view.update >= 0 ? view.shortcut_available : null} hideWindow={desktop ? () => void command("hide_workspace") : undefined}>
+    {feedback}
+    {!desktop && <p className="notice" role="status">Open the desktop app to run the Rust engine.</p>}
+    {page === "session" && <div className="page-stack live-page">
+      {!running && <StartCard view={view} audio={audio} enabled={desktop} starting={starting} start={() => void startSession()}
+        sample={() => void sample()} connect={() => setPage("providers")} />}
+      {hasSession && <>
+        <div className="live-bar">
+          <div className="live-heading">{running ? <h1 className="eyebrow">{isSample ? "Sample session" : "Live session"}</h1>
+            : <h2 className="eyebrow">{isSample ? "Sample session" : "Last session"}</h2>}<LiveStatus view={view} /></div>
+          <div className="live-controls"><CaptureControls view={view} command={command} />
+            <button disabled={!desktop} onClick={() => void command("open_focus")}><Icon name="focus" /> Overlay</button></div>
+        </div>
+        <div className="session-meta"><span>{sourceLabel(session.source.kind)}</span><span className="provider-account">{engine}</span>
+          <button className="text-button" aria-pressed={showTranscript} onClick={() => setTranscriptOpen(!showTranscript)}>{showTranscript ? "Hide transcript" : "Show transcript"}</button>
+        </div>
+        <div className={"live-grid " + (showTranscript ? "" : "answer-view")}>
+          <Transcript session={session} useTranscript={() => void useTranscript()} hidden={!showTranscript} />
+          <AnswerPanel question={session.question} copy={text => void copy(text)} command={command} sample={isSample}
+            connected={Boolean(view.provider)} chooseProvider={() => setPage("providers")} />
+        </div>
+      </>}
+      {(hasSession || view.provider) && <details className="card history" open={promptOpen} onToggle={event => setPromptOpen(event.currentTarget.open)}>
+        <summary>Ask a question</summary>
+        <form className="prompt" onSubmit={submit}><label htmlFor="manual-question">Question</label>
+          <div className="prompt-row"><textarea id="manual-question" ref={promptInput} rows={2} maxLength={64000} value={prompt}
+            placeholder="Type your question…" onChange={event => setPrompt(event.target.value)} />
+            {view.provider ? <button className="primary" disabled={!desktop || !prompt.trim() || (isSample && running)} type="submit">Ask <Icon name="arrow" /></button> :
+              <button type="button" onClick={() => setPage("providers")}>Connect answers</button>}</div>
+        </form>
+      </details>}
+      {hasSession && <History session={session} />}
+      {desktop && !running && (session.history.length > 0 || session.transcript.some(line => line.stability === "final")) &&
+        <SaveSession key={session.session_id} onSaved={() => setPage("history")} />}
+      {!running && hasSession && <button className="text-button erase" onClick={async () => { if (await command("clear_session")) setPrompt(""); }}>Clear current session</button>}
+    </div>}
+    {page === "history" && <SavedSessions enabled={desktop} />}
+    {(page === "audio" || page === "providers") && <div className="settings-heading">
+      <h1>Settings</h1>
+      <nav className="settings-nav" aria-label="Settings">
+        <button aria-current={page === "providers" ? "page" : undefined} onClick={() => setPage("providers")}>Answers</button>
+        <button aria-current={page === "audio" ? "page" : undefined} onClick={() => setPage("audio")}>Audio and display</button>
+      </nav>
+    </div>}
+    {(page === "providers" || providersOpened) && <div hidden={page !== "providers"}>
+      <ProviderSetup view={view} enabled={desktop} visible={page === "providers"} command={command} done={() => setPage("session")} />
+    </div>}
+    {page === "audio" && <AudioSetup view={view} audio={audio} enabled={desktop} zoom={zoom} setZoom={setZoom} theme={theme} setTheme={setTheme}
+      done={() => setPage("session")} />}
   </AppShell>;
 }
 
 function History({ session }: { session: Session }) {
   return <details className="card history"><summary>Session history <span className="soft-label">{session.history.length}</span></summary>
     {session.history.length ? session.history.map(item => <article key={item.answer.key.question_id}>
-      <p className="eyebrow">{item.answer.status === "superseded" ? "Superseded" : "Checked"} · Revision {item.answer.key.revision}{item.follow_up_to && ` · Follow-up to question ${item.follow_up_to}`}</p><strong>{item.question}</strong><p>{item.answer.text}</p>
+      <p className="eyebrow">{item.answer.status === "superseded" ? "Superseded" : "Checked"} · Revision {item.answer.key.revision}{item.follow_up_to && " · Follow-up to question " + item.follow_up_to}</p><strong>{item.question}</strong><p>{item.answer.text}</p>
     </article>) : <Empty label="No checked answers yet" detail="Completed revisions appear here during this session." />}
   </details>;
 }

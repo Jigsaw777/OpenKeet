@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][int]$AppPid,
-    [ValidateSet('Hidden', 'Visible', 'Shortcut')][string]$Check = 'Hidden'
+    [ValidateSet('Hidden', 'Visible', 'Overlay', 'Close', 'Shortcut')][string]$Check = 'Hidden',
+    [switch]$RestoreOverlay
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,6 +31,13 @@ public static class CopilotWindowProbe {
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool PostMessageW(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+
+    public static bool CloseWindow(IntPtr hwnd) {
+        return PostMessageW(hwnd, 0x10, IntPtr.Zero, IntPtr.Zero);
+    }
 
     [DllImport("user32.dll", SetLastError=true)]
     private static extern uint SendInput(uint count, Input[] inputs, int size);
@@ -75,12 +83,12 @@ public static class CopilotWindowProbe {
     }
 
     public static void RevealShortcut() {
-        const ushort Ctrl = 0xA2, Shift = 0xA0, I = 0x49;
+        const ushort Ctrl = 0xA2, Alt = 0xA4, I = 0x49;
         try {
-            Send(Key(Ctrl, false), Key(Shift, false), Key(I, false));
+            Send(Key(Ctrl, false), Key(Alt, false), Key(I, false));
             Thread.Sleep(120);
         } finally {
-            Send(Key(I, true), Key(Shift, true), Key(Ctrl, true));
+            Send(Key(I, true), Key(Alt, true), Key(Ctrl, true));
         }
     }
 
@@ -105,29 +113,40 @@ function Assert-ToolWindow([IntPtr]$Handle, [string]$Name) {
     }
 }
 Assert-ToolWindow $main 'workspace'
-Assert-ToolWindow $focus 'Focus after pin and unpin'
+Assert-ToolWindow $focus 'overlay'
+if (([CopilotWindowProbe]::GetWindowStyle($focus, -20).ToInt64() -band 0x8) -eq 0) {
+    throw 'The overlay must stay above regular windows.'
+}
+if ($Check -eq 'Close' -and ![CopilotWindowProbe]::CloseWindow($main)) {
+    throw 'Could not send Close to the workspace.'
+}
 
 $clock = [Diagnostics.Stopwatch]::StartNew()
-$expectedVisible = $Check -eq 'Visible'
-while ([CopilotWindowProbe]::IsWindowVisible($main) -ne $expectedVisible -and $clock.ElapsedMilliseconds -lt 2000) {
+$showMain = $Check -eq 'Visible'
+$showOverlay = $Check -eq 'Overlay'
+function Test-Visibility {
+    return ([CopilotWindowProbe]::IsWindowVisible($main) -eq $showMain) -and ([CopilotWindowProbe]::IsWindowVisible($focus) -eq $showOverlay)
+}
+while (!(Test-Visibility) -and $clock.ElapsedMilliseconds -lt 3000) {
     Start-Sleep -Milliseconds 30
 }
-if ([CopilotWindowProbe]::IsWindowVisible($main) -ne $expectedVisible) {
-    throw "Workspace did not reach the expected $Check state."
+if (!(Test-Visibility)) {
+    throw "Companion did not reach the expected $Check state."
 }
 if ($Check -ne 'Shortcut') {
-    "Workspace $Check state and both tool-window styles verified."
+    "Companion $Check state, both tool-window styles and overlay topmost flag verified."
     exit 0
 }
 [CopilotWindowProbe]::RevealShortcut()
+$expected = if ($RestoreOverlay) { $focus } else { $main }
 $clock.Restart()
 do {
-    if ([CopilotWindowProbe]::IsWindowVisible($main) -and [CopilotWindowProbe]::GetForegroundWindow() -eq $main) {
-        Assert-ToolWindow $main 'workspace after shortcut'
-        'Ctrl+Shift+I restored and focused the hidden workspace.'
+    if ([CopilotWindowProbe]::IsWindowVisible($expected) -and [CopilotWindowProbe]::GetForegroundWindow() -eq $expected) {
+        Assert-ToolWindow $expected 'companion after shortcut'
+        'Ctrl+Alt+I restored and focused the hidden companion.'
         exit 0
     }
     Start-Sleep -Milliseconds 40
 } while ($clock.ElapsedMilliseconds -lt 5000)
-throw ('Ctrl+Shift+I did not restore and focus the workspace. Visible={0}, foreground=0x{1:X}, main=0x{2:X}.' -f
-    [CopilotWindowProbe]::IsWindowVisible($main), [CopilotWindowProbe]::GetForegroundWindow().ToInt64(), $main.ToInt64())
+throw ('Ctrl+Alt+I did not restore and focus the companion. Visible={0}, foreground=0x{1:X}, expected=0x{2:X}.' -f
+    [CopilotWindowProbe]::IsWindowVisible($expected), [CopilotWindowProbe]::GetForegroundWindow().ToInt64(), $expected.ToInt64())

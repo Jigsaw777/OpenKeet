@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useMeter } from "./audio-meter";
 import type { DesktopView, Question, Session } from "./protocol";
-import { sourceLabel, statusLabel } from "./protocol";
+import { activity, sourceLabel } from "./protocol";
 
 export type Command = (name: string, args?: Record<string, unknown>) => Promise<boolean>;
 
@@ -39,7 +40,33 @@ export function CaptureControls({ view, command }: { view: DesktopView; command:
 }
 
 export function Status({ view }: { view: DesktopView }) {
-  return <span className={`pill capture-${view.session.capture}`} role="status"><i />{statusLabel(view)}</span>;
+  return <span className={`pill tone-${activity(view).tone}`} role="status"><i />{activity(view).title}</span>;
+}
+
+const QUIET_MS = 12_000;
+
+/** Big "what is happening" line with a live input level and a no-sound hint. */
+export function LiveStatus({ view }: { view: DesktopView }) {
+  const { peak } = useMeter(view);
+  const listening = view.mode === "audio" && view.session.capture === "capturing" && !view.stopping;
+  const lastSound = useRef(Date.now());
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!listening || peak > 300 || view.session.speech_active) lastSound.current = Date.now();
+  }, [listening, peak, view.session.speech_active]);
+  useEffect(() => {
+    if (!listening) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [listening]);
+  const state = activity(view);
+  const quiet = listening && peak <= 300 && state.title === "Listening" && now - lastSound.current > QUIET_MS;
+  return <div className={`live-status tone-${state.tone}`} role="status">
+    <i aria-hidden="true" />
+    <div className="live-text"><strong>{state.title}</strong>
+      <span>{quiet ? "No sound from the selected device yet. Check that the call plays through it." : state.detail}</span></div>
+    {listening && <meter aria-label="Input level" min={0} max={32768} value={peak} />}
+  </div>;
 }
 
 export function Transcript({ session, useTranscript, hidden = false }: { session: Session; useTranscript: () => void; hidden?: boolean }) {
@@ -70,58 +97,47 @@ function formatTime(ms: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-const phases: Record<Question["phase"], string> = {
-  candidate: "Waiting for the question to finish",
-  waiting: "Checking for more context",
-  incomplete: "Waiting for the rest of the question",
-  ready: "Ready to answer",
-  drafting: "Preparing a draft",
-  answering: "Preparing a checked answer",
-  checked: "Checked",
-  cancelled: "Cancelled",
-  error: "Needs attention",
-};
-
 export function AnswerPanel({ question, copy, command, sample, connected, chooseProvider, compact = false, footer }: {
   question: Question | null; copy: (text: string) => void; command: Command; sample: boolean;
   connected: boolean; chooseProvider?: () => void; compact?: boolean; footer?: ReactNode;
 }) {
   const answer = question?.answer;
-  const canRequest = question && question.source.kind !== "typed" &&
-    ["candidate", "waiting", "incomplete", "cancelled", "error"].includes(question.phase);
+  const retry = question?.phase === "error" || question?.phase === "cancelled";
+  const canRequest = retry || (question && question.source.kind !== "typed" &&
+    ["candidate", "waiting", "incomplete"].includes(question.phase));
   const canCancel = question && ["answering", "drafting"].includes(question.phase);
   const scroll = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = 0; }, [question?.id, question?.revision]);
   const label = answer?.status === "checked" ? (sample ? "Checked" : "Complete")
     : answer?.status === "provisional" ? (sample ? "Draft" : "Writing")
-    : answer?.status === "superseded" ? "Superseded" : "Awaiting question";
+    : canCancel ? "Answering" : retry ? "Try again" : answer?.status === "superseded" ? "Superseded"
+    : question ? (connected || sample ? "Ready to answer" : "Transcript only") : "Awaiting question";
   const title = sample ? "Practice answer" : "Answer";
   const text = question?.text || "A question will appear here.";
   const followUp = question?.follow_up_to && <p className="follow-up">Follow-up to question {question.follow_up_to}</p>;
-  const phase = question && question.phase !== "checked" && <p className="subtle">{phases[question.phase]}</p>;
   return <section className={`card answer-panel ${compact ? "compact-answer" : ""}`} aria-labelledby="answer-title">
     {compact ? <div className="compact-question">
       {followUp}
       <details key={question?.id}>
         <summary aria-label="Show full current question"><span>{text}</span></summary>
-        <div className="compact-question-full"><p>{text}</p>{phase}</div>
+        <div className="compact-question-full"><p>{text}</p></div>
       </details>
     </div> : <div className="question-block">
       <div className="meta-line"><p className="eyebrow">Current question</p>{question && <span className="soft-label">Revision {question.revision}</span>}</div>
       <p className="question-text">{text}</p>
-      {followUp}{phase}
+      {followUp}
     </div>}
     <div className="card-head"><div>{!compact && <p className="eyebrow">Response</p>}<h2 id="answer-title">{title}</h2></div>
       <span className={`soft-label answer-${answer?.status ?? "empty"}`}>{label}</span></div>
     <div ref={scroll} className="answer-content" role="region" aria-label={`${title} text`} tabIndex={0}>
       {answer ? <><div className={answer.status === "superseded" ? "answer-body superseded" : "answer-body"}><AnswerText text={answer.text} /></div>
         {answer.status === "superseded" && <p className="subtle">This answer is from an earlier revision.</p>}</> :
-        <Empty label={connected || sample ? "Ready for your question" : "Choose an answer provider"}
+        <Empty label={connected || sample ? (canCancel ? "Waiting for an answer" : "Ready for your question") : "Transcription only"}
           detail={sample ? "The bundled rehearsal supplies example answers." : connected
-            ? "Request an answer for a detected question or type your own." : "Connect ChatGPT, Claude, or Ollama in Providers."} />}
+            ? "Request an answer for a detected question or type your own." : "Connect an answer provider in Settings."} />}
     </div>
     <div className="card-foot">{canCancel ? <button onClick={() => void command("cancel_answer")}>Cancel answer</button>
-      : canRequest && (connected || sample) ? <button onClick={() => void command("request_detected")}>{sample ? "Suggest answer" : "Get answer"}</button>
+      : canRequest && (connected || sample) ? <button className="primary" onClick={() => void command("request_detected")}>{retry ? "Retry answer" : sample ? "Suggest answer" : "Get answer"}</button>
       : !sample && !connected && chooseProvider && !answer ? <button onClick={chooseProvider}>Choose provider</button>
       : <button disabled={answer?.status !== "checked"} onClick={() => answer && copy(answer.text)}>Copy answer</button>}{footer}</div>
   </section>;

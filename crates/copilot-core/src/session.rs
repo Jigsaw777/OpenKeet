@@ -141,6 +141,10 @@ impl Session {
         self.capture
     }
 
+    pub fn auto_answer(&self) -> bool {
+        self.policy.auto_answer
+    }
+
     pub fn drain_events(&mut self) -> impl Iterator<Item = Event> + '_ {
         self.events.drain(..)
     }
@@ -333,12 +337,18 @@ impl Session {
             .questions
             .back_mut()
             .ok_or("Wait for a detected question.")?;
-        if q.view.source.kind == SourceKind::Typed
+        if q.requested && q.view.phase == QuestionPhase::Ready
+            || (q.view.source.kind == SourceKind::Typed
+                && !matches!(
+                    q.view.phase,
+                    QuestionPhase::Cancelled | QuestionPhase::Error
+                ))
             || !matches!(
                 q.view.phase,
                 QuestionPhase::Candidate
                     | QuestionPhase::Incomplete
                     | QuestionPhase::Waiting
+                    | QuestionPhase::Ready
                     | QuestionPhase::Cancelled
                     | QuestionPhase::Error
             )
@@ -499,6 +509,23 @@ impl Session {
                 pending.work.request.key.question_id,
                 QuestionPhase::Cancelled,
             );
+        }
+    }
+
+    pub fn change_answer_route(&mut self) {
+        self.policy.auto_answer = false;
+        self.cancel_answer();
+        let queued: Vec<_> = self
+            .questions
+            .iter_mut()
+            .filter_map(|question| {
+                let requested = std::mem::take(&mut question.requested);
+                (requested && question.view.phase == QuestionPhase::Ready)
+                    .then_some(question.view.id)
+            })
+            .collect();
+        for id in queued {
+            self.phase(id, QuestionPhase::Cancelled);
         }
     }
 

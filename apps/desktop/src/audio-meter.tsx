@@ -22,8 +22,3 @@ export function useMeter(view: DesktopView, visible = true) {
 
   return meterForView(view, latest);
 }
-
-export function LiveMeter({ view }: { view: DesktopView }) {
-  const { peak } = useMeter(view);
-  return <label className="meter-compact" htmlFor="live-level">Input level <meter id="live-level" min={0} max={32768} value={peak} /></label>;
-}

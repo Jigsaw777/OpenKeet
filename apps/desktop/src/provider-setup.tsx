@@ -11,154 +11,176 @@ type Connections = {
   error: string | null;
 };
 type Model = { id: string; name: string };
+type Route = ProviderKind | "off";
 
-const routes = [
-  { kind: "chatgpt", name: "ChatGPT / Codex", description: "Use a model available to your ChatGPT plan after signing in." },
-  { kind: "claude", name: "Claude", description: "Sign in to Claude Console and connect an API key. API use is billed through the key owner’s account." },
-  { kind: "ollama", name: "Ollama", description: "Use a model installed on this PC. Local Ollama needs no account." },
-] as const;
+const names = { chatgpt: "ChatGPT / Codex", claude: "Claude", ollama: "Ollama" };
 
-export function ProviderSetup({ view, enabled, command }: {
+export function ProviderSetup({ view, enabled, visible, command, done }: {
   view: DesktopView;
   enabled: boolean;
+  visible: boolean;
   command: Command;
+  done: () => void;
 }) {
   const [connections, setConnections] = useState<Connections | null>(null);
-  const [models, setModels] = useState<Partial<Record<ProviderKind, Model[]>>>({});
-  const [choice, setChoice] = useState<Partial<Record<ProviderKind, string>>>({});
-  const [consent, setConsent] = useState<Partial<Record<ProviderKind, boolean>>>({});
+  const [kind, setKind] = useState<Route>(view.provider?.kind ?? "off");
+  const [models, setModels] = useState<Model[]>([]);
+  const [model, setModel] = useState(view.provider?.model ?? "");
   const [key, setKey] = useState("");
-  const [pending, setPending] = useState<ProviderKind | null>(null);
-  const [signingIn, setSigningIn] = useState(false);
+  const [editingKey, setEditingKey] = useState(false);
+  const [pending, setPending] = useState<"sign-in" | "models" | "saving" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const captureBusy = view.loading || view.stopping || ["capturing", "paused"].includes(view.session.capture);
+  const active = view.provider?.kind === kind && view.provider.model === model;
+  const connected = kind === "chatgpt" ? Boolean(connections?.chatgpt_account) :
+    kind === "claude" ? Boolean(connections?.claude_key_saved) : kind === "ollama";
+  const disabled = !enabled || !connections || pending !== null || Boolean(connections.error);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !visible || connections) return;
     let current = true;
     void invoke<Connections>("provider_connections").then(value => {
-      if (current) setConnections(value);
+      if (!current) return;
+      setConnections(value);
+      // Fill the model list for the active provider so switching models needs no extra click.
+      const active = view.provider?.kind;
+      if (active && !value.error) void perform("models", () => loadModels(active));
     }).catch(problem => { if (current) setError(String(problem)); });
     return () => { current = false; };
-  }, [enabled]);
+  }, [enabled, visible, connections]);
 
-  async function perform(kind: ProviderKind, action: () => Promise<void>) {
-    setPending(kind);
+  function setCatalog(provider: ProviderKind, catalog: Model[]) {
+    setModels(catalog);
+    const previous = view.provider?.kind === provider ? view.provider.model : "";
+    setModel(catalog.find(entry => entry.id === previous)?.id ?? catalog[0]?.id ?? "");
+    if (!catalog.length) setNotice(provider === "ollama" ? "Ollama is running. Install a local model and try again." : "This account returned no models.");
+  }
+
+  async function perform(step: NonNullable<typeof pending>, action: () => Promise<void>) {
+    setPending(step);
     setError("");
     setNotice("");
     try { await action(); }
-    catch (problem) {
-      setError(String(problem));
-      void invoke<Connections>("provider_connections").then(setConnections).catch(() => {});
-    } finally { setPending(null); }
+    catch (problem) { setError(String(problem)); }
+    finally { setPending(null); }
   }
 
-  function connectChatGpt(differentAccount: boolean) {
-    void perform("chatgpt", async () => {
-      setSigningIn(true);
-      try {
-        setConnections(await invoke<Connections>("sign_in_chatgpt", { differentAccount }));
-        setModels(current => ({ ...current, chatgpt: undefined }));
-        setChoice(current => ({ ...current, chatgpt: "" }));
-        setNotice("ChatGPT connected. Load models and select the one to use.");
-      } finally { setSigningIn(false); }
+  async function loadModels(provider: ProviderKind) {
+    setCatalog(provider, await invoke<Model[]>("provider_models", { kind: provider }));
+  }
+
+  function chooseRoute(route: Route) {
+    setKind(route);
+    setModels([]);
+    setModel(view.provider?.kind === route ? view.provider.model : "");
+    setError("");
+    setNotice("");
+    setKey("");
+    setEditingKey(false);
+    if (route === "ollama" || (route === "chatgpt" && connections?.chatgpt_account) ||
+        (route === "claude" && connections?.claude_key_saved)) {
+      void perform("models", () => loadModels(route));
+    }
+  }
+
+  function signIn(differentAccount: boolean) {
+    void perform("sign-in", async () => {
+      setConnections(await invoke<Connections>("sign_in_chatgpt", { differentAccount }));
+      setModels([]);
+      setModel("");
+      setPending("models");
+      await loadModels("chatgpt");
     });
   }
 
-  function changeClaude(remove: boolean) {
-    void perform("claude", async () => {
-      setConnections(await invoke<Connections>(remove ? "clear_claude_key" : "save_claude_key", remove ? undefined : { key }));
-      setKey("");
-      setModels(current => ({ ...current, claude: undefined }));
-      setChoice(current => ({ ...current, claude: "" }));
-      setNotice(remove ? "Claude key removed." : "Claude key saved. Load models to check the connection.");
-    });
-  }
-
-  function findModels(kind: ProviderKind) {
-    void perform(kind, async () => {
-      const catalog = await invoke<Model[]>("provider_models", { kind });
-      setModels(current => ({ ...current, [kind]: catalog }));
-      if (catalog.length === 0) {
-        setNotice(kind === "ollama" ? "Ollama is running. Install a local model and try again." : "The account returned no models.");
-      } else {
-        setNotice(`Loaded ${catalog.length} ${catalog.length === 1 ? "model" : "models"}.`);
+  function disconnect(provider: "chatgpt" | "claude") {
+    void perform("saving", async () => {
+      try { setConnections(await invoke<Connections>(provider === "chatgpt" ? "sign_out_chatgpt" : "clear_claude_key")); }
+      catch (problem) {
+        setConnections(await invoke<Connections>("provider_connections"));
+        throw problem;
+      } finally {
+        setModels([]);
+        setModel("");
       }
     });
   }
 
-  const busy = !enabled || pending !== null || Boolean(connections?.error);
-  return <div className="page-stack">
-    <div className="page-title">
-      <p className="eyebrow">Answer engine</p><h1>Providers</h1>
-      <p>Choose where your questions are answered. Speech recognition stays on this device.</p>
-    </div>
-    <section className="card status-card" aria-label="Active answer provider">
-      <div className="section-heading">
-        <div><p className="eyebrow">Active answer provider</p><strong>{providerLabel(view.provider)}</strong></div>
-        <button disabled={busy || !view.provider} onClick={() => void command("disable_answer_provider")}>Transcription only</button>
+  function saveClaude() {
+    void perform("saving", async () => {
+      const [next, catalog] = await invoke<[Connections, Model[]]>("save_claude_key", { key });
+      setConnections(next);
+      setKey("");
+      setEditingKey(false);
+      setCatalog("claude", catalog);
+    });
+  }
+
+  function apply() {
+    void perform("saving", async () => {
+      const saved = kind === "off" ? await command("disable_answer_provider")
+        // The button sits under the disclosure below, so pressing it is the consent.
+        : await command("select_answer_provider", { route: { kind, model }, consent: true });
+      if (saved) done();
+    });
+  }
+
+  return <section className="card settings-card" aria-labelledby="answers-title">
+    <div className="section-heading"><h2 id="answers-title">Answers</h2></div>
+    <p aria-label="Active answer provider" role="status" className="provider-account">Now using <strong>{providerLabel(view.provider)}</strong></p>
+    <label htmlFor="answer-provider">Answer provider</label>
+    <select id="answer-provider" value={kind} disabled={disabled} onChange={event => chooseRoute(event.target.value as Route)}>
+      <option value="off">Transcription only</option>
+      <option value="chatgpt">{names.chatgpt}</option><option value="claude">{names.claude}</option><option value="ollama">{names.ollama}</option>
+    </select>
+    {kind === "off" && <p className="subtle">You can start a session with a local transcript.</p>}
+    {kind === "chatgpt" && <>
+      {!connected && <button disabled={disabled} onClick={() => signIn(false)}>Continue with ChatGPT</button>}
+      {connected && <details className="advanced-settings"><summary>ChatGPT account</summary>
+        <p className="subtle provider-account">{connections?.chatgpt_account}</p>
+        <div className="actions"><button disabled={disabled} onClick={() => signIn(false)}>Reconnect</button>
+          <button disabled={disabled} onClick={() => signIn(true)}>Use another account</button>
+          <button disabled={disabled} onClick={() => disconnect("chatgpt")}>Sign out</button></div>
+      </details>}
+      {!connected && connections?.chatgpt_registered && <button className="text-button" disabled={disabled} onClick={() => signIn(true)}>Use another account</button>}
+      {pending === "sign-in" && <div className="actions"><p role="status">Finish sign-in in your browser.</p>
+        <button onClick={() => void invoke("cancel_chatgpt_sign_in").catch(problem => setError(String(problem)))}>Cancel sign-in</button></div>}
+    </>}
+    {kind === "claude" && <>
+      {(!connected || editingKey) && <>
+        <p className="subtle">Use a Claude Console API key. Requests use that workspace’s billing.</p>
+        <button disabled={disabled} onClick={() => void perform("saving", () => invoke("open_claude_console"))}>Open Claude Console</button>
+        <label htmlFor="claude-key">Claude Console API key</label>
+        <div className="field-row">
+          <input id="claude-key" type="password" autoComplete="off" maxLength={512} value={key} disabled={disabled} onChange={event => setKey(event.target.value)} />
+          <button disabled={disabled || !key.trim()} onClick={saveClaude}>Check and save key</button>
+        </div>
+      </>}
+      {connected && !editingKey && <details className="advanced-settings"><summary>Claude key</summary>
+        <div className="actions"><button disabled={disabled} onClick={() => setEditingKey(true)}>Replace key</button>
+          <button disabled={disabled} onClick={() => disconnect("claude")}>Remove key</button></div>
+      </details>}
+    </>}
+    {kind !== "off" && connected && !editingKey && <>
+      <label htmlFor="answer-model">Model</label>
+      <div className="field-row">
+        <select id="answer-model" value={model} disabled={disabled || !models.length} onChange={event => setModel(event.target.value)}>
+          {!models.some(item => item.id === model) && <option value={model}>{model || "Load available models"}</option>}
+          {models.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+        <button disabled={disabled} onClick={() => void perform("models", () => loadModels(kind))}>Refresh models</button>
       </div>
-    </section>
+      {kind !== "ollama" && models.length > 0 && !active && <p className="subtle">
+        Pressing Use {names[kind]} sends detected questions and recent transcript to {names[kind]} to write answers.</p>}
+    </>}
     {(error || connections?.error) && <p className="notice" role="alert">{error || connections?.error}</p>}
-    {notice && <p className="toast" role="status">{notice}</p>}
-    {captureBusy && <p className="subtle">Stop capture before selecting a different answer provider.</p>}
-    <div className="provider-grid">
-      {routes.map(({ kind, name, description }) => {
-        const connected = kind === "chatgpt" ? !!connections?.chatgpt_account : kind === "claude" ? !!connections?.claude_key_saved : true;
-        const active = view.provider?.kind === kind;
-        const model = choice[kind] ?? (active ? view.provider?.model ?? "" : "");
-        const catalog = models[kind] ?? [];
-        const listed = catalog.some(item => item.id === model);
-        const label = kind === "chatgpt" ? connections?.chatgpt_account || "Sign in required"
-          : kind === "claude" ? connected ? "Key stored on this device" : "API key required" : "Local HTTP";
-        return <section key={kind} className="card provider-card" aria-labelledby={`provider-${kind}`}>
-          <div className="section-heading"><h2 id={`provider-${kind}`}>{name}</h2>{active && <span className="pill">Active</span>}</div>
-          <p className="subtle">{description}</p>
-          <p className="provider-account">{label}</p>
-          {kind === "chatgpt" && <div className="actions">
-            <button disabled={busy} onClick={() => connectChatGpt(false)}>Continue with ChatGPT</button>
-            {connections?.chatgpt_registered && <button disabled={busy} onClick={() => connectChatGpt(true)}>Use another account</button>}
-            {connected && <button disabled={busy} onClick={() => void perform("chatgpt", async () => {
-              setConnections(await invoke<Connections>("sign_out_chatgpt"));
-              setModels(current => ({ ...current, chatgpt: undefined }));
-              setChoice(current => ({ ...current, chatgpt: "" }));
-              setNotice("Signed out of ChatGPT on this device.");
-            })}>Sign out</button>}
-            {signingIn && <button onClick={() => void invoke("cancel_chatgpt_sign_in").catch(problem => setError(String(problem)))}>Cancel sign-in</button>}
-          </div>}
-          {signingIn && kind === "chatgpt" && <p className="subtle" role="status">Complete sign-in in your browser.</p>}
-          {kind === "claude" && <>
-            <div className="actions"><button disabled={busy} onClick={() => void perform("claude", () => invoke<void>("open_claude_console"))}>Open Claude Console</button>
-              {connected && <button disabled={busy} onClick={() => changeClaude(true)}>Remove key</button>}</div>
-            <label htmlFor="claude-key">Claude Console API key</label>
-            <div className="field-row">
-              <input id="claude-key" type="password" autoComplete="off" maxLength={512} value={key} disabled={busy} onChange={event => setKey(event.target.value)} />
-              <button disabled={busy || !key.trim()} onClick={() => changeClaude(false)}>Save key</button>
-            </div>
-          </>}
-          <label htmlFor={`model-${kind}`}>{name} model</label>
-          <div className="field-row">
-            <select id={`model-${kind}`} value={model} disabled={busy || !connected || !catalog.length}
-              onChange={event => setChoice(current => ({ ...current, [kind]: event.target.value }))}>
-              <option value="">{catalog.length ? "Choose a model" : "Load available models"}</option>
-              {model && !listed && <option value={model} disabled>{model}</option>}
-              {catalog.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            <button disabled={busy || !connected} onClick={() => findModels(kind)}>{kind === "ollama" ? "Find installed models" : "Load models"}</button>
-          </div>
-          {kind !== "ollama" && <label className="checkbox">
-            <input type="checkbox" disabled={busy || !connected} checked={consent[kind] ?? false}
-              onChange={event => setConsent(current => ({ ...current, [kind]: event.target.checked }))} />
-            Send questions and relevant prior turns to {name}.
-          </label>}
-          <div className="actions">
-            <button className="primary" disabled={busy || captureBusy || !connected || !listed || (kind !== "ollama" && !consent[kind]) || (active && model === view.provider?.model)}
-              onClick={() => void command("select_answer_provider", { route: { kind, model }, consent: consent[kind] ?? false })}>Use {name}</button>
-            {pending === kind && !signingIn && <span className="subtle" role="status">Connecting…</span>}
-          </div>
-        </section>;
-      })}
+    {notice && <p className="subtle" role="status">{notice}</p>}
+    {pending === "models" && <p className="subtle" role="status">Checking available models…</p>}
+    {pending === "saving" && <p className="subtle" role="status">Checking the connection…</p>}
+    <div className="actions">
+      {kind === "off" ? (view.provider && <button className="primary" disabled={disabled} onClick={apply}>Use transcription only</button>) :
+        <button className="primary" disabled={disabled || active || editingKey || !models.some(item => item.id === model)} onClick={apply}>Use {names[kind]}</button>}
+      <button onClick={done}>Back to session</button>
     </div>
-  </div>;
+  </section>;
 }

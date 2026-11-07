@@ -29,6 +29,17 @@ pub async fn select_answer_provider(
     route: Selection,
     consent: bool,
 ) -> Result<View, String> {
+    if route.kind != ProviderKind::Ollama && !consent {
+        return Err("Allow sending questions before connecting this provider.".into());
+    }
+    if !hub
+        .models(route.kind)
+        .await?
+        .iter()
+        .any(|model| model.id == route.model)
+    {
+        return Err("This model is unavailable. Refresh the model list and choose again.".into());
+    }
     let state = Arc::clone(state.inner());
     let hub = Arc::clone(hub.inner());
     spawn_blocking(move || {
@@ -70,12 +81,13 @@ pub async fn save_claude_key(
     state: State<'_, Shared>,
     hub: State<'_, Arc<ProviderHub>>,
     key: String,
-) -> Result<Connections, String> {
+) -> Result<(Connections, Vec<Model>), String> {
+    let models = hub.validate_claude(&key).await?;
     let state = Arc::clone(state.inner());
     let hub = Arc::clone(hub.inner());
     spawn_blocking(move || {
         hub.save_claude(key)?;
-        synchronized(&app, &state, &hub)
+        Ok((synchronized(&app, &state, &hub)?, models))
     })
     .await
     .map_err(|_| "Could not save the Claude connection.")?

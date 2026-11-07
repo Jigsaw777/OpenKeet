@@ -1,113 +1,202 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useMeter } from "./audio-meter";
-import { Icon, Status } from "./components";
-import { sourceLabel } from "./protocol";
-import type { CaptureConfig, DesktopView, Endpoint } from "./protocol";
+import { Icon } from "./components";
+import { providerLabel, sourceLabel } from "./protocol";
+import type { DesktopView, Endpoint } from "./protocol";
+import type { Theme } from "./workspace-shell";
 
-export function AudioSetup({ view, enabled, visible, start, showError, zoom, setZoom }: {
-  view: DesktopView;
-  enabled: boolean;
-  visible: boolean;
-  start: (config: CaptureConfig) => Promise<boolean>;
-  showError: (message: string) => void;
-  zoom: string;
-  setZoom: (zoom: string) => void;
-}) {
-  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
-  const [selected, setSelected] = useState("");
-  const [model, setModel] = useState("");
-  const [vocabulary, setVocabulary] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
-  const [consent, setConsent] = useState(false);
-  const [autoAnswer, setAutoAnswer] = useState(false);
-  const [shortFollowups, setShortFollowups] = useState(false);
-  const selectedDevice = endpoints.find(device => device.id === selected);
-  const busy = view.loading || view.stopping || ["paused", "capturing"].includes(view.session.capture);
-  const metrics = view.audio_metrics;
-  const { peak, frames } = useMeter(view, visible);
+const audioKey = "copilot-audio-settings";
+const defaults = { endpoint: "", model: "", vocabulary: "", shortFollowups: false, autoAnswer: true };
 
-  async function refresh() {
-    if (!enabled) return;
-    setRefreshing(true);
-    try {
-      const devices = await invoke<Endpoint[]>("list_endpoints");
-      setEndpoints(devices);
-      setSelected(current => devices.some(device => device.id === current) ? current : "");
-    } catch (error) {
-      showError(String(error));
-    } finally {
-      setRefreshing(false);
-    }
+function storedAudio(): typeof defaults {
+  try {
+    const saved = JSON.parse(localStorage.getItem(audioKey) || "{}");
+    return {
+      endpoint: typeof saved.endpoint === "string" ? saved.endpoint : "",
+      model: typeof saved.model === "string" ? saved.model : "",
+      vocabulary: typeof saved.vocabulary === "string" ? saved.vocabulary : "",
+      shortFollowups: saved.shortFollowups === true,
+      autoAnswer: saved.autoAnswer !== false,
+    };
+  } catch {
+    return defaults;
   }
+}
 
-  useEffect(() => { void refresh(); }, [enabled]);
+export function useAudioSetup(enabled: boolean) {
+  const [prefs, setPrefs] = useState(storedAudio);
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
+  const [refreshing, setRefreshing] = useState(enabled);
+  const [checkedModel, setCheckedModel] = useState<{ path: string; available: boolean }>();
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState("");
+  const change = useCallback((fields: Partial<typeof defaults>) => setPrefs(current => ({ ...current, ...fields })), []);
+
+  const refresh = useCallback(async () => {
+    if (!enabled) return;
+    setError("");
+    setRefreshing(true);
+    try { setEndpoints(await invoke<Endpoint[]>("list_endpoints")); }
+    catch (problem) { setError(String(problem)); }
+    finally { setRefreshing(false); }
+  }, [enabled]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!enabled) return;
+    let current = true;
+    void invoke<string | null>("find_speech_model").then(path => {
+      if (current && path) setPrefs(old => old.model ? old : { ...old, model: path });
+    }).catch(problem => { if (current) setError(String(problem)); });
+    return () => { current = false; };
+  }, [enabled]);
+  useEffect(() => {
+    if (!enabled) return;
+    localStorage.setItem(audioKey, JSON.stringify(prefs));
+  }, [enabled, prefs]);
+  useEffect(() => {
+    if (!enabled || !prefs.model.trim()) return;
+    let current = true;
+    const path = prefs.model.trim();
+    void invoke<boolean>("check_speech_model", { path }).then(available => {
+      if (current) setCheckedModel({ path, available });
+    }).catch(problem => { if (current) setError(String(problem)); });
+    return () => { current = false; };
+  }, [enabled, prefs.model]);
 
   async function chooseModel() {
     try {
-      const path = await open({ title: "Choose a verified local Whisper model", multiple: false, filters: [{ name: "Whisper model", extensions: ["bin"] }] });
-      if (typeof path === "string") setModel(path);
-    } catch (error) { showError(String(error)); }
+      const path = await open({ title: "Choose a speech model", multiple: false, filters: [{ name: "Whisper model", extensions: ["bin"] }] });
+      if (typeof path === "string") { setError(""); change({ model: path }); }
+    } catch (problem) { setError(String(problem)); }
   }
 
-  return <div className="page-stack">
-    <div className="page-title"><p className="eyebrow">Device preferences</p><h1>Audio setup</h1><p>Choose a source and run a short local test before practice.</p></div>
-    <div className="setup-layout">
-      <section className="card setup-card" aria-labelledby="source-heading">
-        <p className="eyebrow">01 / Capture</p><h2 id="source-heading">Select audio</h2>
-        <label htmlFor="endpoint">Input route</label>
-        <div className="field-row"><select id="endpoint" value={selected} disabled={!enabled || busy || refreshing} onChange={event => {
-          setSelected(event.target.value);
-          setConsent(false);
-        }}>
-          <option value="">{refreshing ? "Finding audio devices…" : "Choose a device"}</option>
-          {endpoints.map(device => <option key={device.id} value={device.id}>{sourceLabel(device.kind)} · {device.name}{device.is_default ? " (default)" : ""}</option>)}
-        </select><button disabled={!enabled || busy || refreshing} onClick={() => void refresh()}>Refresh</button></div>
-        <p className="subtle">Select system output for what you hear. Select a microphone for your own voice.</p>
-        <div className="meter-row"><label htmlFor="input-meter">Input level</label><meter id="input-meter" min={0} max={32768} value={peak} /><Status view={view} /></div>
-        {view.mode === "audio" && <details>
-          <summary>Capture diagnostics</summary>
-          <dl className="audio-metrics">
-            <dt>Audio ready</dt><dd>{metrics.ready_ms === null ? "Waiting" : `${metrics.ready_ms} ms`}</dd>
-            <dt>PCM frames processed</dt><dd>{frames.toLocaleString()}</dd>
-            <dt>Last decode</dt><dd>{metrics.decode_ms === null ? "Waiting" : `${metrics.decode_ms} ms`}</dd>
-            <dt>Last decoder queue wait</dt><dd>{metrics.queue_ms === null ? "Waiting" : `${metrics.queue_ms} ms`}</dd>
-            <dt>Reported audio loss</dt><dd>{view.session.dropped_ms} ms</dd>
-          </dl>
-        </details>}
-      </section>
-      <section className="card setup-card" aria-labelledby="model-heading">
-        <p className="eyebrow">02 / Recognition</p><h2 id="model-heading">Load local Whisper</h2>
-        <label htmlFor="model-path">Speech model file</label>
-        <div className="field-row"><input id="model-path" value={model} placeholder="Path to a verified .bin file" disabled={!enabled || busy} onChange={event => setModel(event.target.value)} />
-          <button disabled={!enabled || busy} onClick={() => void chooseModel()}>Browse</button></div>
-        <p className="subtle">Start with the verified <code>ggml-small.en.bin</code> model. The repository setup guide lists downloads and the experimental turbo comparison.</p>
-        <label htmlFor="vocabulary">Optional vocabulary</label>
-        <input id="vocabulary" value={vocabulary} maxLength={300} placeholder="Kotlin, WASAPI, PostgreSQL" disabled={busy} onChange={event => setVocabulary(event.target.value)} />
-        <label className="checkbox"><input type="checkbox" checked={shortFollowups} disabled={busy} onChange={event => setShortFollowups(event.target.checked)} /> Short follow-up mode</label>
-        <p className="subtle">Uses a faster decoder for very short utterances. Recognition varies by phrase.</p>
-      </section>
-      <section className="card setup-card" aria-labelledby="test-heading">
-        <p className="eyebrow">03 / Test</p><h2 id="test-heading">Test your input</h2>
-        <p>After starting, play a test clip on the selected output or speak into your chosen microphone. The workspace shows the meter and transcript.</p>
-        <label className="checkbox"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} /> I have permission to capture this source.</label>
-        <label className="checkbox"><input type="checkbox" checked={autoAnswer && Boolean(view.provider)} disabled={busy || !view.provider} onChange={event => setAutoAnswer(event.target.checked)} /> Automatically request answers</label>
-        {!view.provider && <p className="subtle">Connect an answer provider in Providers to enable answers.</p>}
-        <button className="primary" disabled={!enabled || busy || !selectedDevice || !model.trim() || !consent} onClick={() => {
-          if (selectedDevice) void start({ source: { kind: selectedDevice.kind, endpoint_id: selectedDevice.id }, model_path: model.trim(), vocabulary: vocabulary.trim(), auto_answer: autoAnswer && Boolean(view.provider), short_followups: shortFollowups, consent }).then(started => {
-            if (started) { setConsent(false); setAutoAnswer(false); }
-          });
-        }}>Start local capture <Icon name="arrow" /></button>
-      </section>
-      <section className="card setup-card" aria-labelledby="local-heading">
-        <p className="eyebrow">04 / Preferences</p><h2 id="local-heading">Local workspace</h2>
-        <p>Speech recognition runs locally. A connected answer provider receives your question and relevant prior turns when you request an answer.</p>
-        <label htmlFor="text-scale">Text size</label>
-        <select id="text-scale" value={zoom} onChange={event => setZoom(event.target.value)}>
-          {["100", "125", "150", "175", "200"].map(scale => <option key={scale} value={scale}>{scale}%</option>)}
-        </select>
-      </section>
+  async function download() {
+    setError("");
+    setDownloading(true);
+    try { change({ model: await invoke<string>("download_speech_model") }); }
+    catch (problem) { setError(String(problem)); }
+    finally { setDownloading(false); }
+  }
+
+  // A saved device that disappeared (unplugged headset, driver update) falls back to the default output.
+  const selected = endpoints.find(device => device.id === prefs.endpoint)
+    ?? endpoints.find(device => device.is_default && device.kind === "system_output")
+    ?? endpoints.find(device => device.is_default) ?? endpoints[0];
+  const path = prefs.model.trim();
+  const modelReady = checkedModel?.path === path && checkedModel.available;
+  const modelRejected = Boolean(path) && checkedModel?.path === path && !checkedModel.available;
+  return { prefs, change, endpoints, selected, refreshing, refresh, modelReady, modelRejected, chooseModel, downloading, download, error };
+}
+
+export type AudioSettings = ReturnType<typeof useAudioSetup>;
+
+/** The whole first-run flow: pick what to hear, get a speech model, optionally connect answers, start. */
+export function StartCard({ view, audio, enabled, starting, start, sample, connect }: {
+  view: DesktopView;
+  audio: AudioSettings;
+  enabled: boolean;
+  starting: boolean;
+  start: () => void;
+  sample: () => void;
+  connect: () => void;
+}) {
+  const { prefs, selected, modelReady } = audio;
+  const ready = Boolean(selected && modelReady);
+  const disabled = !enabled || audio.downloading || starting;
+  const fileName = prefs.model.trim().split(/[\\/]/).at(-1);
+  return <section className="card start-card" aria-labelledby="start-title">
+    <h1 id="start-title">{ready ? "Ready to listen" : "Finish setup"}</h1>
+    <ol className="checklist">
+      <li className={selected ? "done" : undefined}>
+        <label htmlFor="endpoint">Listen to</label>
+        <div className="field-row">
+          <select id="endpoint" value={selected?.id ?? ""} disabled={disabled || audio.refreshing}
+            onChange={event => audio.change({ endpoint: event.target.value })}>
+            {!selected && <option value="">{audio.refreshing ? "Finding devices…" : "No audio device found"}</option>}
+            {audio.endpoints.map(device => <option key={device.id} value={device.id}>
+              {sourceLabel(device.kind)} · {device.name}{device.is_default ? " (default)" : ""}
+            </option>)}
+          </select>
+          <button disabled={disabled || audio.refreshing} onClick={() => void audio.refresh()}>Refresh</button>
+        </div>
+        <p className="subtle">Pick the speakers or headphones your call plays through.</p>
+      </li>
+      <li className={modelReady ? "done" : undefined}>
+        <span className="step-label">Speech model</span>
+        {modelReady ? <p>{fileName} <span className="subtle">· runs on this PC</span></p> : <>
+          <div className="actions">
+            <button disabled={disabled} onClick={() => void audio.download()}>{audio.downloading ? "Downloading…" : "Download (488 MB)"}</button>
+            <button disabled={disabled} onClick={() => void audio.chooseModel()}>Choose file</button>
+          </div>
+          {audio.modelRejected && <p className="notice" role="alert">Could not use {fileName}. Download the model, or choose a ggml-small.en.bin file.</p>}
+        </>}
+      </li>
+      <li className={view.provider ? "done" : "optional"}>
+        <span className="step-label">Answers</span>
+        {view.provider ? <>
+          <p className="provider-account">{providerLabel(view.provider)} <button className="text-button" onClick={connect}>Change</button></p>
+          <label className="checkbox"><input type="checkbox" checked={prefs.autoAnswer} disabled={disabled}
+            onChange={event => audio.change({ autoAnswer: event.target.checked })} /> Answer detected questions automatically</label>
+        </> : <>
+          <div className="actions"><button onClick={connect}>Connect answers</button></div>
+          <p className="subtle">Optional. Without it you get a live transcript only.</p>
+        </>}
+      </li>
+    </ol>
+    {audio.error && <p className="notice" role="alert">{audio.error}</p>}
+    <div className="actions">
+      <button className="primary big" disabled={disabled || !ready || view.update < 0} onClick={start}>
+        {starting ? "Starting…" : "Start listening"} <Icon name="arrow" /></button>
+      <button className="text-button" disabled={disabled || view.update < 0} onClick={sample}>Try a sample</button>
     </div>
-  </div>;
+    <p className="subtle">Answers show in a see-through window on top of your call. {view.shortcut_available ? "Ctrl+Alt+I brings it back if hidden." : "Use the tray icon to bring it back if hidden."} Only capture audio you have permission to record.</p>
+  </section>;
+}
+
+export function AudioSetup({ view, audio, enabled, done, zoom, setZoom, theme, setTheme }: {
+  view: DesktopView;
+  audio: AudioSettings;
+  enabled: boolean;
+  done: () => void;
+  zoom: string;
+  setZoom: (value: string) => void;
+  theme: Theme;
+  setTheme: (value: Theme) => void;
+}) {
+  const busy = view.loading || view.stopping || ["paused", "capturing"].includes(view.session.capture);
+  const { peak, frames } = useMeter(view);
+  const { prefs } = audio;
+  const disabled = !enabled || busy;
+  return <section className="card settings-card" aria-labelledby="audio-settings-title">
+    <h2 id="audio-settings-title">Audio and display</h2>
+    <label htmlFor="vocabulary">Words to recognize</label>
+    <input id="vocabulary" value={prefs.vocabulary} maxLength={300} placeholder="Kotlin, WASAPI, PostgreSQL" disabled={disabled}
+      onChange={event => audio.change({ vocabulary: event.target.value })} />
+    <label className="checkbox"><input type="checkbox" checked={prefs.shortFollowups} disabled={disabled} onChange={event => audio.change({ shortFollowups: event.target.checked })} /> Short follow-up mode</label>
+    <label htmlFor="model-path">Speech model file</label>
+    <input id="model-path" value={prefs.model} disabled={disabled} placeholder="Path to a supported .bin file" onChange={event => audio.change({ model: event.target.value })} />
+    <label htmlFor="appearance">Appearance</label>
+    <select id="appearance" value={theme} onChange={event => setTheme(event.target.value as Theme)}>
+      <option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option>
+    </select>
+    <label htmlFor="text-scale">Text size</label>
+    <select id="text-scale" value={zoom} onChange={event => setZoom(event.target.value)}>
+      {["100", "125", "150", "175", "200"].map(scale => <option key={scale} value={scale}>{scale}%</option>)}
+    </select>
+    {view.mode === "audio" && <details className="advanced-settings">
+      <summary>Audio diagnostics</summary>
+      <label htmlFor="input-meter">Input level</label><meter id="input-meter" min={0} max={32768} value={peak} />
+      <dl className="audio-metrics">
+        <dt>Audio ready</dt><dd>{view.audio_metrics.ready_ms === null ? "Waiting" : view.audio_metrics.ready_ms + " ms"}</dd>
+        <dt>PCM frames processed</dt><dd>{frames.toLocaleString()}</dd>
+        <dt>Last decode</dt><dd>{view.audio_metrics.decode_ms === null ? "Waiting" : view.audio_metrics.decode_ms + " ms"}</dd>
+        <dt>Last decoder queue wait</dt><dd>{view.audio_metrics.queue_ms === null ? "Waiting" : view.audio_metrics.queue_ms + " ms"}</dd>
+        <dt>Reported audio loss</dt><dd>{view.session.dropped_ms} ms</dd>
+      </dl>
+    </details>}
+    <div className="actions"><button className="primary" onClick={done}>Back to session <Icon name="arrow" /></button></div>
+  </section>;
 }

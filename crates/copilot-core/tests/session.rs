@@ -70,6 +70,33 @@ fn default_policy_detects_without_asking_and_manual_request_keeps_the_same_revis
 }
 
 #[test]
+fn switching_provider_cancels_work_and_requires_a_new_request() {
+    let mut session = setup(Policy::default());
+    final_text(&mut session, 1, 100, 900, "Explain an inner join.");
+    let old = session.next_request(8_000).unwrap();
+    session.ask("Why?", 8_050).unwrap();
+    session.change_answer_route();
+    assert!(old.is_cancelled());
+    assert_eq!(session.snapshot().capture, CaptureState::Capturing);
+    assert_eq!(session.snapshot().transcript.len(), 1);
+    assert!(session.next_request(8_100).is_none());
+
+    session.request_detected().unwrap();
+    let retry = session.next_request(8_200).unwrap();
+    assert_eq!(retry.request.question, "Why?");
+    assert!(session.complete(
+        retry.request.key,
+        8_300,
+        Err(AnswerFailure::AuthenticationRequired)
+    ));
+    session.request_detected().unwrap();
+    assert_eq!(
+        session.next_request(8_400).unwrap().request.question,
+        "Why?"
+    );
+}
+
+#[test]
 fn repeated_final_is_visible_in_transcript_without_another_answer() {
     let mut session = setup(Policy::default());
     final_text(

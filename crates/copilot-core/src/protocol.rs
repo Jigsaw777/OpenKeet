@@ -122,7 +122,7 @@ impl AnswerFailure {
             }
             Self::InvalidOutput => "Answer provider returned an incomplete or oversized response.",
             Self::AuthenticationRequired => {
-                "Reconnect or select your answer provider in Providers."
+                "The answer provider refused this connection. Reconnect in Settings → Answers."
             }
             Self::UsageLimit => {
                 "The provider reached its usage or rate limit. Check your account or choose another provider."

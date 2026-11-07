@@ -5,9 +5,17 @@ mod history;
 mod platform;
 mod provider_commands;
 mod providers;
+mod speech_setup;
 mod workspace;
 
-use std::{sync::Arc, thread, time::Duration};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::Duration,
+};
 
 use copilot_audio::Endpoint;
 use tauri::{
@@ -17,6 +25,9 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use workspace::{CaptureConfig, Desktop, Shared, View, emit, update};
+
+#[derive(Default)]
+struct LastSurface(AtomicBool);
 
 #[tauri::command]
 fn get_snapshot(state: State<'_, Shared>) -> View {
@@ -96,15 +107,15 @@ fn clear_session(app: AppHandle, state: State<'_, Shared>) -> Result<View, Strin
 
 #[tauri::command]
 async fn open_focus(app: AppHandle) -> Result<(), String> {
-    let window = if let Some(window) = app.get_webview_window("focus") {
-        window
-    } else {
+    if app.get_webview_window("focus").is_none() {
         let window =
             WebviewWindowBuilder::new(&app, "focus", WebviewUrl::App("index.html?focus=1".into()))
                 .title("Personal Copilot · Focus")
                 .theme(Some(tauri::Theme::Dark))
-                .inner_size(420.0, 550.0)
+                .inner_size(420.0, 510.0)
                 .min_inner_size(340.0, 420.0)
+                .transparent(true)
+                .always_on_top(true)
                 .skip_taskbar(true)
                 .visible(false)
                 .build()
@@ -117,49 +128,55 @@ async fn open_focus(app: AppHandle) -> Result<(), String> {
             })
             .map_err(|error| error.to_string())?;
         if let Err(error) = ready.await.map_err(|_| "Could not prepare Focus window.")? {
-            let _ = window.close();
+            let _ = window.destroy();
             return Err(error);
         }
-        window
-    };
-    reveal(window)
-}
-
-#[tauri::command]
-fn pin_focus(window: WebviewWindow, pinned: bool) -> Result<(), String> {
-    if window.label() != "focus" {
-        return Err("Open the focus window first.".into());
     }
-    window
-        .set_always_on_top(pinned)
-        .map_err(|err| err.to_string())
+    show_surface(&app, "focus")
 }
 
 #[tauri::command]
 fn show_workspace(app: AppHandle) -> Result<(), String> {
-    reveal_workspace(&app)
+    show_surface(&app, "main")
 }
 
 #[tauri::command]
 fn hide_workspace(window: WebviewWindow) -> Result<(), String> {
-    if window.label() != "main" {
-        return Err("Hide the workspace from its own window.".into());
+    window.hide().map_err(|error| error.to_string())?;
+    let app = window.app_handle();
+    let state = app.state::<Shared>();
+    update(app, &state, Desktop::pause_when_hidden)?;
+    Ok(())
+}
+
+fn restore_last_surface(app: &AppHandle) {
+    let overlay = app
+        .try_state::<LastSurface>()
+        .is_some_and(|state| state.0.load(Ordering::Relaxed));
+    if !overlay || show_surface(app, "focus").is_err() {
+        let _ = show_surface(app, "main");
     }
-    window.hide().map_err(|error| error.to_string())
 }
 
-fn reveal_workspace(app: &AppHandle) -> Result<(), String> {
+fn show_surface(app: &AppHandle, label: &str) -> Result<(), String> {
     let window = app
-        .get_webview_window("main")
-        .ok_or("The main workspace has been closed.")?;
-    reveal(window)
+        .get_webview_window(label)
+        .ok_or("Could not find this Personal Copilot window.")?;
+    reveal(&window)?;
+    let overlay = label == "focus";
+    if let Some(other) = app.get_webview_window(if overlay { "main" } else { "focus" }) {
+        other.hide().map_err(|err| err.to_string())?;
+    }
+    if let Some(state) = app.try_state::<LastSurface>() {
+        state.0.store(overlay, Ordering::Relaxed);
+    }
+    Ok(())
 }
 
-fn reveal(window: WebviewWindow) -> Result<(), String> {
+fn reveal(window: &WebviewWindow) -> Result<(), String> {
     window
         .show()
         .and_then(|_| window.unminimize())
-        .and_then(|_| window.set_skip_taskbar(true))
         .and_then(|_| window.set_focus())
         .map_err(|err| err.to_string())
 }
@@ -174,7 +191,7 @@ fn install_tray(app: &tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => {
-                let _ = reveal_workspace(app);
+                restore_last_surface(app);
             }
             "quit" => app.exit(0),
             _ => {}
@@ -188,7 +205,7 @@ fn install_tray(app: &tauri::App) -> tauri::Result<()> {
                     ..
                 }
             ) {
-                let _ = reveal_workspace(tray.app_handle());
+                restore_last_surface(tray.app_handle());
             }
         });
     if let Some(icon) = app.default_window_icon() {
@@ -200,19 +217,25 @@ fn install_tray(app: &tauri::App) -> tauri::Result<()> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            restore_last_surface(app)
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _, event| {
                     if event.state() == ShortcutState::Pressed {
-                        let _ = reveal_workspace(app);
+                        restore_last_surface(app);
                     }
                 })
                 .build(),
         )
         .on_window_event(|window, event| {
-            if window.label() == "main" && matches!(event, WindowEvent::CloseRequested { .. }) {
-                window.app_handle().exit(0);
+            if let WindowEvent::CloseRequested { api, .. } = event
+                && let Some(surface) = window.app_handle().get_webview_window(window.label())
+            {
+                api.prevent_close();
+                let _ = hide_workspace(surface);
             }
         })
         .setup(|app| {
@@ -226,10 +249,11 @@ fn main() {
             let providers = Arc::new(
                 providers::ProviderHub::new(directory.clone()).map_err(std::io::Error::other)?,
             );
+            app.manage(speech_setup::SpeechSetup::new(directory.clone()));
             app.manage(history::HistoryStore::new(directory));
             app.manage(Arc::clone(&providers));
             install_tray(app)?;
-            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyI);
+            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyI);
             let shortcut_available = app.global_shortcut().register(shortcut).is_ok();
             let state = Desktop::shared();
             {
@@ -238,11 +262,12 @@ fn main() {
                 desktop.set_shortcut_available(shortcut_available);
             }
             app.manage(Arc::clone(&state));
+            app.manage(LastSurface::default());
             let main = app
                 .get_webview_window("main")
                 .ok_or("Missing workspace window.")?;
             platform::configure_tool_window(&main).map_err(std::io::Error::other)?;
-            reveal(main).map_err(std::io::Error::other)?;
+            reveal(&main).map_err(std::io::Error::other)?;
             let handle = app.handle().clone();
             thread::spawn(move || {
                 loop {
@@ -266,6 +291,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
             list_endpoints,
+            speech_setup::check_speech_model,
+            speech_setup::find_speech_model,
+            speech_setup::download_speech_model,
             start_sample,
             start_capture,
             resume_capture,
@@ -293,7 +321,6 @@ fn main() {
             use_transcript,
             clear_session,
             open_focus,
-            pin_focus,
             hide_workspace,
             show_workspace
         ])

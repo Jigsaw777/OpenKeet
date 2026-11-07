@@ -101,6 +101,7 @@ pub struct View {
     retryable: bool,
     provider: Option<Selection>,
     shortcut_available: bool,
+    auto_answer: bool,
 }
 
 pub struct Desktop {
@@ -159,6 +160,7 @@ impl Desktop {
                 && self.session.capture_state() == CaptureState::Recovery,
             provider: self.provider.clone(),
             shortcut_available: self.shortcut_available,
+            auto_answer: self.session.auto_answer(),
         }
     }
 
@@ -338,9 +340,6 @@ impl Desktop {
         route: Selection,
         consent: bool,
     ) -> Result<(), String> {
-        if self.audio.is_some() || self.session.capture_state() == CaptureState::Paused {
-            return Err("Stop capture before changing the answer provider.".into());
-        }
         hub.select(route, consent)?;
         self.sync_provider(hub.selection());
         Ok(())
@@ -348,13 +347,25 @@ impl Desktop {
 
     pub fn sync_provider(&mut self, provider: Option<Selection>) {
         if self.provider != provider && !matches!(self.mode, Mode::Sample) {
-            self.session.cancel_answer();
+            self.session.change_answer_route();
         }
         self.provider = provider;
     }
 
     pub fn set_shortcut_available(&mut self, available: bool) {
         self.shortcut_available = available;
+    }
+
+    pub fn pause_when_hidden(&mut self) -> Result<(), String> {
+        if self
+            .audio
+            .as_ref()
+            .is_some_and(|audio| audio.stopping.is_none())
+            || self.replay.as_ref().is_some_and(|replay| !replay.paused)
+        {
+            self.stop(true)?;
+        }
+        Ok(())
     }
 
     pub fn cancel_answer(&mut self) {
@@ -541,7 +552,13 @@ pub fn run_generation(
             biased;
             () = cancel => return,
             answer = providers.answer(&generation.route, &generation.work.request, |delta| {
-                let view = state.lock().expect("desktop session lock").answer_delta(key, delta);
+                let view = {
+                    let mut desktop = state.lock().expect("desktop session lock");
+                    if generation.work.is_cancelled() {
+                        return false;
+                    }
+                    desktop.answer_delta(key, delta)
+                };
                 if let Some(view) = view {
                     emit(&app, &view);
                     true
@@ -550,10 +567,13 @@ pub fn run_generation(
                 }
             }) => answer,
         };
-        let view = state
-            .lock()
-            .expect("desktop session lock")
-            .finish_answer(key, result);
+        let view = {
+            let mut desktop = state.lock().expect("desktop session lock");
+            if generation.work.is_cancelled() {
+                return;
+            }
+            desktop.finish_answer(key, result)
+        };
         if let Some(view) = view {
             emit(&app, &view);
         }

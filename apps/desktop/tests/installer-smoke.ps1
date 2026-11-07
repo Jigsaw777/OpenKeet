@@ -1,8 +1,12 @@
 param(
-    [string]$Installer = (Join-Path $PSScriptRoot '../../../target/release/bundle/nsis/Personal Copilot_0.1.0_x64-setup.exe')
+    [string]$Installer
 )
 
 $ErrorActionPreference = 'Stop'
+if (!$Installer) {
+    $version = (Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '../src-tauri/tauri.conf.json') | ConvertFrom-Json).version
+    $Installer = Join-Path $PSScriptRoot "../../../target/release/bundle/nsis/Personal Copilot_${version}_x64-setup.exe"
+}
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
 $existing = Get-ChildItem $uninstallKey -ErrorAction SilentlyContinue |
     ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue } |
