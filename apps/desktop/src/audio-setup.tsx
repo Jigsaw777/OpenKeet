@@ -160,7 +160,7 @@ export function StartCard({ view, audio, enabled, starting, start, sample, conne
         {starting ? "Starting…" : "Start listening"} <Icon name="arrow" /></button>
       <button className="text-button" disabled={disabled || view.update < 0} onClick={sample}>Try a sample</button>
     </div>
-    <p className="subtle">Answers show in a see-through window on top of your call. {view.shortcut_available ? "Ctrl+Alt+I brings it back if hidden." : "Use the tray icon to bring it back if hidden."} Only capture audio you have permission to record.</p>
+    <p className="subtle">Answers show in a see-through window on top of your call. {view.shortcut_available ? <><kbd>Ctrl+Alt+I</kbd> brings it back if hidden.</> : "Use the tray icon to bring it back if hidden."} Only capture audio you have permission to record.</p>
   </section>;
 }
 

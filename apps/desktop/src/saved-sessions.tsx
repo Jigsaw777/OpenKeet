@@ -117,7 +117,7 @@ export function SavedSessions({ enabled }: { enabled: boolean }) {
           disabled={pending} aria-pressed={selected?.summary.id === entry.id} onClick={() => open(entry.id)}>
           <strong>{entry.title}</strong><span>{new Date(entry.saved_ms).toLocaleString()}</span>
           <span>{entry.lines} transcript lines · {entry.answers} checked answers</span>
-        </button>) : !pending && <Empty label="No saved sessions found" detail="Save a completed session from the live workspace." />}
+        </button>) : !pending && <Empty label="No saved sessions yet" detail="Your saved practice sessions will appear here. Save one after it ends." />}
       </section>
       {selected && <section className="card library-card" aria-labelledby="saved-title">
         <h2 id="saved-title">{selected.summary.title}</h2>

@@ -1,16 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useMeter } from "./audio-meter";
+import { Mark } from "./brand";
 import type { DesktopView, Question, Session } from "./protocol";
 import { activity, sourceLabel } from "./protocol";
 
 export type Command = (name: string, args?: Record<string, unknown>) => Promise<boolean>;
-
-const markUrl = new URL("../src-tauri/icons/icon.png", import.meta.url).href;
-
-export function Mark({ size = 35 }: { size?: number }) {
-  return <img src={markUrl} width={size} height={size} alt="" />;
-}
 
 export function Icon({ name }: { name: "home" | "wave" | "settings" | "focus" | "arrow" | "sun" | "lock" | "clock" | "plug" }) {
   const paths = {
@@ -76,14 +71,14 @@ export function Transcript({ session, useTranscript, hidden = false }: { session
     if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
   }, [session.transcript]);
   return <section className="card transcript" aria-labelledby="transcript-title" hidden={hidden}>
-    <div className="card-head"><div><p className="eyebrow">Audio timeline</p><h2 id="transcript-title">Transcript</h2></div>
+    <div className="card-head"><div><p className="eyebrow">What was said</p><h2 id="transcript-title">Transcript</h2></div>
       <span className="soft-label">{sourceLabel(session.source.kind)}</span></div>
     <div ref={scroll} tabIndex={0} role="region" aria-label="Transcript timeline" className="transcript-scroll"
       onScroll={event => { const node = event.currentTarget; follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 24; }}>
       {session.transcript_truncated && <p className="subtle">Older rows exceeded the in-memory limit.</p>}
-      {session.transcript.length === 0 ? <Empty label="Waiting for speech" detail="Final text and live previews will appear here." /> :
+      {session.transcript.length === 0 ? <Empty label="Nothing said yet" detail="Their words appear here as you listen. Live preview lines can still change." /> :
         session.transcript.map(line => <article className={`line ${line.stability}`} key={`${session.session_id}:${line.id}`}>
-          <div className="line-meta"><time>{formatTime(line.span.start_ms)}</time><span>{line.stability === "final" ? "Final" : "Interim"}</span></div>
+          <div className="line-meta"><time>{formatTime(line.span.start_ms)}</time><span>{line.stability === "final" ? "Final" : "Live preview"}</span></div>
           <p>{line.text}</p>
         </article>)}
     </div>
@@ -113,20 +108,22 @@ export function AnswerPanel({ question, copy, command, sample, connected, choose
     : question ? (connected || sample ? "Ready to answer" : "Transcript only") : "Awaiting question";
   const title = sample ? "Practice answer" : "Answer";
   const text = question?.text || "A question will appear here.";
+  // Detected but not settled: the interviewer may still be talking.
+  const shaping = question && ["candidate", "waiting", "incomplete"].includes(question.phase);
   const followUp = question?.follow_up_to && <p className="follow-up">Follow-up to question {question.follow_up_to}</p>;
-  return <section className={`card answer-panel ${compact ? "compact-answer" : ""}`} aria-labelledby="answer-title">
+  return <section className={`card answer-panel ${compact ? "compact-answer" : ""}`} data-answer={answer?.status ?? "empty"} aria-labelledby="answer-title">
     {compact ? <div className="compact-question">
       {followUp}
       <details key={question?.id}>
         <summary aria-label="Show full current question"><span>{text}</span></summary>
         <div className="compact-question-full"><p>{text}</p></div>
       </details>
-    </div> : <div className="question-block">
-      <div className="meta-line"><p className="eyebrow">Current question</p>{question && <span className="soft-label">Revision {question.revision}</span>}</div>
+    </div> : <div className={shaping ? "question-block provisional" : "question-block"}>
+      <div className="meta-line"><p className="eyebrow">{shaping ? "Question taking shape" : question ? "Question" : "Current question"}</p>{question && <span className="soft-label">Revision {question.revision}</span>}</div>
       <p className="question-text">{text}</p>
       {followUp}
     </div>}
-    <div className="card-head"><div>{!compact && <p className="eyebrow">Response</p>}<h2 id="answer-title">{title}</h2></div>
+    <div className="card-head"><div>{!compact && <p className="eyebrow">Suggested answer</p>}<h2 id="answer-title">{title}</h2></div>
       <span className={`soft-label answer-${answer?.status ?? "empty"}`}>{label}</span></div>
     <div ref={scroll} className="answer-content" role="region" aria-label={`${title} text`} tabIndex={0}>
       {answer ? <><div className={answer.status === "superseded" ? "answer-body superseded" : "answer-body"}><AnswerText text={answer.text} /></div>
@@ -173,5 +170,5 @@ function InlineCode({ text }: { text: string }) {
 }
 
 export function Empty({ label, detail }: { label: string; detail: string }) {
-  return <div className="empty"><Mark size={27} /><strong>{label}</strong><p>{detail}</p></div>;
+  return <div className="empty"><Mark size={24} /><strong>{label}</strong><p>{detail}</p></div>;
 }

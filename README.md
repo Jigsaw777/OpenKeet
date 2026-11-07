@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/openkeet-logo-dark.png">
-    <img src="docs/assets/openkeet-logo-light.png" alt="OpenKeet" width="430">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/assets/openkeet-logo-on-dark.svg">
+    <img src="docs/brand/assets/openkeet-logo-on-light.svg" alt="OpenKeet" width="430">
   </picture>
 </p>
 

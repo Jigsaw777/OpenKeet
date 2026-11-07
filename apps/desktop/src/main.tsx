@@ -23,6 +23,11 @@ function storedTheme(): Theme {
   return theme === "light" || theme === "system" ? theme : "dark";
 }
 
+const darkSystem = window.matchMedia("(prefers-color-scheme: dark)");
+const resolvedTheme = (theme: Theme) => focusWindow ? "dark" : theme === "system" ? (darkSystem.matches ? "dark" : "light") : theme;
+// Before the first render, so a light-theme start never paints a dark frame.
+document.documentElement.dataset.theme = resolvedTheme(storedTheme());
+
 function storedOpacity() {
   const value = Number(localStorage.getItem("overlay-opacity"));
   return value >= 30 && value <= 100 ? value : 70;
@@ -46,7 +51,7 @@ function App() {
 
   const receive = useCallback((incoming: DesktopView) => {
     if (incoming.session.protocol_version !== 1) {
-      setError("The desktop engine uses a different protocol version. Restart the installed app.");
+      setError("OpenKeet needs a restart to finish updating. Quit it from the tray and open it again.");
       return;
     }
     setView(current => acceptView(current, incoming));
@@ -69,15 +74,12 @@ function App() {
   }, [receive]);
 
   useEffect(() => {
-    const system = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      document.documentElement.dataset.theme = focusWindow ? "dark" : theme === "system" ? (system.matches ? "dark" : "light") : theme;
-    };
+    const apply = () => { document.documentElement.dataset.theme = resolvedTheme(theme); };
     apply();
     if (!focusWindow) localStorage.setItem("copilot-theme", theme);
     if (desktop) void getCurrentWindow().setTheme(focusWindow ? "dark" : theme === "system" ? null : theme).catch(problem => setError(String(problem)));
-    if (theme === "system") system.addEventListener("change", apply);
-    return () => system.removeEventListener("change", apply);
+    if (theme === "system") darkSystem.addEventListener("change", apply);
+    return () => darkSystem.removeEventListener("change", apply);
   }, [theme]);
 
   useEffect(() => {
@@ -112,7 +114,7 @@ function App() {
 
   async function copy(text: string) {
     try { await navigator.clipboard.writeText(text); setCopied(true); }
-    catch { setError("Clipboard access failed. Select the answer text to copy it manually."); }
+    catch { setError("We couldn't copy that. Select the answer text and copy it manually."); }
   }
 
   async function startSession() {
@@ -171,7 +173,7 @@ function App() {
   const feedback = <>{notice && <p className="notice" role="alert">{notice}{session.dropped_ms > 0 && " Reported audio loss: " + session.dropped_ms + " ms."}</p>}
     {copied && <p className="toast" role="status">Answer copied</p>}</>;
 
-  if (focusWindow) return <main className="focus-shell" style={{ backgroundColor: `rgba(17, 18, 20, ${opacity / 100})` }}>
+  if (focusWindow) return <main className="focus-shell" style={{ backgroundColor: `rgba(var(--overlay-rgb), ${opacity / 100})` }}>
     <header className="focus-top"><LiveStatus view={view} />
       <button onClick={() => void command("hide_workspace")}
         title={view.shortcut_available ? "Hide and pause listening. Ctrl+Alt+I brings it back." : "Hide and pause listening. Use the tray icon to bring it back."}>Hide</button></header>
@@ -185,7 +187,7 @@ function App() {
   return <AppShell page={page} navigate={setPage} status={page === "session" && hasSession ? null : <Status view={view} />}
     shortcut={desktop && view.update >= 0 ? view.shortcut_available : null} hideWindow={desktop ? () => void command("hide_workspace") : undefined}>
     {feedback}
-    {!desktop && <p className="notice" role="status">Open the desktop app to run the Rust engine.</p>}
+    {!desktop && <p className="notice" role="status">Open the OpenKeet desktop app to listen and suggest answers.</p>}
     {page === "session" && <div className="page-stack live-page">
       {!running && <StartCard view={view} audio={audio} enabled={desktop} starting={starting} start={() => void startSession()}
         sample={() => void sample()} connect={() => setPage("providers")} />}
@@ -239,7 +241,7 @@ function History({ session }: { session: Session }) {
   return <details className="card history"><summary>Session history <span className="soft-label">{session.history.length}</span></summary>
     {session.history.length ? session.history.map(item => <article key={item.answer.key.question_id}>
       <p className="eyebrow">{item.answer.status === "superseded" ? "Superseded" : "Checked"} · Revision {item.answer.key.revision}{item.follow_up_to && " · Follow-up to question " + item.follow_up_to}</p><strong>{item.question}</strong><p>{item.answer.text}</p>
-    </article>) : <Empty label="No checked answers yet" detail="Completed revisions appear here during this session." />}
+    </article>) : <Empty label="No checked answers yet" detail="Checked answers from this session appear here." />}
   </details>;
 }
 

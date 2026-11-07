@@ -130,20 +130,20 @@ export function activity(view: DesktopView): Activity {
   const { capture, speech_active, question } = view.session;
   if (view.loading) return { title: "Starting…", detail: "Loading the speech model. This takes a few seconds.", tone: "busy" };
   if (view.stopping) return { title: "Stopping…", detail: "Finishing the last words.", tone: "busy" };
-  if (capture === "recovery") return { title: "Audio stopped", detail: view.retryable ? "The audio device stopped. Press Retry." : "Start a new session.", tone: "warn" };
+  if (capture === "recovery") return { title: "Audio stopped", detail: view.retryable ? "The audio device stopped. Press Retry same source." : "Start a new session.", tone: "warn" };
   if (capture === "paused") return { title: "Paused", detail: "Not listening. Press Resume to continue.", tone: "idle" };
-  if (capture === "stopped") return { title: "Session ended", detail: "Start a new session when you are ready.", tone: "idle" };
+  if (capture === "stopped") return { title: "Session ended", detail: "Start a new session when you're ready.", tone: "idle" };
   if (capture !== "capturing") return { title: "Not listening", detail: "Press Start listening when the interview begins.", tone: "idle" };
   const phase = question?.phase;
   // "ready" means an answer was already requested and is queued.
-  if (phase === "ready" || phase === "drafting" || phase === "answering") return { title: "Writing answer…", detail: "The answer appears as it is written.", tone: "busy" };
+  if (phase === "ready" || phase === "drafting" || phase === "answering") return { title: "Writing answer…", detail: "Putting together a suggested answer.", tone: "busy" };
   if (speech_active) return { title: "Hearing speech", detail: "Turning speech into text.", tone: "live" };
   if (phase === "candidate" || phase === "waiting" || phase === "incomplete") return { title: "Question heard", tone: "live",
     detail: !view.provider && view.mode !== "sample" ? "Connect answers in Settings to get replies."
       : view.auto_answer ? "Waiting for them to finish…" : "Press Get answer when they finish." };
-  if (phase === "error") return { title: "Answer failed", detail: "The red message says why.", tone: "warn" };
+  if (phase === "error") return { title: "Answer failed", detail: "The message above says what to try next.", tone: "warn" };
   if (phase === "cancelled") return { title: "Answer cancelled", detail: "Press Retry answer.", tone: "warn" };
   if (phase === "checked") return { title: "Answer ready", detail: "Still listening for the next question.", tone: "done" };
   return view.mode === "sample" ? { title: "Playing sample", detail: "A recorded practice question is playing.", tone: "live" }
-    : { title: "Listening", detail: "Waiting for someone to speak.", tone: "live" };
+    : { title: "Listening", detail: "Listening for the next question.", tone: "live" };
 }

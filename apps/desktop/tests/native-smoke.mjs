@@ -30,7 +30,7 @@ async function checkContrast(page, theme) {
   const pairs = await page.evaluate(() => {
     const style = getComputedStyle(document.documentElement);
     return [["--ink", "--surface", 4.5], ["--muted", "--surface", 4.5], ["--rail-muted", "--rail", 4.5],
-      ["--primary-ink", "--primary", 4.5], ["--field-border", "--surface", 3], ["--focus", "--canvas", 3]]
+      ["--primary-ink", "--primary", 4.5], ["--accent", "--soft", 4.5], ["--field-border", "--surface", 3], ["--focus", "--canvas", 3]]
       .map(([fg, bg, minimum]) => [style.getPropertyValue(fg).trim(), style.getPropertyValue(bg).trim(), minimum, fg]);
   });
   function luminance(hex) {
@@ -183,17 +183,17 @@ try {
     const color = getComputedStyle(shell).backgroundColor;
     return { color, canvas: getComputedStyle(document.documentElement).backgroundColor, opacity: getComputedStyle(shell).opacity };
   });
-  assert.deepEqual(overlay, { color: "rgba(17, 18, 20, 0.7)", canvas: "rgba(0, 0, 0, 0)", opacity: "1" });
+  assert.deepEqual(overlay, { color: "rgba(11, 16, 32, 0.7)", canvas: "rgba(0, 0, 0, 0)", opacity: "1" });
   const shell = color => focus.waitForFunction(expected =>
     getComputedStyle(document.querySelector(".focus-shell")).backgroundColor === expected, color, { timeout: 3_000 });
   const opacity = focus.getByRole("slider", { name: "Window opacity" });
   await opacity.focus();
   await opacity.press("Home");
-  await shell("rgba(17, 18, 20, 0.3)");
+  await shell("rgba(11, 16, 32, 0.3)");
   await opacity.press("End");
-  await shell("rgb(17, 18, 20)");
+  await shell("rgb(11, 16, 32)");
   for (let step = 0; step < 6; step++) await opacity.press("ArrowLeft");
-  await shell("rgba(17, 18, 20, 0.7)");
+  await shell("rgba(11, 16, 32, 0.7)");
   console.log("Overlay opacity slider runs from 30% to solid while text stays opaque.");
   await focus.screenshot({ path: join(output, "focus.png"), animations: "disabled", omitBackground: true });
   await checkWindow("Overlay");

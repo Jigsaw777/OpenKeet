@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="OpenKeet"><title>OpenKeet</title>
+<defs><mask id="ok-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+  <rect width="64" height="64" fill="#fff"/><g>
+  <path d="M16.1 19.6a4 4 0 1 1 6.3 3.3c-1.4.9-2.2 1.8-2.2 3.4" fill="none" stroke="#000" stroke-width="3.2" stroke-linecap="round"/><circle cx="20.2" cy="29.9" r="1.9" fill="#000"/>
+  <path d="M28.4 43.9H42.8M28.4 48.3H42.8" stroke="#000" stroke-width="2.8" stroke-linecap="round"/></g></mask></defs>
+<g fill="#F5F7FB" mask="url(#ok-cut)"><g><path d="M9.5 11H43.3L23.6 36.9H14.2L9.5 43.6Z" stroke="#F5F7FB" stroke-width="3.6" stroke-linejoin="round"/>
+  <path d="M23.6 36.9H36.1L56 52V56.5H23.5L18.6 59V43.4Z" stroke="#F5F7FB" stroke-width="3.6" stroke-linejoin="round"/><path d="M32.96 24.6H45.5L36.1 36.9H23.6Z"/><path d="M51.25 12.8C51.9 16.9 53.3 18.3 57.4 19C53.3 19.7 51.9 21.1 51.25 25.2C50.6 21.1 49.2 19.7 45.1 19C49.2 18.3 50.6 16.9 51.25 12.8Z"/></g></g>
+</svg>
