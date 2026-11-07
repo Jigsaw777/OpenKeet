@@ -1,6 +1,6 @@
 # Choose an answer model
 
-OpenKeet uses two kinds of models. A **speech model** turns audio into text on your PC. An **answer model** can suggest responses to questions. Try the built-in sample before setting up either.
+OpenKeet uses two kinds of models. A **speech model** turns audio into text on your PC. An **answer model** can suggest responses to typed or detected questions. Connect an answer model to try a typed question, or choose **Transcription only** to work with audio without an answer provider.
 
 | Route | What you need | Where answer text goes |
 | --- | --- | --- |

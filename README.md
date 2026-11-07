@@ -30,9 +30,9 @@ Typing one question you expect to hear is a good place to start if you're prepar
 
 ## From a question to a clearer answer
 
-1. Connect an answer model in **Settings**, then type a question under **Ask a question**.
-2. To work from audio, choose what to listen to and get a local speech model. OpenKeet transcribes on your PC and flags likely questions.
-3. Review what OpenKeet heard and request a suggestion. Check the reasoning and say the answer in your own words.
+1. To start with a typed question, connect an answer model in **Settings**. Return to **Session** and open **Ask a question**.
+2. To work from audio, choose what to listen to and download a local speech model. OpenKeet transcribes on your PC and flags likely questions.
+3. Review the question and any suggested answer. Check the reasoning and say the answer in your own words.
 4. When the session ends, choose **Save to history** if you want to keep the transcript and checked answers.
 
 ## See it in action
@@ -43,7 +43,7 @@ This is the Windows app at first launch. [Screenshot gallery](docs/community/scr
 
 ## Use AI your way
 
-- **Start offline.** Install a speech model to transcribe your own audio locally. No account is needed for transcription.
+- **Transcribe on your PC.** After a one-time speech model download, transcription works offline without an account. [Speech setup](docs/getting-started.md#3-practice-with-audio)
 - **Run answers on your PC.** Connect a local model through Ollama. Download size, memory use, and speed depend on the model and computer.
 - **Connect a service.** The preview implements a Claude Console API-key route with separate usage billing and an experimental **Sign in with ChatGPT** route for eligible plan usage. Account access and usage limits depend on the provider.
 
@@ -51,7 +51,7 @@ This is the Windows app at first launch. [Screenshot gallery](docs/community/scr
 
 ## Your interview prep is personal
 
-You choose one microphone or Windows playback device when you start listening. OpenKeet transcribes that audio on your PC and keeps the current transcript in the session. When you request an answer from a cloud provider, OpenKeet sends the question and relevant text context to that provider. Save a finished session only if you want a local history entry. You can export or delete it from **History**. [Data and privacy guide](docs/privacy.md)
+You choose one microphone or Windows playback device when you start listening. OpenKeet transcribes that audio on your PC and keeps the current transcript in the session. If you select a cloud provider, each answer request sends the question and relevant text to that service. This includes automatic suggestions when enabled. Save a finished session only if you want a local history entry. You can export or delete it from **History**. [Data and privacy guide](docs/privacy.md)
 
 For real interviews or assessments, follow the interviewer's rules. Get permission before capturing someone else's audio or using live AI help. [Live assistance guide](docs/live-assistance.md)
 
@@ -59,9 +59,9 @@ For real interviews or assessments, follow the interviewer's rules. Get permissi
 
 **Is it free? Do I need an AI subscription?** OpenKeet has no app subscription. Local Ollama models need no AI service account. Connected services may charge for usage. The repository declares MIT for project source. The public distribution review is tracked in [release readiness](docs/release-readiness.md).
 
-**Can I install it without programming?** The current preview requires a Windows source build or an installer built by a maintainer. After launch, the sample and regular setup use buttons and menus. Follow the [Windows setup guide](docs/getting-started.md).
+**Can I install it without programming?** The current preview requires a Windows source build or an installer built by a maintainer. After installation, setup uses buttons and menus. Follow the [Windows setup guide](docs/getting-started.md).
 
-**Do I need a powerful PC or internet access?** The sample runs offline. Building the app and downloading speech or answer models need internet access. Once downloaded, local transcription and local Ollama answers can work offline. Larger models can use more disk space and memory. [Model requirements](docs/ai-providers.md#local-answers-with-ollama)
+**Do I need a powerful PC or internet access?** Building the app and downloading models need internet access. Local transcription and local Ollama answers can work offline after setup. Connected answer services need internet access. Larger models can use more disk space and memory. [Model requirements](docs/ai-providers.md#local-answers-with-ollama)
 
 **Can this help with a coding interview?** Use it to practice explaining code, choosing data structures, or describing system-design trade-offs. Review suggestions yourself. Your preparation and the interview determine the outcome.
 

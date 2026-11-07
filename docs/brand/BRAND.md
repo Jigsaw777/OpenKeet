@@ -1,6 +1,6 @@
 # OpenKeet brand guide
 
-OpenKeet is an AI interview copilot. It helps candidates understand a question, work out a stronger answer and approach the conversation with composure. This guide covers strategy, identity, voice and reusable copy. Tokens, components and screens are in the [design system](DESIGN_SYSTEM.md).
+OpenKeet is a personal AI interview assistant for Windows. It helps candidates understand a question, work out a stronger answer and approach the conversation with composure. This guide covers strategy, identity, voice and reusable copy. Tokens, components and screens are in the [design system](DESIGN_SYSTEM.md).
 
 ## A. Strategy
 
@@ -8,7 +8,7 @@ OpenKeet is an AI interview copilot. It helps candidates understand a question, 
 
 **Positioning.** OpenKeet helps interview candidates prepare thoughtfully, understand questions clearly, and formulate stronger answers with confidence.
 
-**Category.** AI interview copilot. Not a general chatbot, meeting recorder, workplace suite or note-taking app.
+**Category.** Personal AI interview assistant.
 
 **Audience.**
 
@@ -137,7 +137,7 @@ OpenKeet sounds like a thoughtful interview coach who helps you find clarity whe
 | Speech model | ASR engine, transcription backend |
 | Answer provider | LLM backend |
 | Live preview | Interim hypothesis |
-| Practice session, sample | Demo replay |
+| Practice question | Test prompt |
 
 ### Microcopy library
 
@@ -174,16 +174,16 @@ OpenKeet sounds like a thoughtful interview coach who helps you find clarity whe
 | Copied *(shipped)* | Answer copied | — | — | — |
 | Clipboard failure *(shipped)* | We couldn't copy that | Select the answer text and copy it manually. | — | — |
 | Update needed *(shipped)* | OpenKeet needs a restart to finish updating | Quit it from the tray and open it again. | — | — |
-| Privacy | Your data stays on this PC | Transcripts and saved sessions live in a local library. Answers go only to the provider you choose. | Open history | Delete a session |
+| Privacy | Local transcription, your choice of answer provider | Audio is transcribed on this PC. Saved sessions stay in your local library. If you choose a cloud answer provider, each answer request sends your question and related text to that service. | Open history | Delete a session |
 | Help | Something not working? | Check the audio device, the speech model and the answer provider in that order. | Open settings | Read the guide |
 
 ### Marketing copy
 
-**One line.** OpenKeet is an AI interview copilot that helps you understand each question and shape a stronger answer, live, on your own PC.
+**One line.** OpenKeet is your personal AI interview assistant for Windows. Practice questions and shape stronger answers in your own words.
 
 **50 words.** OpenKeet listens to your interview call on Windows, transcribes it locally, and spots the questions as they're asked. Connect ChatGPT, Claude or a local Ollama model to get a suggested answer in a see-through window over your call. Save sessions to review later.
 
-**150 words.** Interviews are hard enough without losing the thread of a question. OpenKeet is a Windows desktop copilot that helps you stay clear and composed. It transcribes the other person's audio on your PC with a local speech model. You can choose Whisper or NVIDIA Parakeet. As they speak, OpenKeet tracks the question and shows it settling into shape. When you're ready, it streams a suggested answer from the provider you choose: your ChatGPT account, your Claude Console key, or a model running locally in Ollama. Answers appear in a compact see-through window over your call, with readable lists and code blocks for technical rounds. Start, pause and stop are always visible. Sessions stay in a local library you can search, annotate, export or delete. OpenKeet helps you think. Your experience is still the answer. Interview smarter. Answer better.
+**150 words.** Interviews are hard enough without losing the thread of a question. OpenKeet is a personal AI interview assistant for Windows. It transcribes audio on your PC using Whisper or experimental NVIDIA Parakeet v3. As someone speaks, OpenKeet tracks the question as it takes shape. Get a suggested answer through the provider you choose. Use local Ollama, a Claude Console API key, or the preview sign-in for eligible ChatGPT accounts. Answers appear in a compact see-through window over your call, with readable lists and code blocks for technical rounds. Save a finished session to your local library to search, add notes, export or delete it. OpenKeet helps you think. Your experience is still the answer. Interview smarter. Answer better.
 
 **Launch announcement.** OpenKeet is here. It is a Windows interview copilot that hears the question, keeps it in focus and suggests a clear answer while you stay in control. Speech recognition runs on your PC. Answers come from the provider you pick, including fully local Ollama.
 

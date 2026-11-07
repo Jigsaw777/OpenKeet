@@ -1,6 +1,6 @@
 # Provider authorization audit
 
-The previous Windows preview used bundled answers because the Rust provider integrations were still open. The **Providers** screen connects external inference in the current build. **Run sample session** retains the bundled rehearsal. The legacy Python provider adapter has separate CLI workflows. [Legacy adapter](../../providers.py)
+The Windows preview configures answer providers under **Settings**, then **Answers**. Typed and detected questions use the selected provider. The legacy Python prototype uses separate CLI workflows. [Desktop provider guide](../ai-providers.md) · [Legacy adapter](../../providers.py)
 
 | Route | Verified documentation | Integration boundary |
 | --- | --- | --- |

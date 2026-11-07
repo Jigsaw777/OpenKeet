@@ -1,13 +1,13 @@
 # Native desktop UI validation
 
-Baseline B used a large welcome panel. The current dark overview puts sample start, audio setup, and capture status in the initial viewport. The light overview uses a light canvas and light navigation rail. See the [screenshot gallery](../community/screenshots.md). The remaining images are local outputs from the [native smoke test](../desktop-slice.md#build-and-test) under `target/ui-smoke/`.
+Baseline B used a large welcome panel. The current start screen shows audio input, speech model setup, the answer provider entry point, and capture status. See the [screenshot gallery](../community/screenshots.md). The remaining images are local outputs from the [native smoke test](../desktop-slice.md#build-and-test) under `target/ui-smoke/`.
 
 | Screen | Checked behavior | Screenshot |
 | --- | --- | --- |
 | Overview | Keyboard skip link, primary session action, dark/light/system switching, visible status | `first-run.png`, `overview-light.png` |
 | Live workspace | Checked follow-up, copy, manual and full transcript actions, separate reading regions. Rust tests cover superseded state. | `live-long-question.png`, `answer-view.png` |
 | Focus | 380 × 480 CSS px, keyboard scroll, visible Copy, pin/unpin and return to workspace | `focus.png` |
-| Audio setup | Endpoint list, permission, verified model path, missing-model recovery, manual-answer default, pause/resume | `audio-setup.png` |
+| Audio setup | Endpoint list, permission, verified model path, missing-model recovery, manual answer control, pause/resume | `audio-setup.png` |
 | Saved sessions | Save, transcript search, notes reopen, export controls and confirmed deletion | `saved-sessions.png` |
 | Providers | Browser sign-in entry points, masked Claude key field, installed model picker and selected route. Live fixture answers render lists and code and preserve raw text for follow-up context. | `providers.png` |
 

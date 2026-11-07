@@ -1,6 +1,6 @@
 # Get started with OpenKeet
 
-Connect an answer model to practice typed questions, or get a local speech model to work from audio.
+Connect an answer model to practice typed questions without audio setup. To transcribe speech, download a speech model and choose what to listen to.
 
 ## 1. Build the Windows preview
 
@@ -25,8 +25,10 @@ Open the generated `OpenKeet_*_x64-setup.exe` under `target/release/bundle/nsis/
 ## 3. Practice with audio
 
 1. Under **Listen to**, select your microphone to practice alone or the speakers or headphones playing a call where everyone has agreed to transcription. In Windows privacy settings, allow desktop apps to use the microphone if you choose it.
-2. Under **Speech model**, select **Download** for the recommended local model or **Choose file** for a supported download. The standard English model takes about 465 MiB on disk.
-3. Select **Start listening** and confirm you have permission. For suggestions, choose **Get answer** when OpenKeet detects a question. You can choose **Transcription only** to use the app without an answer model.
+2. Under **Speech model**, select **Download (488 MB)** for the default English Whisper model or **Choose file** if you already have the supported `ggml-small.en.bin`.
+3. Once you have permission, select **Start listening**. If an answer model is connected, review its suggestions or use **Get answer** for a detected question. Select **Transcription only** in **Settings**, under **Answers**, if you only need a transcript.
 4. Select **Stop** when finished. Saving to **History** is optional.
+
+To try experimental **NVIDIA Parakeet v3**, open **Settings**, then **Audio and display**, and select it under **Speech engine**. Return to **Session** and choose **Download Parakeet (670 MB)** or **Choose folder** for the supported model folder. Both speech engines run on your PC after setup. **Words to recognize** and **Short follow-up mode** apply to Whisper only.
 
 If the app can't hear you or you get a setup error, start with [troubleshooting](troubleshooting.md).
