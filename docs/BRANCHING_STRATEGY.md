@@ -45,7 +45,7 @@ The [default branch ruleset](https://github.com/Jigsaw777/OpenKeet/rules) requir
 - A PR merged with **Squash and merge**, with all conversations resolved. Stale reviews are dismissed on new pushes.
 - All seven checks above, passing on a branch that is up to date with `main`.
 - CodeQL results with no high or critical security alerts and no errors.
-- Linear history and signed commits. GitHub signs squash merges automatically.
+- Linear history and signed commits. Every commit on the PR branch needs a verified signature; one unsigned commit blocks the merge.
 - No deletion and no force pushes. There are no bypass actors.
 
 Release tags matching `v*` can be created but not moved or deleted. Community pack validation runs when its inputs change; review its result when it runs. Run `cargo deny check` and `zizmor .github` locally before changing dependencies or workflows.
