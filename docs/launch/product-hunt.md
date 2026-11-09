@@ -35,7 +35,7 @@ Thanks for trying it. Interview smarter. Answer better.
 | --- | --- |
 | Where should I start? | Open the Windows release notes. If you already have an answer model, start with one typed question. For audio, follow the separate speech setup. |
 | Does it work offline? | Once the required models are downloaded, local speech and a local Ollama model can work offline. Cloud answers require internet access. |
-| Is there a Mac or Linux installer? | The current packaged preview is Windows 11 x64. The legacy Python prototype has separate source paths. |
+| Is there a Mac or Linux installer? | The packaged preview targets Windows 11 x64. |
 | I couldn't get an answer. | Which Windows build, answer route, and setup step were you using? Please keep keys and interview text out of the report. We can narrow it down from a synthetic typed question. |
 | Can I contribute? | Yes. The [VERIFIED_CONTRIBUTING_URL] guide covers documentation, keyboard testing, and focused fixtures. |
 | What about using it in a live assessment? | Follow the assessment rules and get permission for audio capture and AI assistance. You can practice the same question alone. |

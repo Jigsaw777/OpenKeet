@@ -1,31 +1,32 @@
-# Legacy Python prototype
+# Move from the Python prototype
 
-For the current Windows desktop app, use [Get started with OpenKeet](getting-started.md). The legacy Python app has a separate interface, settings, and audio path. macOS and Linux prototype paths are source-only and lack current desktop validation.
+The current desktop app runs on Windows 11 x64 with a Rust backend and a React interface. The prototype and its launchers are available in the [last Python revision](https://github.com/Jigsaw777/OpenKeet/tree/769f9023f888ef8b9a19270f5b9fcf3758d1a8bd). [Get started with OpenKeet](getting-started.md)
 
-## Run the prototype
+## Import your saved profile
 
-On Windows, see the [legacy Windows guide](../WINDOWS_QUICKSTART.md). On macOS or Linux, use Python 3.11 or 3.12 with Tk. From the repository root:
+1. Find the old profile at `%USERPROFILE%\.personal_copilot\profile.json` if you saved context in the prototype.
+2. In **Prepare**, open **Your documents**. Choose the profile file and select **Add document**.
+3. Review the imported resume, job description, and notes. Set your answer model in **Settings**, then **Answers**. Copy speech hints to **Words to recognize** under **Audio and display**.
 
-```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python app.py
-```
+The import reads a copy of the text into local prep storage. You can keep the original file as a backup. The current [provider setup](ai-providers.md) covers model choice and credentials.
 
-After setup, `sh start_mac_linux.command` uses the same environment. Check Tk with `python3 -m tkinter`. Linux may also need its Tk, PortAudio, and PulseAudio client libraries.
+## Run the text bridge
 
-## Practice with a question
+1. Select an answer model in OpenKeet. Quit OpenKeet from the tray.
+2. In PowerShell, run `& "C:\path\to\OpenKeet.exe" --text-bridge` with your installed or built executable's path. Pass a port after the flag to override port 11435.
+3. Set the desktop client's Ollama base URL to `http://127.0.0.1:11435` or the port you chose. Use the model name returned by `/api/tags`.
 
-1. Start Ollama and download a supported local Qwen model. In the prototype, select **Local Ollama**, choose the matching tag, and select **Check connection**.
-2. Type a practice question and select **Suggest answer**. **Your context** can include a résumé, a job description, and notes. TXT, Markdown, DOCX, and text PDFs are supported.
-3. Keep **Save context** off unless you want a local, unencrypted profile. Context becomes part of your prompts when used. Completed questions and answers can be exported to Markdown.
+The bridge serves `/api/version`, `/api/tags`, and text requests at `/api/generate`. It uses the app's selected provider and forwards the submitted prompt. Cloud providers apply their usual data and billing terms. Start the bridge only when you want local desktop clients to use that connection. Quit OpenKeet to close the listener. [Provider guide](ai-providers.md)
 
-The prototype also contains adapters for installed Claude Code and Codex binaries. They have separate account terms, entitlements, and limits. Use the [Windows desktop provider guide](ai-providers.md) for current supported setup.
+## Source map
 
-## Select an audio source
-
-- **Windows.** Select the playback output carrying the practice call. See the [legacy Windows guide](../WINDOWS_QUICKSTART.md).
-- **macOS.** Use a virtual input such as [BlackHole](https://github.com/ExistentialAudio/BlackHole). In Audio MIDI Setup, create a Multi-Output Device for BlackHole and your headphones. Send the mock call there and select BlackHole as the input in OpenKeet.
-- **Linux.** Select a PulseAudio or compatible PipeWire monitor for the output that plays the practice call.
-
-In **Audio**, load the local `small.en` model and select **Start listening**. The Windows launcher starts model setup automatically. Stop when finished. [Prototype validation](../VALIDATION.md)
+| Prototype file | Current implementation |
+| --- | --- |
+| `app.py` | [Tauri application](../apps/desktop/src-tauri/src/main.rs) and [React views](../apps/desktop/src/main.tsx) |
+| `audio.py` | [WASAPI capture](../crates/copilot-audio/src/windows.rs) and [speech pipeline](../crates/copilot-audio/src/pipeline.rs) |
+| `capture_privacy.py` | [Windows display affinity](../apps/desktop/src-tauri/src/platform.rs) |
+| `core.py` | [Profile and document import](../apps/desktop/src-tauri/src/prep.rs) and [provider connections](../apps/desktop/src-tauri/src/providers.rs) |
+| `free_cluely_bridge.py` | [Local text bridge](../apps/desktop/src-tauri/src/bridge.rs) |
+| `live.py` | [Question and answer lifecycle](../crates/copilot-core/src/session.rs) |
+| `providers.py` | [Ollama, Claude Console, and ChatGPT routes](../apps/desktop/src-tauri/src/providers.rs) |
+| `window_shortcut.py` | [Tauri global shortcut and window restoration](../apps/desktop/src-tauri/src/main.rs) |

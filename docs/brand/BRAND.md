@@ -6,7 +6,7 @@ OpenKeet is a personal AI interview assistant for Windows. It helps candidates u
 
 **Purpose.** When an important question comes your way, you can approach it with clarity and confidence.
 
-**Positioning.** OpenKeet helps interview candidates prepare thoughtfully, understand questions clearly, and formulate stronger answers with confidence.
+**Positioning.** OpenKeet is a Windows interview copilot for preparation, practice, and real-time answer suggestions in sessions that allow AI help.
 
 **Category.** Personal AI interview assistant.
 
@@ -41,7 +41,7 @@ OpenKeet is a personal AI interview assistant for Windows. It helps candidates u
 
 **Differentiation.** Real-time question understanding, local speech recognition, transparent model choice and local history, in a calm desktop experience designed for interviews rather than meetings.
 
-**Honest use.** OpenKeet makes no claim to be hidden from screen sharing, proctoring or the other person. Capture state is always visible, and the start screen asks users to capture only audio they have permission to record. Marketing never promotes concealment or suggests answers replace real experience.
+**Honest use.** Describe live transcription and answer suggestions plainly. Ask users to follow interview and screen-sharing rules and get permission before capturing audio. Describe screen-share privacy as an optional Windows setting for OpenKeet's own windows. Its effect depends on the capture method. [Live assistance guide](../live-assistance.md)
 
 ## B. Identity
 

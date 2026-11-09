@@ -1,5 +1,7 @@
 # Live questions, predictions and pauses
 
+This describes the archived Python prototype. The current desktop uses the [Rust session protocol](docs/adr/0002-session-protocol.md).
+
 The important distinction is between a **capture segment**, a **candidate logical question**, and a **checked answer**. A short pause can close a capture segment while the person is still building the same question.
 
 ## Implemented flow

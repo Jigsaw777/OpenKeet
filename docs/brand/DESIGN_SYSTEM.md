@@ -136,7 +136,7 @@ States apply to every interactive component. **Hover** moves to `--raised` or th
 
 **Settings → Answers.** Pick a provider (ChatGPT, Claude, Ollama), sign in or paste a key, choose a model, then confirm the active provider.
 
-**Settings → Audio and display.** Words to recognize, Short follow-up mode, Speech engine, Speech model file or folder, Appearance, Text size, then Audio diagnostics during a live session.
+**Settings → Audio and display.** Words to recognize, Short follow-up mode, Speech engine, Speech model file or folder, Appearance, Text size, Screen-share privacy on Windows, then Audio diagnostics during a live session.
 
 **History.** Search, a result list, and a selected session with export (Markdown, JSON, TXT), notes and delete.
 

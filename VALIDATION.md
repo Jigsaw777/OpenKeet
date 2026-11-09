@@ -1,5 +1,7 @@
 # Validation
 
+These results apply to the Python prototype. See the [migration guide](docs/legacy-python.md) for the current Windows app and its test paths.
+
 November 4, 2026. Windows 11 25H2, build 26200.9711, Python 3.12.10.
 
 ## Windows checks

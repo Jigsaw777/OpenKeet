@@ -19,7 +19,7 @@
 - [Troubleshooting](troubleshooting.md)
 - [Support and reporting](../SUPPORT.md)
 - [Windows screenshot gallery](community/screenshots.md)
-- [Legacy Python prototype](legacy-python.md)
+- [Move from the Python prototype](legacy-python.md)
 
 ## Build and contribute
 

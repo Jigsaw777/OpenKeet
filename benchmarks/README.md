@@ -12,6 +12,6 @@ For the short-speech comparison, run `target\release\copilot.exe bench-asr gener
 
 Keep foreground activity low. Model load is process-cold and file-cache state is uncontrolled. Archive B should use the same Windows hardware as C.
 
-For the separate desktop probe, retain the B desktop executable and run `powershell -NoProfile -File benchmarks/desktop-startup.ps1 -Before <baseline-desktop-exe> -After target/release/OpenKeet.exe`. It launches and closes isolated app instances and writes per-run window and process-tree measurements.
+For the separate desktop probe, retain the baseline release executable and run `powershell -NoProfile -File benchmarks/desktop-startup.ps1 -Before <baseline-desktop-exe> -After target/release/OpenKeet.exe -StartupOnly`. For current builds that hide the workspace when closed, `-StartupOnly` measures launch and process-tree memory, then stops the isolated test process. Use the same toolchain and release settings for both builds.
 
 Do not commit private audio. The checked-in data is generated from the repository's synthetic recipes and Windows voices. Tests and profile commands need no paid credentials.

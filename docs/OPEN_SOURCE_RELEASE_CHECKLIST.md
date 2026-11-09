@@ -21,7 +21,7 @@ OpenKeet is a Windows 11 x64 source preview under the existing [MIT license](../
 ## Licensing and intellectual property
 
 - [x] The root [MIT license](../LICENSE) is the current project source license. The rename keeps that declaration.
-- [x] The [source audit](audit/DEPENDENCY_AND_LICENSE_AUDIT.md) separates the restricted Natively research reference from the local legacy bridge, which uses an Ollama-compatible protocol.
+- [x] The [source audit](audit/DEPENDENCY_AND_LICENSE_AUDIT.md) separates the restricted Natively research reference from the local text bridge, which uses an Ollama-compatible protocol.
 - [ ] Inventory packaged libraries, native speech runtime DLLs, installer components, and build tooling. Include their required license notices with the release.
 - [ ] Review terms for model downloads, including default Whisper and experimental NVIDIA Parakeet. Keep their provenance, checksums, notices, and attribution documented. The preview downloads weights separately.
 - [x] The owner supplied the logo artwork and approved publication of the source repository. Manrope is used as artwork outlines, with no font files bundled. [Brand guide](brand/BRAND.md) · [SIL OFL FAQ](https://openfontlicense.org/ofl-faq/)

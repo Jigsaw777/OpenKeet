@@ -1,6 +1,6 @@
 # Legacy Python setup on Windows
 
-For the current desktop preview, follow [Get started with OpenKeet](docs/getting-started.md). This guide covers the older Python prototype.
+These instructions apply to the [archived Python revision](https://github.com/Jigsaw777/OpenKeet/blob/769f9023f888ef8b9a19270f5b9fcf3758d1a8bd/WINDOWS_QUICKSTART.md). For the current Windows app, see [Get started with OpenKeet](docs/getting-started.md) and [move your saved documents](docs/legacy-python.md).
 
 ## 1. Open the app
 
@@ -10,7 +10,7 @@ The first launch creates `.venv` and installs the app dependencies. It uses an e
 
 ## 2. Choose an answer model
 
-Follow the [legacy model setup](docs/legacy-python.md#practice-with-a-question) and try a typed question with **Suggest answer**.
+Follow the [legacy model setup](https://github.com/Jigsaw777/OpenKeet/blob/769f9023f888ef8b9a19270f5b9fcf3758d1a8bd/docs/legacy-python.md#practice-with-a-question) and try a typed question with **Suggest answer**.
 
 ## 3. Listen to the other participant through system audio
 

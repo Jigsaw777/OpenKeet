@@ -12,6 +12,10 @@ tauri-build = { version = "2", features = [] }
 base64 = "0.23"
 copilot-core.workspace = true
 copilot-audio.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "form"] }
 ring = "0.17"
 rusqlite = { version = "0.41", features = ["bundled"] }

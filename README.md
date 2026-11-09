@@ -11,11 +11,13 @@
 
 **Interview smarter. Answer better.**
 
-Interviews can be stressful. Preparing for them shouldn't be. OpenKeet helps you practice questions, understand what's being asked, and work through answers you can put in your own words.
+OpenKeet is a real-time interview copilot for Windows. It transcribes speech on your PC, flags likely questions, and offers live answer suggestions. Build interview packs from your own experience, rehearse likely questions, and bring prepared answers into sessions that allow live AI assistance.
 
 [Windows setup downloads](setup/README.md) · [See it in action](#see-it-in-action) · [Documentation](docs/README.md) · [Contribute](CONTRIBUTING.md)
 
 **Windows 11 x64 preview.** Download and run the setup file, then open OpenKeet from Start. [First run](docs/getting-started.md) · [Build from source](docs/getting-started.md#1-build-the-windows-preview) · [MIT source license](LICENSE)
+
+The desktop backend and command-line tools use Rust. If you used the older Python prototype, [import your saved profile](docs/legacy-python.md).
 
 ## What you can practice
 
@@ -67,7 +69,7 @@ This is the Windows app at first launch. [Screenshot gallery](docs/community/scr
 
 You choose one microphone or Windows playback device when you start listening. OpenKeet transcribes that audio on your PC and keeps the current transcript in the session. If you select a cloud provider, each answer request sends the question and relevant text to that service. This includes automatic suggestions when enabled. Save a finished session only if you want a local history entry. You can export or delete it from **History**. [Data and privacy guide](docs/privacy.md)
 
-For real interviews or assessments, follow the interviewer's rules. Get permission before capturing someone else's audio or using live AI help. [Live assistance guide](docs/live-assistance.md)
+For real interviews or assessments, follow the interviewer's rules. Get permission before capturing someone else's audio or using live AI help. [Live assistance guide](docs/live-assistance.md) · [Screen-share privacy on Windows](docs/live-assistance.md#screen-share-privacy-on-windows)
 
 ## Common questions
 
