@@ -2,9 +2,14 @@
 
 Connect an answer model to practice typed questions without audio setup. To transcribe speech, download a speech model and choose what to listen to.
 
+## Download and install
+
+1. Download the current `OpenKeet_*_x64-setup.exe` for Windows 11 x64. [Setup snapshots](../setup/README.md)
+2. Run the setup file, then open **OpenKeet** from Start and continue to [practice your own questions](#2-practice-your-own-questions).
+
 ## 1. Build the Windows preview
 
-Build the latest source to install the preview on **Windows 11 x64** with Microsoft Edge WebView2. Check Releases for versioned installers as they become available. [GitHub Releases](https://github.com/Jigsaw777/OpenKeet/releases)
+Build the latest source on **Windows 11 x64** with Microsoft Edge WebView2. For a prebuilt installer, see the [setup snapshots](../setup/README.md).
 
 1. Install Git, Node.js 24, and stable Rust for `x86_64-pc-windows-msvc`. In Visual Studio Installer, select **Desktop development with C++** with a Windows SDK and C++ CMake tools. Install LLVM with `libclang.dll` and add LLVM's `bin` folder to your `PATH`. [Toolchain setup and troubleshooting](desktop-slice.md#build-and-test)
 

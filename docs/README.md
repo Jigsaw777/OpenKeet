@@ -2,6 +2,7 @@
 
 ## Prepare for an interview
 
+- [Download a Windows setup snapshot](../setup/README.md)
 - [Get started on Windows](getting-started.md)
 - [Practice technical and behavioral questions](interview-preparation.md)
 - [Build an interview pack (InstantPrep)](features/instantprep.md)
