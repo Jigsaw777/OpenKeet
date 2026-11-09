@@ -51,6 +51,15 @@ pub fn load(
     })
 }
 
+/// Opens a model file so nothing can write, rename or delete it while the handle lives.
+pub(crate) fn open_locked(path: &Path) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    std::os::windows::fs::OpenOptionsExt::share_mode(&mut options, 1); // FILE_SHARE_READ
+    options.open(path)
+}
+
 pub const SAMPLE_RATE: u32 = 16_000;
 const FRAME_MS: u64 = 30;
 const SAMPLES: usize = (SAMPLE_RATE as u64 * FRAME_MS / 1_000) as usize;

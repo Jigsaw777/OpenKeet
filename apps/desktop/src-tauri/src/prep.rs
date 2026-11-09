@@ -25,7 +25,7 @@ use copilot_core::{
 };
 use rusqlite::{Connection, TransactionBehavior};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use tauri::{AppHandle, Manager, State, async_runtime::spawn_blocking};
+use tauri::{AppHandle, Manager, State, async_runtime::spawn_blocking, ipc::Response};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::{
@@ -164,26 +164,73 @@ impl PrepStore {
         Ok((ws, meta("active_pack")?))
     }
 
-    /// Writes the whole workspace in one transaction.
-    // ponytail: full rewrite per change; switch to per-row upserts if packs grow past ~10k rows.
-    fn save(&self, ws: &Workspace, active: Option<&str>) -> Result<(), String> {
+    /// Writes, in one transaction, only rows that changed since `old` (the stored state) and
+    /// deletes rows that are gone. Parents are upserted in place, so foreign-key cascades never
+    /// remove their unchanged children. With no `old`, every table is rewritten.
+    fn save(
+        &self,
+        ws: &Workspace,
+        active: Option<&str>,
+        old: Option<&Workspace>,
+    ) -> Result<(), String> {
         let mut db = self.open()?;
         let tx = db
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(db_error)?;
-        tx.execute_batch(
-            "DELETE FROM answer_claims; DELETE FROM answer_variants; DELETE FROM question_families; DELETE FROM packs;
-             DELETE FROM conflicts; DELETE FROM claim_sources; DELETE FROM claims; DELETE FROM sources; DELETE FROM stories;
-             DELETE FROM community_packs; DELETE FROM practice_attempts; DELETE FROM study_states;
-             DELETE FROM meta WHERE key IN ('practice', 'active_pack');",
-        )
-        .map_err(db_error)?;
-        let run = |sql: &str, values: &[&dyn rusqlite::ToSql]| {
-            tx.execute(sql, values).map(|_| ()).map_err(db_error)
+        let empty = Workspace::default();
+        let base = match old {
+            Some(old) => old,
+            None => {
+                tx.execute_batch(
+                    "DELETE FROM answer_claims; DELETE FROM answer_variants; DELETE FROM question_families; DELETE FROM packs;
+                     DELETE FROM conflicts; DELETE FROM claim_sources; DELETE FROM claims; DELETE FROM sources; DELETE FROM stories;
+                     DELETE FROM community_packs; DELETE FROM practice_attempts; DELETE FROM study_states;",
+                )
+                .map_err(db_error)?;
+                &empty
+            }
         };
-        for s in &ws.sources {
+        let run = |sql: &str, values: &[&dyn rusqlite::ToSql]| {
+            tx.prepare_cached(sql)
+                .and_then(|mut statement| statement.execute(values))
+                .map(|_| ())
+                .map_err(db_error)
+        };
+        // Removals first, children before parents; cascades take their child rows with them.
+        for id in removed(&base.answers, &ws.answers, |a| &a.id) {
+            run("DELETE FROM answer_variants WHERE id=?1", &[&id])?;
+        }
+        for id in removed(&base.families, &ws.families, |f| &f.id) {
+            run("DELETE FROM question_families WHERE id=?1", &[&id])?;
+        }
+        for id in removed(&base.packs, &ws.packs, |p| &p.id) {
+            run("DELETE FROM packs WHERE id=?1", &[&id])?;
+        }
+        for id in removed(&base.conflicts, &ws.conflicts, |c| &c.id) {
+            run("DELETE FROM conflicts WHERE id=?1", &[&id])?;
+        }
+        for id in removed(&base.claims, &ws.claims, |c| &c.id) {
+            run("DELETE FROM claims WHERE id=?1", &[&id])?;
+        }
+        for id in removed(&base.sources, &ws.sources, |s| &s.id) {
+            run("DELETE FROM sources WHERE id=?1", &[&id])?;
+        }
+        for id in removed(&base.stories, &ws.stories, |s| &s.id) {
+            run("DELETE FROM stories WHERE id=?1", &[&id])?;
+        }
+        for id in removed(&base.community, &ws.community, |p| &p.pack.id) {
+            run("DELETE FROM community_packs WHERE id=?1", &[&id])?;
+        }
+        for id in removed(&base.attempts, &ws.attempts, |a| &a.id) {
+            run("DELETE FROM practice_attempts WHERE id=?1", &[&id])?;
+        }
+        for id in removed(&base.study, &ws.study, |s| &s.topic_id) {
+            run("DELETE FROM study_states WHERE topic_id=?1", &[&id])?;
+        }
+        // Upserts, parents before children.
+        for s in changed(&base.sources, &ws.sources, |s| &s.id) {
             run(
-                "INSERT INTO sources VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO sources VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, name=excluded.name, fingerprint=excluded.fingerprint, imported_ms=excluded.imported_ms, data=excluded.data",
                 &[
                     &s.id,
                     &tag(&s.kind),
@@ -194,30 +241,34 @@ impl PrepStore {
                 ],
             )?;
         }
-        for c in &ws.claims {
+        for c in changed(&base.claims, &ws.claims, |c| &c.id) {
             run(
-                "INSERT INTO claims VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO claims VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO UPDATE SET state=excluded.state, revision=excluded.revision, data=excluded.data",
                 &[&c.id, &tag(&c.state), &c.revision, &json(c)?],
             )?;
+            run("DELETE FROM claim_sources WHERE claim_id=?1", &[&c.id])?;
             for source in &c.source_ids {
                 run(
-                    "INSERT INTO claim_sources VALUES (?1, ?2)",
+                    "INSERT OR IGNORE INTO claim_sources VALUES (?1, ?2)",
                     &[&c.id, source],
                 )?;
             }
         }
-        for c in &ws.conflicts {
+        for c in changed(&base.conflicts, &ws.conflicts, |c| &c.id) {
             run(
-                "INSERT INTO conflicts VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO conflicts VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO UPDATE SET claim_a=excluded.claim_a, claim_b=excluded.claim_b, status=excluded.status, data=excluded.data",
                 &[&c.id, &c.a, &c.b, &tag(&c.status), &json(c)?],
             )?;
         }
-        for s in &ws.stories {
-            run("INSERT INTO stories VALUES (?1, ?2)", &[&s.id, &json(s)?])?;
-        }
-        for p in &ws.packs {
+        for s in changed(&base.stories, &ws.stories, |s| &s.id) {
             run(
-                "INSERT INTO packs VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO stories VALUES (?1, ?2) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+                &[&s.id, &json(s)?],
+            )?;
+        }
+        for p in changed(&base.packs, &ws.packs, |p| &p.id) {
+            run(
+                "INSERT INTO packs VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO UPDATE SET name=excluded.name, revision=excluded.revision, state=excluded.state, data=excluded.data",
                 &[
                     &p.id,
                     &p.settings.name,
@@ -227,15 +278,15 @@ impl PrepStore {
                 ],
             )?;
         }
-        for f in &ws.families {
+        for f in changed(&base.families, &ws.families, |f| &f.id) {
             run(
-                "INSERT INTO question_families VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO question_families VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO UPDATE SET pack_id=excluded.pack_id, intent=excluded.intent, data=excluded.data",
                 &[&f.id, &f.pack_id, &tag(&f.intent), &json(f)?],
             )?;
         }
-        for a in &ws.answers {
+        for a in changed(&base.answers, &ws.answers, |a| &a.id) {
             run(
-                "INSERT INTO answer_variants VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO answer_variants VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(id) DO UPDATE SET family_id=excluded.family_id, approval=excluded.approval, revision=excluded.revision, content_hash=excluded.content_hash, data=excluded.data",
                 &[
                     &a.id,
                     &a.family_id,
@@ -245,6 +296,7 @@ impl PrepStore {
                     &json(a)?,
                 ],
             )?;
+            run("DELETE FROM answer_claims WHERE answer_id=?1", &[&a.id])?;
             for claim in &a.claim_ids {
                 run(
                     "INSERT OR IGNORE INTO answer_claims VALUES (?1, ?2)",
@@ -252,9 +304,9 @@ impl PrepStore {
                 )?;
             }
         }
-        for p in &ws.community {
+        for p in changed(&base.community, &ws.community, |p| &p.pack.id) {
             run(
-                "INSERT INTO community_packs VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO community_packs VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(id) DO UPDATE SET version=excluded.version, license=excluded.license, content_hash=excluded.content_hash, installed_ms=excluded.installed_ms, data=excluded.data",
                 &[
                     &p.pack.id,
                     &p.pack.version,
@@ -265,9 +317,9 @@ impl PrepStore {
                 ],
             )?;
         }
-        for a in &ws.attempts {
+        for a in changed(&base.attempts, &ws.attempts, |a| &a.id) {
             run(
-                "INSERT INTO practice_attempts VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO practice_attempts VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO UPDATE SET pack_id=excluded.pack_id, family_id=excluded.family_id, created_ms=excluded.created_ms, data=excluded.data",
                 &[
                     &a.id,
                     &a.pack_id,
@@ -277,12 +329,17 @@ impl PrepStore {
                 ],
             )?;
         }
-        for s in &ws.study {
+        for s in changed(&base.study, &ws.study, |s| &s.topic_id) {
             run(
-                "INSERT INTO study_states VALUES (?1, ?2)",
+                "INSERT INTO study_states VALUES (?1, ?2) ON CONFLICT(topic_id) DO UPDATE SET data=excluded.data",
                 &[&s.topic_id, &json(s)?],
             )?;
         }
+        tx.execute(
+            "DELETE FROM meta WHERE key IN ('practice', 'active_pack')",
+            [],
+        )
+        .map_err(db_error)?;
         if let Some(practice) = &ws.practice {
             run(
                 "INSERT INTO meta VALUES ('practice', ?1)",
@@ -353,6 +410,39 @@ impl PrepStore {
     }
 }
 
+/// Rows of `new` that are added or differ from the row with the same id in `old`.
+fn changed<'a, T: PartialEq>(old: &[T], new: &'a [T], id: impl Fn(&T) -> &String) -> Vec<&'a T> {
+    let before: std::collections::HashMap<&String, &T> =
+        old.iter().map(|row| (id(row), row)).collect();
+    new.iter()
+        .filter(|row| before.get(id(row)).is_none_or(|was| *was != *row))
+        .collect()
+}
+
+/// Ids present in `old` but not in `new`.
+fn removed<'a, T>(old: &'a [T], new: &[T], id: impl Fn(&T) -> &String) -> Vec<&'a String> {
+    let after: std::collections::HashSet<&String> = new.iter().map(&id).collect();
+    old.iter()
+        .map(&id)
+        .filter(|key| !after.contains(key))
+        .collect()
+}
+
+/// Whether two workspaces hold the same stored rows (the in-memory event log is ignored).
+fn same_rows(a: &Workspace, b: &Workspace) -> bool {
+    a.sources == b.sources
+        && a.claims == b.claims
+        && a.conflicts == b.conflicts
+        && a.stories == b.stories
+        && a.packs == b.packs
+        && a.families == b.families
+        && a.answers == b.answers
+        && a.community == b.community
+        && a.attempts == b.attempts
+        && a.study == b.study
+        && a.practice == b.practice
+}
+
 const SCHEMA_V1: &str = "
 CREATE TABLE sources (id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, fingerprint TEXT NOT NULL,
     imported_ms INTEGER NOT NULL, data TEXT NOT NULL) STRICT;
@@ -386,13 +476,15 @@ CREATE TABLE embeddings (model TEXT NOT NULL, text_hash TEXT NOT NULL, vector BL
 PRAGMA user_version = 2;";
 
 struct Loaded {
-    ws: Workspace,
+    ws: Arc<Workspace>,
     active: Option<String>,
 }
 
 pub struct PrepState {
     store: PrepStore,
     loaded: Mutex<Option<Loaded>>,
+    /// The paraphrase model setting, read from the store once.
+    paraphrase: Mutex<Option<Option<String>>>,
 }
 
 impl PrepState {
@@ -402,31 +494,63 @@ impl PrepState {
                 path: dir.join("prep.sqlite3"),
             },
             loaded: Mutex::new(None),
+            paraphrase: Mutex::new(None),
         })
+    }
+
+    fn paraphrase(&self) -> Option<String> {
+        let mut cached = self.paraphrase.lock().expect("paraphrase lock");
+        cached
+            .get_or_insert_with(|| self.store.setting("paraphrase_model"))
+            .clone()
+    }
+
+    fn set_paraphrase(&self, model: Option<&str>) -> Result<(), String> {
+        self.store.set_setting("paraphrase_model", model)?;
+        *self.paraphrase.lock().expect("paraphrase lock") = Some(model.map(String::from));
+        Ok(())
+    }
+
+    /// The current workspace without copying it, for read-only views.
+    fn read(&self) -> Result<(Arc<Workspace>, Option<String>), String> {
+        let mut guard = self.loaded.lock().expect("prep lock");
+        if guard.is_none() {
+            let (ws, active) = self.store.load()?;
+            *guard = Some(Loaded {
+                ws: Arc::new(ws),
+                active,
+            });
+        }
+        let current = guard.as_ref().expect("loaded");
+        Ok((Arc::clone(&current.ws), current.active.clone()))
     }
 
     /// Applies a change to a copy, saves the copy, then swaps it in: all or nothing.
     fn transact<T>(
         &self,
         change: impl FnOnce(&mut Workspace, &mut Option<String>) -> Result<T, String>,
-    ) -> Result<(T, Workspace, Option<String>), String> {
+    ) -> Result<(T, Arc<Workspace>, Option<String>), String> {
         let mut guard = self.loaded.lock().expect("prep lock");
         if guard.is_none() {
             let (ws, active) = self.store.load()?;
-            *guard = Some(Loaded { ws, active });
+            *guard = Some(Loaded {
+                ws: Arc::new(ws),
+                active,
+            });
         }
         let current = guard.as_ref().expect("loaded");
-        let (mut ws, mut active) = (current.ws.clone(), current.active.clone());
-        let before = serde_json::to_string(&ws).unwrap_or_default();
+        let (mut ws, mut active) = ((*current.ws).clone(), current.active.clone());
         let value = change(&mut ws, &mut active)?;
         if active.as_ref().is_some_and(|id| ws.pack(id).is_none()) {
             active = None;
         }
-        if before != serde_json::to_string(&ws).unwrap_or_default() || active != current.active {
-            self.store.save(&ws, active.as_deref())?;
+        if same_rows(&current.ws, &ws) && active == current.active {
+            return Ok((value, Arc::clone(&current.ws), active));
         }
+        self.store.save(&ws, active.as_deref(), Some(&current.ws))?;
+        let ws = Arc::new(ws);
         *guard = Some(Loaded {
-            ws: ws.clone(),
+            ws: Arc::clone(&ws),
             active: active.clone(),
         });
         Ok((value, ws, active))
@@ -588,76 +712,92 @@ pub struct PrepView<'a> {
     message: Option<String>,
 }
 
+/// The starter packs, parsed and validated once.
+fn bundled() -> &'static [(&'static str, community::CommunityPack)] {
+    static PACKS: std::sync::OnceLock<Vec<(&'static str, community::CommunityPack)>> =
+        std::sync::OnceLock::new();
+    PACKS.get_or_init(|| {
+        BUNDLED
+            .iter()
+            .filter_map(|(name, text)| {
+                community::parse(text.as_bytes())
+                    .ok()
+                    .map(|pack| (*name, pack))
+            })
+            .collect()
+    })
+}
+
 fn view(
     ws: &Workspace,
     active: Option<String>,
     paraphrase_model: Option<String>,
     test: Option<Resolution>,
     message: Option<String>,
-) -> serde_json::Value {
-    let catalog = BUNDLED
+) -> Response {
+    let catalog = bundled()
         .iter()
-        .filter_map(|(name, text)| {
-            let pack = community::parse(text.as_bytes()).ok()?;
-            Some(CatalogEntry {
-                name,
-                installed: ws
-                    .community
-                    .iter()
-                    .find(|p| p.pack.id == pack.id)
-                    .map(|p| p.pack.version.clone()),
-                questions: pack.questions.len(),
-                skills: pack.skills.iter().map(|s| s.name.clone()).collect(),
-                authors: pack.authors.iter().map(|a| a.name.clone()).collect(),
-                id: pack.id,
-                version: pack.version,
-                title: pack.title,
-                description: pack.description,
-                license: pack.license,
-            })
+        .map(|(name, pack)| CatalogEntry {
+            name,
+            installed: ws
+                .community
+                .iter()
+                .find(|p| p.pack.id == pack.id)
+                .map(|p| p.pack.version.clone()),
+            questions: pack.questions.len(),
+            skills: pack.skills.iter().map(|s| s.name.clone()).collect(),
+            authors: pack.authors.iter().map(|a| a.name.clone()).collect(),
+            id: pack.id.clone(),
+            version: pack.version.clone(),
+            title: pack.title.clone(),
+            description: pack.description.clone(),
+            license: pack.license.clone(),
         })
         .collect();
     let now = now_ms();
     let start = ws.attempts.len().saturating_sub(200);
-    serde_json::to_value(PrepView {
-        sources: ws
-            .sources
-            .iter()
-            .map(|s| SourceView {
-                id: &s.id,
-                kind: s.kind,
-                name: &s.name,
-                parser: &s.parser,
-                imported_ms: s.imported_ms,
-                chars: s.text.chars().count(),
-                preview: s.text.chars().take(1_200).collect(),
-                warnings: &s.warnings,
-                pages: &s.pages,
-                job: (s.kind == DocKind::JobDescription).then(|| parse_job(&s.text)),
-            })
-            .collect(),
-        claims: &ws.claims,
-        conflicts: &ws.conflicts,
-        stories: &ws.stories,
-        packs: &ws.packs,
-        families: &ws.families,
-        answers: &ws.answers,
-        community: &ws.community,
-        catalog,
-        attempts: &ws.attempts[start..],
-        study: &ws.study,
-        practice: ws.practice.as_ref(),
-        recommendations: ws
-            .packs
-            .iter()
-            .map(|p| (p.id.clone(), ws.recommendations(&p.id, now)))
-            .collect(),
-        active_pack: active,
-        paraphrase_model,
-        test,
-        message,
-    })
-    .unwrap_or_default()
+    // Serialized once, straight to the IPC body (no intermediate JSON tree).
+    Response::new(
+        serde_json::to_string(&PrepView {
+            sources: ws
+                .sources
+                .iter()
+                .map(|s| SourceView {
+                    id: &s.id,
+                    kind: s.kind,
+                    name: &s.name,
+                    parser: &s.parser,
+                    imported_ms: s.imported_ms,
+                    chars: s.text.chars().count(),
+                    preview: s.text.chars().take(1_200).collect(),
+                    warnings: &s.warnings,
+                    pages: &s.pages,
+                    job: (s.kind == DocKind::JobDescription).then(|| parse_job(&s.text)),
+                })
+                .collect(),
+            claims: &ws.claims,
+            conflicts: &ws.conflicts,
+            stories: &ws.stories,
+            packs: &ws.packs,
+            families: &ws.families,
+            answers: &ws.answers,
+            community: &ws.community,
+            catalog,
+            attempts: &ws.attempts[start..],
+            study: &ws.study,
+            practice: ws.practice.as_ref(),
+            recommendations: ws
+                .packs
+                .iter()
+                .map(|p| (p.id.clone(), ws.recommendations(&p.id, now)))
+                .collect(),
+            active_pack: active,
+            paraphrase_model,
+            test,
+            message,
+        })
+        .unwrap_or_default(),
+    )
 }
 
 /// Reads an untrusted local file: extension allowlist plus content checks.
@@ -943,21 +1083,25 @@ fn sync_session(
     ws: &Workspace,
     active: Option<&str>,
 ) {
-    let resolver = active.and_then(|id| Resolver::build(ws, id));
-    let model = state.store.setting("paraphrase_model");
-    let attached = {
+    let model = state.paraphrase();
+    let wanted = active
+        .and_then(|id| ws.pack(id))
+        .map(|p| (p.id.as_str(), p.revision));
+    // Most prep actions don't touch the pack in use: keep its index instead of rebuilding it.
+    let unchanged = {
         let desktop = shared.lock().expect("desktop session lock");
-        desktop.prepared().is_some_and(|r| {
-            resolver
-                .as_ref()
-                .is_some_and(|n| n.pack_id == r.pack_id && n.revision == r.revision)
-                && r.semantic_model().is_some()
-                && r.semantic_model() == model.as_deref()
-        })
+        match (desktop.prepared(), wanted) {
+            (None, None) => true,
+            (Some(r), Some((id, revision))) => {
+                r.pack_id == id && r.revision == revision && r.semantic_model() == model.as_deref()
+            }
+            _ => false,
+        }
     };
-    if attached {
+    if unchanged {
         return;
     }
+    let resolver = active.and_then(|id| Resolver::build(ws, id));
     if let (Some(model), Some(resolver)) = (model, &resolver) {
         let (app, state, shared, resolver) = (
             app.clone(),
@@ -1032,25 +1176,23 @@ pub async fn prep(
     state: State<'_, Arc<PrepState>>,
     shared: State<'_, Shared>,
     action: Action,
-) -> Result<serde_json::Value, String> {
+) -> Result<Response, String> {
     let state = Arc::clone(&state);
     let shared = Arc::clone(&shared);
     spawn_blocking(move || {
         let erase = matches!(action, Action::DeleteAllPrivate);
-        let ((test, message), ws, active) =
-            state.transact(|ws, active| apply(&app, ws, active, action))?;
+        let ((test, message), ws, active) = if matches!(action, Action::Get) {
+            let (ws, active) = state.read()?;
+            ((None, None), ws, active)
+        } else {
+            state.transact(|ws, active| apply(&app, ws, active, action))?
+        };
         if erase {
             // Vectors are derived from private questions; they go with them.
             state.store.replace_vectors("", &[])?;
         }
         sync_session(&app, &state, &shared, &ws, active.as_deref());
-        Ok(view(
-            &ws,
-            active,
-            state.store.setting("paraphrase_model"),
-            test,
-            message,
-        ))
+        Ok(view(&ws, active, state.paraphrase(), test, message))
     })
     .await
     .map_err(|_| "Interview prep worker failed.")?
@@ -1118,7 +1260,7 @@ pub async fn prep_draft_with_ai(
     providers: State<'_, Arc<ProviderHub>>,
     family_id: String,
     length: Length,
-) -> Result<serde_json::Value, String> {
+) -> Result<Response, String> {
     let route = providers
         .selection()
         .ok_or("Choose an AI option in Settings → Answers first.")?;
@@ -1160,7 +1302,7 @@ pub async fn prep_draft_with_ai(
             Ok(())
         })?;
         sync_session(&app, &state, &shared, &ws, active.as_deref());
-        Ok(view(&ws, active, state.store.setting("paraphrase_model"), None, Some("AI draft saved. Review it before approving.".into())))
+        Ok(view(&ws, active, state.paraphrase(), None, Some("AI draft saved. Review it before approving.".into())))
     })
     .await
     .map_err(|_| "Interview prep worker failed.")?
@@ -1199,7 +1341,7 @@ pub async fn prep_ai(
     shared: State<'_, Shared>,
     providers: State<'_, Arc<ProviderHub>>,
     task: AiTask,
-) -> Result<serde_json::Value, String> {
+) -> Result<Response, String> {
     let route: Selection = providers
         .selection()
         .ok_or("Choose an AI option in Settings → Answers first.")?;
@@ -1249,7 +1391,7 @@ pub async fn prep_ai(
             })
         })?;
         sync_session(&app, &state, &shared, &ws, active.as_deref());
-        Ok(view(&ws, active, state.store.setting("paraphrase_model"), None, Some(message)))
+        Ok(view(&ws, active, state.paraphrase(), None, Some(message)))
     })
     .await
     .map_err(|_| "Interview prep worker failed.")?
@@ -1262,9 +1404,9 @@ pub async fn prep_paraphrase(
     state: State<'_, Arc<PrepState>>,
     shared: State<'_, Shared>,
     model: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<Response, String> {
     let state = Arc::clone(&state);
-    let (_, ws, active) = state.transact(|_, _| Ok(()))?;
+    let (ws, active) = state.read()?;
     let message = match &model {
         Some(model) => {
             let resolver = active
@@ -1273,7 +1415,7 @@ pub async fn prep_paraphrase(
                 .ok_or("Choose a pack for sessions first.")?;
             let count = resolver.semantic_texts().len();
             let ready = with_vectors(&app, &state, resolver, model).await?;
-            state.store.set_setting("paraphrase_model", Some(model))?;
+            state.set_paraphrase(Some(model))?;
             let view = shared
                 .lock()
                 .expect("desktop session lock")
@@ -1286,19 +1428,13 @@ pub async fn prep_paraphrase(
             )
         }
         None => {
-            state.store.set_setting("paraphrase_model", None)?;
+            state.set_paraphrase(None)?;
             state.store.replace_vectors("", &[])?;
             sync_session(&app, &state, &shared, &ws, active.as_deref());
             "Paraphrase matching is off. Sessions use wording matches only.".into()
         }
     };
-    Ok(view(
-        &ws,
-        active,
-        state.store.setting("paraphrase_model"),
-        None,
-        Some(message),
-    ))
+    Ok(view(&ws, active, state.paraphrase(), None, Some(message)))
 }
 
 #[cfg(test)]
@@ -1329,6 +1465,27 @@ mod tests {
             serde_json::to_string(&saved).unwrap()
         );
         assert!(active.is_some());
+        // Row-level saves: edits, additions and cascading removals still reload identically.
+        let ((), edited, _) = state
+            .transact(|ws, active| {
+                let family = ws.families[0].id.clone();
+                ws.set_family_excluded(&family, true)?;
+                ws.add_claim("Checkout", "I cut checkout errors by 30%", 4)?;
+                let pack = active.take().expect("active pack");
+                ws.delete_pack(&pack)?;
+                let source = ws.sources[0].id.clone();
+                ws.delete_source(&source)
+            })
+            .unwrap();
+        let (reloaded, _) = PrepStore {
+            path: dir.path().join("prep.sqlite3"),
+        }
+        .load()
+        .unwrap();
+        assert_eq!(
+            serde_json::to_string(&reloaded).unwrap(),
+            serde_json::to_string(&*edited).unwrap()
+        );
         // A failed change leaves the stored data untouched.
         assert!(state.transact(|ws, _| ws.delete_pack("missing")).is_err());
         assert_eq!(
@@ -1378,6 +1535,50 @@ mod tests {
             .unwrap();
         assert_eq!(store.vectors("m").unwrap()["h"], vec![0.5, -1.0]);
         assert_eq!(store.load().unwrap().0.sources.len(), 0);
+    }
+
+    /// Cost of one small prep action (store + view) with 20 packs. `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn bench_prep_action_cost() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = PrepState::new(dir.path().to_path_buf());
+        state
+            .transact(|ws, _| {
+                let id = ws.import_source(DocKind::Resume, "a.txt", "Experience\nEngineer, Example Co | 2020 - 2022\n- Built a Redis cache for the catalog API\n- Designed REST APIs with Java and PostgreSQL", "text/1", 1)?;
+                let mut community = Vec::new();
+                for (file, text) in BUNDLED {
+                    let pack = community::parse(text.as_bytes()).map_err(|e| e.to_string())?;
+                    community.push(pack.id.clone());
+                    ws.install_community(pack, file, 2)?;
+                }
+                for i in 0..20 {
+                    let settings = PackSettings { name: format!("Pack {i}"), depth: copilot_core::prep::Depth::Thorough, source_ids: vec![id.clone()], community_ids: community.clone(), ..PackSettings::default() };
+                    ws.compile_pack(None, settings, 3 + i)?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        let (_, ws, _) = state.transact(|_, _| Ok(())).unwrap();
+        let family = ws.families[0].id.clone();
+        let (families, answers) = (ws.families.len(), ws.answers.len());
+        let started = std::time::Instant::now();
+        for i in 0..20 {
+            let (_, ws, active) = state
+                .transact(|ws, _| ws.set_family_excluded(&family, i % 2 == 0))
+                .unwrap();
+            std::hint::black_box(view(&ws, active, None, None, None));
+        }
+        let change = started.elapsed() / 20;
+        let started = std::time::Instant::now();
+        for _ in 0..20 {
+            let (ws, active) = state.read().unwrap();
+            std::hint::black_box(view(&ws, active, None, None, None));
+        }
+        println!(
+            "{families} families, {answers} answers: change {change:?}, read {:?}",
+            started.elapsed() / 20
+        );
     }
 
     fn tiny_pdf(pages: &[&str]) -> Vec<u8> {
