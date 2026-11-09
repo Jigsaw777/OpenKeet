@@ -20,7 +20,15 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+      # The action downloads lychee from GitHub Releases; retry once if that download fails.
+      # A real broken link fails both attempts.
+      - id: lychee
+        continue-on-error: true
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: "--offline --include-fragments --no-progress '**/*.md'"
+      - if: steps.lychee.outcome == 'failure'
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: "--offline --include-fragments --no-progress '**/*.md'"
 
@@ -76,6 +84,20 @@ jobs:
           $clang = (Get-Command clang.exe -ErrorAction Stop).Source | Split-Path -Parent
           if (-not (Test-Path (Join-Path $clang 'libclang.dll'))) { throw 'libclang.dll is missing' }
           "LIBCLANG_PATH=$clang" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # sherpa-onnx-sys downloads this archive in its build script with no retry, and uses a copy
+      # already in target/sherpa-onnx-prebuilt. Fetch it with retries and pin its checksum.
+      - name: Fetch the pinned speech runtime
+        shell: pwsh
+        env:
+          ARCHIVE: sherpa-onnx-v2.0.1-win-x64-shared-MT-Release-lib.tar.bz2
+          SHA256: afa4de3ca4ab0afd53bb4aab40d28ee15608364b549ffc0fe0caf6489bfc39a5
+        run: |
+          $dir = New-Item -ItemType Directory -Force -Path target/sherpa-onnx-prebuilt
+          $file = Join-Path $dir $env:ARCHIVE
+          curl.exe --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 10 `
+            --output $file "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/$env:ARCHIVE"
+          $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:SHA256) { throw "Unexpected sherpa-onnx archive checksum: $hash" }
       - name: Build the frontend the desktop crate embeds
         working-directory: apps/desktop
         run: |
