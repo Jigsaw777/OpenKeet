@@ -11,7 +11,7 @@
 
 **Interview smarter. Answer better.**
 
-OpenKeet is a real-time interview copilot for Windows. It transcribes speech on your PC, flags likely questions, and offers live answer suggestions. Build interview packs from your own experience, rehearse likely questions, and bring prepared answers into sessions that allow live AI assistance.
+OpenKeet is a real-time interview copilot for Windows. During a live interview, it transcribes the conversation on your PC, flags likely questions, and shows answer suggestions in the Focus overlay when an answer model is connected. Build an interview pack beforehand to rehearse questions and bring up answers you've prepared.
 
 [Windows setup downloads](setup/README.md) · [See it in action](#see-it-in-action) · [Documentation](docs/README.md) · [Contribute](CONTRIBUTING.md)
 
@@ -69,7 +69,7 @@ This is the Windows app at first launch. [Screenshot gallery](docs/community/scr
 
 You choose one microphone or Windows playback device when you start listening. OpenKeet transcribes that audio on your PC and keeps the current transcript in the session. If you select a cloud provider, each answer request sends the question and relevant text to that service. This includes automatic suggestions when enabled. Save a finished session only if you want a local history entry. You can export or delete it from **History**. [Data and privacy guide](docs/privacy.md)
 
-For real interviews or assessments, follow the interviewer's rules. Get permission before capturing someone else's audio or using live AI help. [Live assistance guide](docs/live-assistance.md) · [Screen-share privacy on Windows](docs/live-assistance.md#screen-share-privacy-on-windows)
+Get permission before processing someone else's audio. [Live assistance guide](docs/live-assistance.md) · [Screen-share privacy on Windows](docs/live-assistance.md#screen-share-privacy-on-windows)
 
 ## Common questions
 
@@ -79,7 +79,7 @@ For real interviews or assessments, follow the interviewer's rules. Get permissi
 
 **Do I need a powerful PC or internet access?** Building the app and downloading models need internet access. Local transcription and local Ollama answers can work offline after setup. Connected answer services need internet access. Larger models can use more disk space and memory. [Model requirements](docs/ai-providers.md#local-answers-with-ollama)
 
-**Can this help with a coding interview?** Use it to practice explaining code, choosing data structures, or describing system-design trade-offs. Review suggestions yourself. Your preparation and the interview determine the outcome.
+**Can this help with a coding interview?** Rehearse explanations before the interview. During the interview, OpenKeet can surface suggestions for questions about code, data structures, and system-design trade-offs as they come up.
 
 **Does OpenKeet record interviews?** Listening processes audio in memory. The desktop app lets you explicitly save retained text and answers to a local library. [What gets saved](docs/privacy.md#what-stays-on-your-pc)
 

@@ -112,7 +112,7 @@ Setup: [VERIFIED_RELEASE_DOWNLOAD_URL]
 
 **First comment.** Keep the exercise in the main thread comment. Reply to follow-up questions in that thread.
 
-**Likely question.** “Can I use it in an assessment?” Only where the rules allow AI assistance and everyone has given permission for audio capture. The exercise works in solo practice.
+**Likely question.** “Can it respond to questions during an interview?” Yes. OpenKeet flags likely questions from your selected audio and shows suggestions when an answer model is connected.
 
 ## 6. Feedback from developers preparing for technical rounds
 

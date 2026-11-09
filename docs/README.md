@@ -11,7 +11,7 @@
 - [Prepared answers in sessions (Anticipate)](features/anticipate.md)
 - [Community interview packs](features/community-packs.md)
 - [Set up answer models](ai-providers.md)
-- [Use live assistance with permission](live-assistance.md)
+- [Use live interview assistance](live-assistance.md)
 - [Understand your data and privacy](privacy.md)
 
 ## Get unstuck

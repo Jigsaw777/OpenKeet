@@ -4,7 +4,7 @@
 
 **Short.** OpenKeet is a real-time interview copilot for Windows with local transcription and live answer suggestions.
 
-**Candidate introduction.** Practice likely questions with an interview pack based on your experience. In sessions that allow live AI help, OpenKeet follows the conversation, flags likely questions, and offers structured answers you can put in your own words.
+**Candidate introduction.** During a live interview, OpenKeet follows the conversation and shows answer suggestions alongside the detected question. Before the call, practice with an interview pack based on your experience.
 
 **Developer introduction.** OpenKeet combines local speech recognition, question detection, and optional answer providers in a Windows desktop app. Help improve the setup, accessibility, transcription, or practice experience.
 

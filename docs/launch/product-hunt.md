@@ -38,6 +38,6 @@ Thanks for trying it. Interview smarter. Answer better.
 | Is there a Mac or Linux installer? | The packaged preview targets Windows 11 x64. |
 | I couldn't get an answer. | Which Windows build, answer route, and setup step were you using? Please keep keys and interview text out of the report. We can narrow it down from a synthetic typed question. |
 | Can I contribute? | Yes. The [VERIFIED_CONTRIBUTING_URL] guide covers documentation, keyboard testing, and focused fixtures. |
-| What about using it in a live assessment? | Follow the assessment rules and get permission for audio capture and AI assistance. You can practice the same question alone. |
+| What does it show during a live interview? | The Focus window shows the detected question and streams answer suggestions when an answer model is connected. Transcription runs on your PC. |
 
 Verify gallery captions, download link, and signing status before submission. [Asset checklist](launch-assets.md)
