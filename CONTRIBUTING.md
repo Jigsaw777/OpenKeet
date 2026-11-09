@@ -27,6 +27,7 @@ Install the [Windows desktop prerequisites](docs/desktop-slice.md#build-and-test
    cargo test --locked -p copilot-core -p copilot
    cargo fmt --all --check
    ```
+   If you change dependencies or workflows, also run `cargo deny check` and `zizmor .github` (both install with `cargo install --locked`).
 
 2. Start the desktop app from `apps/desktop`.
 
