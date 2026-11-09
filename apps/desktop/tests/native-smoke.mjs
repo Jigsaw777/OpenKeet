@@ -122,7 +122,10 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   await page.getByRole("heading", { name: "Finish setup", exact: true }).waitFor();
   await page.getByRole("status").filter({ hasText: /^Not listening$/ }).waitFor();
-  assert.equal(await page.getByRole("navigation", { name: "Workspace" }).getByRole("button").count(), 3);
+  const workspace = page.getByRole("navigation", { name: "Workspace" });
+  assert.deepEqual(await workspace.getByRole("button").allTextContents(), [
+    "Prepare", "My experience", "Practice", "Session", "Community", "Settings", "History",
+  ]);
   await page.locator('html[data-theme="dark"]').waitFor({ state: "attached" });
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
   await checkContrast(page, "dark");
@@ -135,7 +138,6 @@ try {
   let focus;
   let ollamaConnected = false;
 
-  const workspace = page.getByRole("navigation", { name: "Workspace" });
   const settings = page.getByRole("navigation", { name: "Settings" });
   const audioSettings = async () => {
     await workspace.getByRole("button", { name: "Settings", exact: true }).click();
