@@ -7,6 +7,37 @@ import { providerLabel, sourceLabel } from "./protocol";
 import type { DesktopView, Endpoint, SpeechEngine } from "./protocol";
 import type { Theme } from "./workspace-shell";
 
+function ScreenSharePrivacySetting() {
+  const [active, setActive] = useState<boolean | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let current = true;
+    void invoke<boolean | null>("screen_share_privacy")
+      .then(value => { if (current) setActive(value); })
+      .catch(problem => { if (current) setError(String(problem)); });
+    return () => { current = false; };
+  }, []);
+
+  async function change(enabled: boolean) {
+    setPending(true);
+    setError("");
+    try { setActive(await invoke<boolean | null>("screen_share_privacy", { enabled })); }
+    catch (problem) { setError(String(problem)); }
+    finally { setPending(false); }
+  }
+
+  return <>
+    {active !== null && <>
+      <label className="checkbox"><input type="checkbox" checked={active} disabled={pending} aria-describedby="screen-share-help"
+        onChange={event => void change(event.target.checked)} /> Screen-share privacy</label>
+      <p id="screen-share-help" className="subtle">Exclude OpenKeet windows from compatible Windows capture until you quit. Check the receiving view.</p>
+    </>}
+    {error && <p className="notice error" role="alert">{error}</p>}
+  </>;
+}
+
 const audioKey = "copilot-audio-settings";
 const defaults = { endpoint: "", engine: "whisper" as SpeechEngine, model: "", vocabulary: "", shortFollowups: false, autoAnswer: true };
 
@@ -200,6 +231,7 @@ export function AudioSetup({ view, audio, enabled, done, zoom, setZoom, theme, s
     <select id="text-scale" value={zoom} onChange={event => setZoom(event.target.value)}>
       {["100", "125", "150", "175", "200"].map(scale => <option key={scale} value={scale}>{scale}%</option>)}
     </select>
+    {enabled && <ScreenSharePrivacySetting />}
     {view.mode === "audio" && <details className="advanced-settings">
       <summary>Audio diagnostics</summary>
       <label htmlFor="input-meter">Input level</label><meter id="input-meter" min={0} max={32768} value={peak} />

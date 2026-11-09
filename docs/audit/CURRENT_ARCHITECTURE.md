@@ -13,7 +13,7 @@ Line references here and in the technical-debt audit refer to the baseline. Use 
 | Answer provider | [workspace.rs](../../apps/desktop/src-tauri/src/workspace.rs#L214), `rehearsal.rs` (since removed) | Bundled deterministic practice responder. Rust desktop has no cloud login, key storage, or network inference. |
 | CLI | [main.rs](../../apps/cli/src/main.rs), [audio.rs](../../apps/cli/src/audio.rs) | Reuses the domain and optional native audio crates for JSON replay, endpoint discovery and paced WAV replay. |
 | Package | [tauri.conf.json](../../apps/desktop/src-tauri/tauri.conf.json), [preview.yml](../../.github/workflows/preview.yml), [installer-smoke.ps1](../../apps/desktop/tests/installer-smoke.ps1) | Private Windows NSIS preview. Native WebView2 and controlled install tests exist. |
-| Legacy | [app.py](../../app.py#L56), [providers.py](../../providers.py#L63), [core.py](../../core.py#L76) | Python/Tkinter launchers, local Ollama, supported local CLI processes, JSON profile and document import. Kept outside the Rust build. |
+| Legacy | [app.py](https://github.com/Jigsaw777/OpenKeet/blob/769f9023f888ef8b9a19270f5b9fcf3758d1a8bd/app.py#L56), [providers.py](https://github.com/Jigsaw777/OpenKeet/blob/769f9023f888ef8b9a19270f5b9fcf3758d1a8bd/providers.py#L63), [core.py](https://github.com/Jigsaw777/OpenKeet/blob/769f9023f888ef8b9a19270f5b9fcf3758d1a8bd/core.py#L76) | Archived Python/Tkinter launchers, local Ollama, CLI processes, JSON profile and document import. |
 
 ```mermaid
 flowchart LR

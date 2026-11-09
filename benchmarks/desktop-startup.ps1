@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Before,
     [Parameter(Mandatory = $true)][string]$After,
     [ValidateRange(1, 10)][int]$Repetitions = 3,
+    [switch]$StartupOnly,
     [string]$Output = 'benchmarks/output/desktop-startup/results.json'
 )
 
@@ -47,18 +48,22 @@ function Measure-Desktop([string]$Executable, [string]$Profile) {
         $resident = ($members | Measure-Object -Property WorkingSet64 -Sum).Sum
         $private = ($members | Measure-Object -Property PrivateMemorySize64 -Sum).Sum
 
-        $clock.Restart()
-        do {
-            if ($app.HasExited) { throw 'The process exited before the shutdown probe.' }
-            $app.Refresh()
-            $closeSent = $app.CloseMainWindow()
-            if (!$closeSent) { Start-Sleep -Milliseconds 50 }
-        } until ($closeSent -or $clock.ElapsedMilliseconds -ge 2000)
-        if (!$closeSent) { throw 'Could not send close to a native main window.' }
-        if (!$app.WaitForExit(5000)) { throw 'The process stayed open after the close request.' }
+        $shutdownMs = $null
+        if (!$StartupOnly) {
+            $clock.Restart()
+            do {
+                if ($app.HasExited) { throw 'The process exited before the shutdown probe.' }
+                $app.Refresh()
+                $closeSent = $app.CloseMainWindow()
+                if (!$closeSent) { Start-Sleep -Milliseconds 50 }
+            } until ($closeSent -or $clock.ElapsedMilliseconds -ge 2000)
+            if (!$closeSent) { throw 'Could not send close to a native main window.' }
+            if (!$app.WaitForExit(5000)) { throw 'The process stayed open after the close request.' }
+            $shutdownMs = $clock.ElapsedMilliseconds
+        }
         [pscustomobject]@{
             window_ms = $windowMs
-            shutdown_ms = $clock.ElapsedMilliseconds
+            shutdown_ms = $shutdownMs
             processes = $members.Count
             summed_working_set_mib = [Math]::Round($resident / 1MB, 1)
             summed_private_mib = [Math]::Round($private / 1MB, 1)

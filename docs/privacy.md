@@ -1,6 +1,6 @@
 # How OpenKeet handles your data
 
-This guide covers the Windows desktop preview. The older Python prototype has [separate behavior](legacy-python.md).
+This guide covers the Windows desktop preview. See [profile migration](legacy-python.md) if you used the archived Python app.
 
 ## When you start listening
 

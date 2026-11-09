@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod auth;
+mod bridge;
 mod history;
 mod platform;
 mod prep;
@@ -29,6 +30,9 @@ use workspace::{CaptureConfig, Desktop, Shared, View, emit, update};
 
 #[derive(Default)]
 struct LastSurface(AtomicBool);
+
+#[derive(Default)]
+struct CapturePrivacy(AtomicBool);
 
 #[tauri::command]
 fn get_snapshot(state: State<'_, Shared>) -> View {
@@ -109,6 +113,32 @@ fn clear_session(app: AppHandle, state: State<'_, Shared>) -> Result<View, Strin
 }
 
 #[tauri::command]
+fn screen_share_privacy(app: AppHandle, enabled: Option<bool>) -> Result<Option<bool>, String> {
+    if !cfg!(windows) {
+        return Ok(None);
+    }
+    let privacy = app.state::<CapturePrivacy>();
+    let previous = privacy.0.load(Ordering::Relaxed);
+    let Some(enabled) = enabled else {
+        return Ok(Some(previous));
+    };
+    let main = app
+        .get_webview_window("main")
+        .ok_or("Could not find the OpenKeet workspace.")?;
+    platform::set_capture_exclusion(&main, enabled)?;
+    if let Some(focus) = app.get_webview_window("focus")
+        && let Err(error) = platform::set_capture_exclusion(&focus, enabled)
+    {
+        platform::set_capture_exclusion(&main, previous).map_err(|restore| {
+            format!("{error} Could not restore the workspace setting. {restore}")
+        })?;
+        return Err(error);
+    }
+    privacy.0.store(enabled, Ordering::Relaxed);
+    Ok(Some(enabled))
+}
+
+#[tauri::command]
 async fn open_focus(app: AppHandle) -> Result<(), String> {
     if app.get_webview_window("focus").is_none() {
         let window =
@@ -127,7 +157,18 @@ async fn open_focus(app: AppHandle) -> Result<(), String> {
         let target = window.clone();
         window
             .run_on_main_thread(move || {
-                let _ = configured.send(platform::configure_tool_window(&target));
+                let result = platform::configure_tool_window(&target).and_then(|()| {
+                    if target
+                        .app_handle()
+                        .state::<CapturePrivacy>()
+                        .0
+                        .load(Ordering::Relaxed)
+                    {
+                        platform::set_capture_exclusion(&target, true)?;
+                    }
+                    Ok(())
+                });
+                let _ = configured.send(result);
             })
             .map_err(|error| error.to_string())?;
         if let Err(error) = ready.await.map_err(|_| "Could not prepare Focus window.")? {
@@ -254,6 +295,7 @@ fn main() {
             let providers = Arc::new(
                 providers::ProviderHub::new(directory.clone()).map_err(std::io::Error::other)?,
             );
+            bridge::start(std::env::args_os().skip(1), Arc::clone(&providers))?;
             app.manage(speech_setup::SpeechSetup::new(directory.clone()));
             app.manage(prep::PrepState::new(directory.clone()));
             app.manage(history::HistoryStore::new(directory));
@@ -269,6 +311,7 @@ fn main() {
             }
             app.manage(Arc::clone(&state));
             app.manage(LastSurface::default());
+            app.manage(CapturePrivacy::default());
             let main = app
                 .get_webview_window("main")
                 .ok_or("Missing workspace window.")?;
@@ -296,6 +339,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            screen_share_privacy,
             list_endpoints,
             speech_setup::check_speech_model,
             speech_setup::find_speech_model,

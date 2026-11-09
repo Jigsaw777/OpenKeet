@@ -11,7 +11,7 @@
 - [Prepared answers in sessions (Anticipate)](features/anticipate.md)
 - [Community interview packs](features/community-packs.md)
 - [Set up answer models](ai-providers.md)
-- [Use live assistance with permission](live-assistance.md)
+- [Use live interview assistance](live-assistance.md)
 - [Understand your data and privacy](privacy.md)
 
 ## Get unstuck
@@ -19,7 +19,7 @@
 - [Troubleshooting](troubleshooting.md)
 - [Support and reporting](../SUPPORT.md)
 - [Windows screenshot gallery](community/screenshots.md)
-- [Legacy Python prototype](legacy-python.md)
+- [Move from the Python prototype](legacy-python.md)
 
 ## Build and contribute
 

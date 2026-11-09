@@ -9,7 +9,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use copilot_core::{AnswerFailure, AnswerRequest, MAX_ANSWER_BYTES};
+use copilot_core::{
+    AnswerFailure, AnswerKey, AnswerMode, AnswerRequest, MAX_ANSWER_BYTES, Source, Span,
+};
 use reqwest::{Client, RequestBuilder, Response, StatusCode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
@@ -27,6 +29,21 @@ const MAX_EVENT_BYTES: usize = 256_000;
 const MAX_CATALOG_BYTES: usize = 2_000_000;
 pub const ANSWER_TIMEOUT_MS: u64 = 120_000;
 const INSTRUCTIONS: &str = "Answer the current question directly and concisely. Use relevant prior turns for follow-ups. State assumptions when needed. Do not invent the user's experience. Use short paragraphs and numbered steps when helpful.";
+
+pub fn one_off(question: String) -> AnswerRequest {
+    AnswerRequest {
+        key: AnswerKey {
+            session_id: 0,
+            question_id: 0,
+            revision: 1,
+            mode: AnswerMode::Checked,
+        },
+        question,
+        source: Source::TYPED,
+        span: Span::at(0),
+        follow_up: None,
+    }
+}
 
 #[derive(Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
