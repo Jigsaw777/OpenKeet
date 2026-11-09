@@ -17,7 +17,7 @@ Build the latest source to install the preview on **Windows 11 x64** with Micros
 
    If you already cloned OpenKeet, run `git switch main` and `git pull --ff-only` from its repository root.
 
-3. From the OpenKeet repository root, build the installer. The first build downloads dependencies.
+3. From the OpenKeet repository root, build the installer. The first build downloads dependencies. [Speech library download troubleshooting](desktop-slice.md#if-the-speech-library-download-times-out)
 
    ```powershell
    Set-Location apps/desktop
