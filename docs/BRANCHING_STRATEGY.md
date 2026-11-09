@@ -56,6 +56,8 @@ Secret scanning with push protection, Dependabot alerts and security updates, an
 
 ## Tag, verify, and publish a release
 
+**Release Windows snapshot** runs after each merge to `main` that changes more than Markdown or `docs/`. It builds the installer and publishes `v<version>-preview.<n>`, where `<version>` comes from `tauri.conf.json` and `<n>` is one more than the highest existing snapshot. The release carries the checksum and notes generated from the merged PRs, and is marked Latest so the [setup page](../setup/README.md) links resolve. Snapshots are unsigned and skip the native install smoke. Run `npm run test:native` or **Verify desktop preview** for that. Bump the version to start a new series. Stable and candidate releases follow the steps below.
+
 1. Merge the reviewed changes. Use a candidate branch only when stabilization needs to continue separately from `main`.
 2. Choose a [Semantic Versioning](https://semver.org/) tag for the verified commit. Tag approved releases explicitly, for example `vX.Y.Z` for stable or `vX.Y.Z-rc.N` for a candidate.
 3. Build from the tagged source with the locked dependencies. Verify install, launch, teardown, and the supported provider paths. Record the checksums, signing status, and dependency notices.
