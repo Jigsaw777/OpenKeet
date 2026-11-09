@@ -4,17 +4,31 @@ Connect an answer model to practice typed questions without audio setup. To tran
 
 ## 1. Build the Windows preview
 
-The desktop preview targets **Windows 11 x64** with Microsoft Edge WebView2. There is no published installer. Use a checkout you have access to and install Node.js 24, stable Rust with the Windows MSVC target, Visual Studio C++ build tools and Windows SDK, CMake, and LLVM/libclang. The build needs internet access for dependencies. [Toolchain setup and build troubleshooting](desktop-slice.md#build-and-test)
+Build the latest source to install the preview on **Windows 11 x64** with Microsoft Edge WebView2. Check Releases for versioned installers as they become available. [GitHub Releases](https://github.com/Jigsaw777/OpenKeet/releases)
 
-From the repository root in PowerShell:
+1. Install Git, Node.js 24, and stable Rust for `x86_64-pc-windows-msvc`. In Visual Studio Installer, select **Desktop development with C++** with a Windows SDK and C++ CMake tools. Install LLVM with `libclang.dll` and add LLVM's `bin` folder to your `PATH`. [Toolchain setup and troubleshooting](desktop-slice.md#build-and-test)
 
-```powershell
-Set-Location apps/desktop
-npm ci
-npm run desktop -- build --ci -- --locked
-```
+2. Open **Developer PowerShell for Visual Studio** and clone `main` from the folder where you keep projects.
 
-Open the generated `OpenKeet_*_x64-setup.exe` under `target/release/bundle/nsis/` at the repository root. The build produces an unsigned Windows preview. You can also run `target/release/OpenKeet.exe` from the build output. [Release status](release-readiness.md)
+   ```powershell
+   git clone --branch main --single-branch https://github.com/Jigsaw777/OpenKeet.git
+   Set-Location OpenKeet
+   ```
+
+   If you already cloned OpenKeet, run `git switch main` and `git pull --ff-only` from its repository root.
+
+3. From the OpenKeet repository root, build the installer. The first build downloads dependencies. [Speech library download troubleshooting](desktop-slice.md#if-the-speech-library-download-times-out)
+
+   ```powershell
+   Set-Location apps/desktop
+   if (-not $env:LIBCLANG_PATH) {
+       $env:LIBCLANG_PATH = Split-Path -Parent (Get-Command clang.exe -ErrorAction Stop).Source
+   }
+   npm.cmd ci
+   npm.cmd run desktop -- build --ci -- --locked
+   ```
+
+4. Run `OpenKeet_<version>_x64-setup.exe` from `target/release/bundle/nsis/` at the repository root. Finish setup, then search **OpenKeet** in Start. Source builds produce an unsigned installer. [Release status](release-readiness.md)
 
 ## 2. Practice your own questions
 

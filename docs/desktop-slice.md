@@ -45,6 +45,22 @@ powershell -NoProfile -File scripts/get-speech-model.ps1 -Model turbo
 cargo run --release --locked -p copilot --features audio -- devices
 ```
 
+### If the speech library download times out
+
+Download `sherpa-onnx-v2.0.1-win-x64-shared-MT-Release-lib.tar.bz2` from the pinned upstream release. Keep the archive compressed in Downloads or adjust the path below. [sherpa-onnx v2.0.1 release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/v2.0.1)
+
+In the same PowerShell session, from `apps/desktop`, verify the archive and retry the build.
+
+```powershell
+$archive = (Resolve-Path -LiteralPath "$env:USERPROFILE\Downloads\sherpa-onnx-v2.0.1-win-x64-shared-MT-Release-lib.tar.bz2" -ErrorAction Stop).Path
+$hashOutput = certutil.exe -hashfile $archive SHA256
+if ($LASTEXITCODE -ne 0 -or $hashOutput -notcontains 'afa4de3ca4ab0afd53bb4aab40d28ee15608364b549ffc0fe0caf6489bfc39a5') {
+    throw 'Unexpected sherpa-onnx archive checksum.'
+}
+$env:SHERPA_ONNX_ARCHIVE_DIR = Split-Path -Parent $archive
+npm.cmd run desktop -- build --ci -- --locked
+```
+
 ## Remaining Windows checks
 
 | Scenario | Pass condition |
