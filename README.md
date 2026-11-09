@@ -13,9 +13,9 @@
 
 Interviews can be stressful. Preparing for them shouldn't be. OpenKeet helps you practice questions, understand what's being asked, and work through answers you can put in your own words.
 
-[Get started on Windows](docs/getting-started.md) · [See it in action](#see-it-in-action) · [Documentation](docs/README.md) · [Contribute](CONTRIBUTING.md)
+[Build and install on Windows](docs/getting-started.md#1-build-the-windows-preview) · [See it in action](#see-it-in-action) · [Documentation](docs/README.md) · [Contribute](CONTRIBUTING.md)
 
-**Windows 11 x64 preview.** Build from source to try OpenKeet today. Prebuilt downloads will appear in [GitHub Releases](https://github.com/Jigsaw777/OpenKeet/releases) when packages are ready. [MIT source license](LICENSE)
+**Windows 11 x64 preview.** Build the setup file from the latest `main`, then run it and open OpenKeet from Start. Versioned installer downloads will appear on the Releases page. [GitHub Releases](https://github.com/Jigsaw777/OpenKeet/releases) · [MIT source license](LICENSE)
 
 ## What you can practice
 
@@ -73,7 +73,7 @@ For real interviews or assessments, follow the interviewer's rules. Get permissi
 
 **Is it free? Do I need an AI subscription?** OpenKeet has no app subscription. Local Ollama models need no AI service account. Connected services may charge for usage. The repository declares MIT for project source. The public distribution review is tracked in [release readiness](docs/release-readiness.md).
 
-**Can I install it without programming?** The current preview requires a Windows source build or an installer built by a maintainer. After installation, setup uses buttons and menus. Follow the [Windows setup guide](docs/getting-started.md).
+**Can I install it without programming?** The current preview needs a source build. The build guide gives you the commands to create a Windows setup file. [Windows setup guide](docs/getting-started.md#1-build-the-windows-preview)
 
 **Do I need a powerful PC or internet access?** Building the app and downloading models need internet access. Local transcription and local Ollama answers can work offline after setup. Connected answer services need internet access. Larger models can use more disk space and memory. [Model requirements](docs/ai-providers.md#local-answers-with-ollama)
 
