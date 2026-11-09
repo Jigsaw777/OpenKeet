@@ -713,7 +713,7 @@ dependencies = [
  "copilot-core",
  "hound",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "windows",
 ]
 
@@ -724,7 +724,7 @@ dependencies = [
  "copilot-core",
  "hound",
  "serde",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "sherpa-onnx",
  "wasapi",
  "webrtc-vad",
@@ -3142,7 +3142,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "sherpa-onnx-sys",
  "tauri",
  "tauri-build",
