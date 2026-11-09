@@ -7,7 +7,7 @@ use std::{
 use sha2::{Digest, Sha256};
 use sherpa_onnx::{OfflineRecognizer, OfflineRecognizerConfig, OfflineTransducerModelConfig};
 
-use crate::{AudioError, Model, SAMPLE_RATE, SpeechRecognizer};
+use crate::{AudioError, Model, SAMPLE_RATE, SpeechRecognizer, open_locked};
 
 /// sherpa-onnx INT8 export of NVIDIA Parakeet TDT 0.6B v3, Hugging Face revision `PARAKEET_REVISION`.
 pub const PARAKEET_FOLDER: &str = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8";
@@ -37,27 +37,29 @@ pub const PARAKEET_FILES: &[Model] = &[
 
 pub struct LocalParakeet(OfflineRecognizer);
 
-fn verified(path: &Path, spec: &Model) -> Option<String> {
-    let file = File::open(path).ok()?;
+/// The verified path plus a handle that keeps the file unchanged until the model is loaded.
+fn verified(path: &Path, spec: &Model) -> Option<(String, File)> {
+    let file = open_locked(path).ok()?;
     if file.metadata().ok()?.len() != spec.bytes {
         return None;
     }
     let mut hash = Sha256::new();
-    let read = io::copy(&mut io::Read::take(file, spec.bytes + 1), &mut hash).ok()?;
+    let read = io::copy(&mut io::Read::take(&file, spec.bytes + 1), &mut hash).ok()?;
     if read != spec.bytes || format!("{:x}", hash.finalize()) != spec.sha256 {
         return None;
     }
-    path.to_str().map(str::to_owned)
+    Some((path.to_str()?.to_owned(), file))
 }
 
 impl LocalParakeet {
     /// Loads the model folder after checking every file's size and SHA-256.
     pub fn load(folder: &Path) -> Result<Self, AudioError> {
-        // ponytail: sherpa-onnx opens files by path, so a file swapped after hashing is not caught.
-        let paths = PARAKEET_FILES
+        // sherpa-onnx opens files by path; the locked handles stop a swap after hashing.
+        let (paths, _locks): (Vec<String>, Vec<File>) = PARAKEET_FILES
             .iter()
             .map(|spec| verified(&folder.join(spec.filename), spec))
             .collect::<Option<Vec<_>>>()
+            .map(|files| files.into_iter().unzip())
             .ok_or_else(|| {
                 AudioError::new(
                     "Parakeet model folder is missing files or failed verification. Download it again.",

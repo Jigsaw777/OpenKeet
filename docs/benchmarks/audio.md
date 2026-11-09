@@ -4,15 +4,15 @@ See the [interview stress and resource comparison](interview-stress.md) for tong
 
 ## Reproduce
 
-From the repository root with the legacy dependencies and model caches already installed:
+From the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s benchmarks
-.\.venv\Scripts\python.exe benchmarks/asr.py generate
-.\.venv\Scripts\python.exe benchmarks/asr.py legacy
+cargo test --locked -p copilot
+cargo build --release --locked -p copilot --features audio
+target\release\copilot.exe bench-asr generate
 ```
 
-Generation uses local Windows SAPI and the checked-in recipe. It puts waveforms, references, per-clip hashes, hypotheses, and measured results under `benchmarks/output/`. Keep that directory local. To compare backends, use the same generated manifest. SAPI engine or voice updates can change WAV hashes on regeneration. Legacy replay replaces the hardware `sounddevice` stream with paced 30 ms frames, keeping the production segmentation, mailbox, and decoder. The offline runner requires the three existing model caches.
+Generation uses local Windows SAPI and the checked-in recipe. It puts waveforms, references, per-clip hashes, hypotheses, and measured results under `benchmarks/output/`. Keep that directory local. To compare backends, use the same generated manifest. SAPI engine or voice updates can change WAV hashes on regeneration. The Python prototype's numbers in the tables below were measured with the former Python harness and are kept as a frozen baseline; the harness itself is now `copilot bench-asr`.
 
 ## Baseline on 6 November 2026
 
@@ -37,8 +37,8 @@ Run the release CLI with the `audio` feature and compare the original manifest. 
 
 ```powershell
 cargo build --release --locked -p copilot --features audio
-.\.venv\Scripts\python.exe benchmarks/asr.py rust --cli target/release/copilot.exe --model models/ggml-small.en.bin
-.\.venv\Scripts\python.exe benchmarks/asr.py rust --cli target/release/copilot.exe --model models/ggml-large-v3-turbo-q5_0.bin
+target\release\copilot.exe bench-asr run --cli target/release/copilot.exe --model models/ggml-small.en.bin
+target\release\copilot.exe bench-asr run --cli target/release/copilot.exe --model models/ggml-large-v3-turbo-q5_0.bin
 ```
 
 | Rust CPU path | WER | CER | Terms | Missed | False / 2 controls | Stable partial p50 / p95 | Final p50 / p95 | Reported decode RTF |

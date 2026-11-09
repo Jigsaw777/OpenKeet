@@ -2,7 +2,7 @@
 
 Baseline A uses the Git-based Python fallback documented in [legacy baseline](LEGACY_PYTHON_BASELINE.md). Baseline B uses a fresh release CLI from the byte-matched [7z source](CURRENT_ARCHITECTURE.md). Both run on Windows build 26200 with Intel Core i5-1335U, Iris Xe, 15.72 GiB visible RAM, Balanced power mode, and CPU inference.
 
-Run `.\.venv\Scripts\python.exe -B benchmarks/profile_engines.py --cli <frozen-cli> --model models/ggml-small.en.bin --output benchmarks/output/baseline-3.0/profile`. It selects 25 clips, including four controls, from the 116-clip offline synthetic corpus. The runner pairs each clip ID and WAV SHA-256. Full stress evidence, known model trade-offs, and the earlier measurement are in [interview stress](../benchmarks/interview-stress.md).
+Run `target\release\copilot.exe bench-asr profile --cli <frozen-cli> --model models/ggml-small.en.bin --output benchmarks/output/baseline-3.0/profile`. (The Python half of this baseline was measured with the former Python harness and is frozen in `benchmarks/results/python-baseline.json`.) It selects 25 clips, including four controls, from the 116-clip offline synthetic corpus. The runner pairs each clip ID and WAV SHA-256. Full stress evidence, known model trade-offs, and the earlier measurement are in [interview stress](../benchmarks/interview-stress.md).
 
 The comparison is a **product pipeline** comparison. Faster-Whisper INT8 and whisper.cpp use differently formatted weights and different VAD/decoding. The Rust before/after replay can hold model, waveform, and backend fixed. A language-only comparison would require the same inference backend and processing policies.
 

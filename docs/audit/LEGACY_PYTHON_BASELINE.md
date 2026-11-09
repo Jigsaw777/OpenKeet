@@ -10,6 +10,6 @@ The fallback is the pre-migration Git revision `69616f4` with tree `04bfadf973cb
 | Model | [audio.py](../../audio.py#L84) loads Faster-Whisper on CPU with INT8. The paired run uses `small.en`. |
 | Context | [core.py](../../core.py#L76) manages profiles and document import. [QuestionBuffer](../../live.py#L191) groups transcript fragments and [commit_checked_answer](../../live.py#L384) writes checked responses into memory. |
 | Provider | [providers.py](../../providers.py#L63) uses user-installed CLI processes. [core.py](../../core.py#L227) connects to local Ollama. The ASR benchmark requires neither. |
-| Process measurement | [profile_engines.py](../../benchmarks/profile_engines.py#L16) targets the actual interpreter and rejects a venv-launcher measurement. It reports ASR process metrics separately from desktop process-tree metrics. |
+| Process measurement | The former `benchmarks/profile_engines.py` (now replaced by `copilot bench-asr profile`) targeted the actual interpreter and rejected a venv-launcher measurement. It reports ASR process metrics separately from desktop process-tree metrics. |
 
 See [performance baseline](PERFORMANCE_BASELINE.md) for the paired input, hardware, and raw output locations.

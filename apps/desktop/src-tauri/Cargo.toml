@@ -9,7 +9,7 @@ publish.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 copilot-core.workspace = true
 copilot-audio.workspace = true
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "form"] }
@@ -30,6 +30,8 @@ zip = { version = "9", default-features = false, features = ["deflate-flate2-zli
 pdf-extract = "0.12.1"
 
 [target.'cfg(windows)'.dependencies]
+# Same version Tauri's WebView2 backend uses; only for the hidden-window memory hint.
+webview2-com = "0.39"
 # Direct `links` dependency: its build script fetches the DLLs that
 # tauri.windows.conf.json bundles before tauri-build checks they exist.
 sherpa-onnx-sys = { version = "=2.0.1", default-features = false }

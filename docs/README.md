@@ -2,6 +2,7 @@
 
 ## Prepare for an interview
 
+- [Download a Windows setup snapshot](../setup/README.md)
 - [Get started on Windows](getting-started.md)
 - [Practice technical and behavioral questions](interview-preparation.md)
 - [Build an interview pack (InstantPrep)](features/instantprep.md)
@@ -27,6 +28,7 @@
 - [Desktop architecture](architecture/DESKTOP_3_0.md)
 - [Interview-prep features: implementation map](architecture/openkeet-five-features-implementation.md)
 - [Interview-prep benchmarks](benchmarks/interview-feature-benchmarks.md)
+- [Memory and speed optimizations](benchmarks/resource-optimizations.md)
 - [Contribute a community pack](../community-packs/README.md)
 - [Speech benchmark instructions](../benchmarks/README.md) and [results](benchmarks/interview-stress.md)
 - [Roadmap](roadmap.md) and [release readiness](release-readiness.md)
