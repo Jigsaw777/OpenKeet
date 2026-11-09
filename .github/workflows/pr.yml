@@ -7,21 +7,38 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   links:
     name: Documentation links
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
-        with:
-          args: "--offline --include-fragments --no-progress '**/*.md'"
+      # lychee comes from GitHub Releases, which returns intermittent 504s; fetch it with
+      # retries and verify GitHub's published digest instead of the action's single attempt.
+      - name: Install lychee
+        env:
+          VERSION: lychee-v0.24.2
+          SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
+        run: |
+          curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 10 \
+            --output "$RUNNER_TEMP/lychee.tar.gz" \
+            "https://github.com/lycheeverse/lychee/releases/download/$VERSION/lychee-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$SHA256  $RUNNER_TEMP/lychee.tar.gz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/lychee-bin"
+          tar -xzf "$RUNNER_TEMP/lychee.tar.gz" -C "$RUNNER_TEMP/lychee-bin" --strip-components=1
+      - run: '"$RUNNER_TEMP/lychee-bin/lychee" --offline --include-fragments --no-progress "**/*.md"'
 
   rust:
     name: Rust checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -34,6 +51,7 @@ jobs:
   frontend:
     name: Desktop frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/desktop
@@ -48,3 +66,86 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+
+  windows:
+    # The desktop app and speech engine only build on Windows; lint and test the whole workspace there.
+    name: Windows workspace
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - run: rustup toolchain install stable --profile minimal --component clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Locate libclang for whisper-rs
+        shell: pwsh
+        run: |
+          $clang = (Get-Command clang.exe -ErrorAction Stop).Source | Split-Path -Parent
+          if (-not (Test-Path (Join-Path $clang 'libclang.dll'))) { throw 'libclang.dll is missing' }
+          "LIBCLANG_PATH=$clang" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # sherpa-onnx-sys downloads this archive in its build script with no retry, and uses a copy
+      # already in target/sherpa-onnx-prebuilt. Fetch it with retries and pin its checksum.
+      - name: Fetch the pinned speech runtime
+        shell: pwsh
+        env:
+          ARCHIVE: sherpa-onnx-v2.0.1-win-x64-shared-MT-Release-lib.tar.bz2
+          SHA256: afa4de3ca4ab0afd53bb4aab40d28ee15608364b549ffc0fe0caf6489bfc39a5
+        run: |
+          $dir = New-Item -ItemType Directory -Force -Path target/sherpa-onnx-prebuilt
+          $file = Join-Path $dir $env:ARCHIVE
+          curl.exe --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 10 `
+            --output $file "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/$env:ARCHIVE"
+          $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:SHA256) { throw "Unexpected sherpa-onnx archive checksum: $hash" }
+          # A cached build skips the build script, which normally extracts the DLLs the
+          # desktop bundle config points at; extract them here so both paths have them.
+          tar -xf $file -C $dir
+          if ($LASTEXITCODE) { throw "Could not extract $env:ARCHIVE" }
+      - name: Build the frontend the desktop crate embeds
+        working-directory: apps/desktop
+        run: |
+          npm ci --ignore-scripts --no-audit
+          npm run build
+      - run: cargo +stable clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo +stable test --workspace --all-features --locked
+
+  supply-chain:
+    # Advisories, licenses, banned crates and registry sources, per deny.toml.
+    name: Supply chain
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+
+  dependency-review:
+    # Blocks pull requests that add dependencies with known high or critical vulnerabilities.
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
+
+  workflows:
+    # Static security analysis of these workflows (template injection, credentials, pinning).
+    name: Workflow security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          advanced-security: false

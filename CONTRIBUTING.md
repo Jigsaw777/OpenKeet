@@ -27,6 +27,7 @@ Install the [Windows desktop prerequisites](docs/desktop-slice.md#build-and-test
    cargo test --locked -p copilot-core -p copilot
    cargo fmt --all --check
    ```
+   If you change dependencies or workflows, also run `cargo deny check` and `zizmor .github` (both install with `cargo install --locked`).
 
 2. Start the desktop app from `apps/desktop`.
 
@@ -48,7 +49,7 @@ Install the [Windows desktop prerequisites](docs/desktop-slice.md#build-and-test
 
 ## Open a pull request
 
-1. Use a focused branch and open a PR to `main`. Follow the [branching strategy](docs/BRANCHING_STRATEGY.md) for naming, required checks, and release changes. Format Rust with `cargo fmt` and use actual button names in guides.
+1. Use a focused branch and open a PR to `main`. Follow the [branching strategy](docs/BRANCHING_STRATEGY.md) for naming, required checks, and release changes. Format Rust with `cargo fmt` and use actual button names in guides. [Sign your commits](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits); `main` only accepts PRs whose commits all have verified signatures.
 2. Include the user impact, related issue, commands run, and any changes to data handling. Use synthetic text in screenshots and test data.
 3. Check your diff for keys, private transcripts, and local build files. Report vulnerabilities through [SECURITY.md](SECURITY.md).
 

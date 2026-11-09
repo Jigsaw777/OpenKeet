@@ -26,13 +26,33 @@ If your branch falls behind, merge current `main` into it when an update is need
 
 ## Checks and branch protection
 
-The PR workflow runs **Documentation links**, **Rust checks**, and **Desktop frontend** on PRs to `main` and release branches. It checks local links and anchors, Rust formatting and Clippy, portable unit tests, frontend tests and build, and high or critical production npm advisories. GitHub Actions checks out PR code with a read-only token and no persisted checkout credentials. Use the manually dispatched **Verify desktop preview** workflow for native Windows packaging and dependency audit before a release candidate.
+Every PR to `main` or a release branch runs **Verify pull request**:
 
-The [default branch ruleset](https://github.com/Jigsaw777/OpenKeet/rules) requires a PR, resolved conversations, and all three checks from GitHub Actions. The PR must be up to date with `main`. Deletion and force pushes to the default branch are blocked. There are no bypass actors. Community pack validation runs when its inputs change; review its result when it runs.
+| Check | What it enforces |
+| --- | --- |
+| **Documentation links** | Local links and anchors in every Markdown file resolve. |
+| **Rust checks** | Formatting, Clippy with warnings as errors, and the portable unit tests (Linux). |
+| **Desktop frontend** | Frontend tests and build, and no high or critical production npm advisories. |
+| **Windows workspace** | Clippy with warnings as errors and every test in the workspace, including the desktop app and speech engine (Windows). |
+| **Supply chain** | `cargo deny`: no known vulnerable or unsound crates, only allowed licenses, crates.io as the only source. Policy and exceptions live in [deny.toml](../deny.toml). |
+| **Dependency review** | The PR adds no dependency with a high or critical advisory. |
+| **Workflow security** | `zizmor` finds no security issues in the workflows (template injection, credential leaks, unpinned actions). |
+
+**CodeQL** analyzes the workflows, TypeScript and Rust on each PR, on `main`, and weekly. All jobs check out code with a read-only token and no persisted credentials, and every action is pinned to a commit. [Dependabot](../.github/dependabot.yml) proposes grouped updates monthly, capped at two open PRs per ecosystem, and security fixes as advisories appear. Use the manually dispatched **Verify desktop preview** workflow for native Windows packaging and dependency audit before a release candidate.
+
+The [default branch ruleset](https://github.com/Jigsaw777/OpenKeet/rules) requires, on `main`:
+
+- A PR merged with **Squash and merge**, with all conversations resolved. Stale reviews are dismissed on new pushes.
+- All seven checks above, passing on a branch that is up to date with `main`.
+- CodeQL results with no high or critical security alerts and no errors.
+- Linear history and signed commits. Every commit on the PR branch needs a verified signature; one unsigned commit blocks the merge.
+- No deletion and no force pushes. There are no bypass actors.
+
+Release tags matching `v*` can be created but not moved or deleted. Community pack validation runs when its inputs change; review its result when it runs. Run `cargo deny check` and `zizmor .github` locally before changing dependencies or workflows.
 
 The ruleset requires no separate approvals while there is one maintainer. When a second maintainer can review independently, require one approval. If a long-lived release branch becomes necessary, give it the same PR and check requirements. [GitHub ruleset settings](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository)
 
-Review security advisories and installer evidence at release time. Keep review or policy exceptions in the PR or release record.
+Secret scanning with push protection, Dependabot alerts and security updates, and private vulnerability reporting are on. Review security advisories and installer evidence at release time. Keep review or policy exceptions in the PR or release record.
 
 ## Tag, verify, and publish a release
 

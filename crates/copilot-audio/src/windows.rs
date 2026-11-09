@@ -261,8 +261,10 @@ pub(crate) fn capture(
                         };
                         for frame in bytes.chunks_exact(channels * 2) {
                             let sum: i32 = frame
-                                .chunks_exact(2)
-                                .map(|s| i32::from(i16::from_le_bytes([s[0], s[1]])))
+                                .as_chunks::<2>()
+                                .0
+                                .iter()
+                                .map(|s| i32::from(i16::from_le_bytes(*s)))
                                 .sum();
                             frames.push((sum / channels as i32) as i16)?;
                         }
