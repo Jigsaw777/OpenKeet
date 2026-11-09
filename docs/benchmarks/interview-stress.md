@@ -115,17 +115,17 @@ The comparison uses clip hashes from manifest `45e8b4f60facb7ce49549f812c86995d3
 ## Reproduce
 
 ```powershell
-.\.venv\Scripts\python.exe benchmarks/asr.py generate --stress
 cargo build --release --locked -p copilot --features audio
-.\.venv\Scripts\python.exe benchmarks/asr.py --output benchmarks/output/stress rust --cli target/release/copilot.exe --model models/ggml-small.en.bin
-.\.venv\Scripts\python.exe benchmarks/profile_engines.py --cli target/release/copilot.exe --model models/ggml-small.en.bin
+target\release\copilot.exe bench-asr generate --stress
+target\release\copilot.exe bench-asr run --output benchmarks/output/stress --cli target/release/copilot.exe --model models/ggml-small.en.bin
+target\release\copilot.exe bench-asr profile --cli target/release/copilot.exe --model models/ggml-small.en.bin
 ```
 
 For the live pipeline comparison, add `--profile` to record process CPU and memory. A model folder selects Parakeet in the CLI. The app downloads that folder to `%LOCALAPPDATA%\dev.personalcopilot.desktop\models`.
 
 ```powershell
-.\.venv\Scripts\python.exe benchmarks/asr.py --output benchmarks/output/stress rust --cli target/release/copilot.exe --model models/ggml-small.en.bin --profile
-.\.venv\Scripts\python.exe benchmarks/asr.py --output benchmarks/output/stress rust --cli target/release/copilot.exe --model models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8 --profile
+target\release\copilot.exe bench-asr run --output benchmarks/output/stress --cli target/release/copilot.exe --model models/ggml-small.en.bin --profile
+target\release\copilot.exe bench-asr run --output benchmarks/output/stress --cli target/release/copilot.exe --model models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8 --profile
 ```
 
 The WASAPI smoke and `npm run test:native` accept the same folder in `COPILOT_TEST_MODEL`. Windows 11 ships an older `onnxruntime.dll` in System32, and the loader searches there before `PATH`. Copy the two bundled DLLs next to the test binary first. The app, the CLI and the installer already keep them beside the executable.
@@ -137,4 +137,4 @@ $env:COPILOT_TEST_WAV = (Resolve-Path benchmarks/output/cache-0.wav).Path
 cargo test --release --locked -p copilot-audio --test wasapi -- --ignored --nocapture
 ```
 
-For the offline reference, pass the Parakeet model folder to `benchmarks/parakeet_probe.py --input benchmarks/output/stress --model <directory>`. `--runtime-dir` can point to an isolated installation of `sherpa-onnx==2.0.1`. The first offline run used the `sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2` release asset with SHA-256 `5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf`. Upstream replaced that asset and the Hugging Face files with a new export on 7 November 2026 at 11:20 am IST. The replacement archive has SHA-256 `1495e91b59d7fc53ddca91f3431758ec99f8fa253fdb0e1e851be0f72b14b0f9` and was not measured. The desktop download and these runs use the earlier export, pinned to Hugging Face revision `2bda32ec70b097a55adaa07d9a7173915b43cc78`. Its four files reproduce all 116 earlier offline transcripts exactly. [Official release assets](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models), [Pinned export](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tree/2bda32ec70b097a55adaa07d9a7173915b43cc78)
+For the offline reference, run `target\release\copilot.exe bench-asr parakeet --input benchmarks/output/stress --model <directory>`. It decodes each whole clip with the app's own sherpa-onnx 2.0.1 runtime. The first offline run used the `sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2` release asset with SHA-256 `5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf`. Upstream replaced that asset and the Hugging Face files with a new export on 7 November 2026 at 11:20 am IST. The replacement archive has SHA-256 `1495e91b59d7fc53ddca91f3431758ec99f8fa253fdb0e1e851be0f72b14b0f9` and was not measured. The desktop download and these runs use the earlier export, pinned to Hugging Face revision `2bda32ec70b097a55adaa07d9a7173915b43cc78`. Its four files reproduce all 116 earlier offline transcripts exactly. [Official release assets](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models), [Pinned export](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tree/2bda32ec70b097a55adaa07d9a7173915b43cc78)

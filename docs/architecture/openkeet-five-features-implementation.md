@@ -55,7 +55,7 @@ Practice attempts -> rubric + follow-up -> StudyState -> recommendations
 
 `sources`, `claims`, `claim_sources` (FK cascade), `conflicts`, `stories`, `packs`, `question_families` (FK cascade to packs), `answer_variants` (FK cascade to families), `answer_claims`, `community_packs` (public scope, separate table), `practice_attempts`, `study_states`, `embeddings` (derived vectors for the active pack only), `meta` (practice state, active pack, embedding model).
 
-Every mutation clones the in-memory `Workspace`, applies the change, and writes the clone in one transaction. The in-memory copy is replaced only after commit. A failed compile or crash never leaves a half-written pack. Existing `sessions.sqlite3`, provider settings and speech models are untouched.
+Every mutation applies the change to a copy of the in-memory `Workspace`, compares it with the stored state, and writes only the changed and removed rows in one transaction. The shared in-memory copy is replaced only after commit; reads use it without copying. A failed compile or crash never leaves a half-written pack. Existing `sessions.sqlite3`, provider settings and speech models are untouched.
 
 ## Invalidation rules
 

@@ -146,6 +146,7 @@ fn show_workspace(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn hide_workspace(window: WebviewWindow) -> Result<(), String> {
     window.hide().map_err(|error| error.to_string())?;
+    platform::memory_target(&window, true);
     let app = window.app_handle();
     let state = app.state::<Shared>();
     update(app, &state, Desktop::pause_when_hidden)?;
@@ -169,6 +170,7 @@ fn show_surface(app: &AppHandle, label: &str) -> Result<(), String> {
     let overlay = label == "focus";
     if let Some(other) = app.get_webview_window(if overlay { "main" } else { "focus" }) {
         other.hide().map_err(|err| err.to_string())?;
+        platform::memory_target(&other, true);
     }
     if let Some(state) = app.try_state::<LastSurface>() {
         state.0.store(overlay, Ordering::Relaxed);
@@ -177,6 +179,7 @@ fn show_surface(app: &AppHandle, label: &str) -> Result<(), String> {
 }
 
 fn reveal(window: &WebviewWindow) -> Result<(), String> {
+    platform::memory_target(window, false);
     window
         .show()
         .and_then(|_| window.unminimize())

@@ -1,6 +1,11 @@
-use std::{fs::File, io::Read, path::Path};
+use std::{
+    io::{self, Read},
+    path::Path,
+};
 
 use sha2::{Digest, Sha256};
+
+use crate::open_locked;
 use whisper_rs::{
     FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
 };
@@ -50,26 +55,40 @@ impl LocalWhisper {
                 "Model file is missing or failed verification. Check its download and checksum.",
             )
         };
-        let file = File::open(path).map_err(|_| invalid())?;
+        let file = open_locked(path).map_err(|_| invalid())?;
         if file.metadata().map_err(|_| invalid())?.len() != spec.bytes {
-            return Err(invalid());
-        }
-        // Parse the exact bytes checked here, including on a replaced path.
-        let mut bytes = Vec::with_capacity(spec.bytes as usize);
-        file.take(spec.bytes + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| invalid())?;
-        if bytes.len() as u64 != spec.bytes
-            || format!("{:x}", Sha256::digest(&bytes)) != spec.sha256
-        {
             return Err(invalid());
         }
         whisper_rs::install_logging_hooks();
         let mut config = WhisperContextParameters::default();
         config.use_gpu(false);
-        let context = WhisperContext::new_from_buffer_with_params(&bytes, config)
-            .map_err(|_| AudioError::new("Local Whisper could not load the verified model."))?;
-        drop(bytes);
+        // flash_attn was measured: 92 MiB less commit but CER 5.0% -> 6.9% on the profile pack.
+        let failed = |_| AudioError::new("Local Whisper could not load the verified model.");
+        // The C loader opens ASCII paths only on Windows. For those, hash through the locked
+        // handle and let Whisper stream the same, unchangeable file: the model is never held
+        // twice in memory. Other paths parse a verified in-memory copy, as before.
+        let context = if path.to_str().is_some_and(str::is_ascii) {
+            let mut hash = Sha256::new();
+            let read =
+                io::copy(&mut (&file).take(spec.bytes + 1), &mut hash).map_err(|_| invalid())?;
+            if read != spec.bytes || format!("{:x}", hash.finalize()) != spec.sha256 {
+                return Err(invalid());
+            }
+            let context = WhisperContext::new_with_params(path, config).map_err(failed)?;
+            drop(file);
+            context
+        } else {
+            let mut bytes = Vec::with_capacity(spec.bytes as usize);
+            file.take(spec.bytes + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|_| invalid())?;
+            if bytes.len() as u64 != spec.bytes
+                || format!("{:x}", Sha256::digest(&bytes)) != spec.sha256
+            {
+                return Err(invalid());
+            }
+            WhisperContext::new_from_buffer_with_params(&bytes, config).map_err(failed)?
+        };
         let state = context
             .create_state()
             .map_err(|_| AudioError::new("Local Whisper could not allocate decoder state."))?;
