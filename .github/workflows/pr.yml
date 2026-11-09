@@ -20,17 +20,20 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      # The action downloads lychee from GitHub Releases; retry once if that download fails.
-      # A real broken link fails both attempts.
-      - id: lychee
-        continue-on-error: true
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
-        with:
-          args: "--offline --include-fragments --no-progress '**/*.md'"
-      - if: steps.lychee.outcome == 'failure'
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
-        with:
-          args: "--offline --include-fragments --no-progress '**/*.md'"
+      # lychee comes from GitHub Releases, which returns intermittent 504s; fetch it with
+      # retries and verify GitHub's published digest instead of the action's single attempt.
+      - name: Install lychee
+        env:
+          VERSION: lychee-v0.24.2
+          SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
+        run: |
+          curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 10 \
+            --output "$RUNNER_TEMP/lychee.tar.gz" \
+            "https://github.com/lycheeverse/lychee/releases/download/$VERSION/lychee-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$SHA256  $RUNNER_TEMP/lychee.tar.gz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/lychee-bin"
+          tar -xzf "$RUNNER_TEMP/lychee.tar.gz" -C "$RUNNER_TEMP/lychee-bin"
+      - run: '"$RUNNER_TEMP/lychee-bin/lychee" --offline --include-fragments --no-progress "**/*.md"'
 
   rust:
     name: Rust checks
