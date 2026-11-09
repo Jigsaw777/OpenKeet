@@ -2,11 +2,15 @@ use std::{env, error::Error, process::ExitCode};
 
 #[cfg(feature = "audio")]
 mod audio;
+mod bench_asr;
 mod prep;
 
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     if let Some(result) = prep::run(&args) {
+        return result;
+    }
+    if let Some(result) = bench_asr::run(&args) {
         return result;
     }
     #[cfg(feature = "audio")]
@@ -16,6 +20,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let help = matches!(args.as_slice(), [cmd] if cmd == "--help" || cmd == "-h");
     println!("Usage:");
     prep::help();
+    bench_asr::help();
     #[cfg(feature = "audio")]
     audio::help();
     #[cfg(not(feature = "audio"))]

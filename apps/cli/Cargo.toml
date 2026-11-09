@@ -12,3 +12,8 @@ audio = ["dep:copilot-audio"]
 copilot-core.workspace = true
 copilot-audio = { workspace = true, optional = true }
 serde_json.workspace = true
+hound = "3.5.1"
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"] }

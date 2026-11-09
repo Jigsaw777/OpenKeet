@@ -711,7 +711,10 @@ version = "0.1.0"
 dependencies = [
  "copilot-audio",
  "copilot-core",
+ "hound",
  "serde_json",
+ "sha2 0.10.9",
+ "windows",
 ]
 
 [[package]]
@@ -3149,6 +3152,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
+ "webview2-com",
  "windows",
  "zip",
 ]

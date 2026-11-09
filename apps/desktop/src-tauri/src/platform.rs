@@ -160,3 +160,32 @@ unsafe extern "system" fn keep_tool_style(
 pub fn configure_tool_window(_: &tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
+
+/// Tells WebView2 a window is hidden (`low`) so it can trim memory, or visible again.
+#[cfg(windows)]
+pub fn memory_target(window: &tauri::WebviewWindow, low: bool) {
+    let _ = window.with_webview(move |webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL, ICoreWebView2_19,
+        };
+        use windows::core::Interface;
+        let level = if low {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+        } else {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+        };
+        // SAFETY: called on the webview's thread with its live controller; older runtimes lack
+        // ICoreWebView2_19 and simply keep their default level.
+        unsafe {
+            if let Ok(core) = webview.controller().CoreWebView2()
+                && let Ok(webview) = core.cast::<ICoreWebView2_19>()
+            {
+                let _ = webview.SetMemoryUsageTargetLevel(level);
+            }
+        }
+    });
+}
+
+#[cfg(not(windows))]
+pub fn memory_target(_: &tauri::WebviewWindow, _: bool) {}
