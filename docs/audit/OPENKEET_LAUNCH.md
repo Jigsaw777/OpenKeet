@@ -13,7 +13,7 @@ The launch scope is the Windows 11 x64 preview. The setup index lists unsigned W
 | Local Ollama and Claude Console | Implemented | [Provider audit](PROVIDER_AUTHORIZATION.md). Local HTTP fixtures verify routing and response parsing. Live Claude account and real-model quality checks remain open. |
 | ChatGPT plan usage | Experimental | [Provider audit](PROVIDER_AUTHORIZATION.md) documents the official OAuth flow. Real account eligibility, limits, and inference remain unverified. |
 | Local history | Functional | [SQLite tests](../../apps/desktop/src-tauri/src/history.rs) and [native smoke](../../apps/desktop/tests/native-smoke.mjs) cover save, search, notes, and deletion. |
-| macOS and Linux desktop | Outside preview scope | The [legacy Python prototype](../legacy-python.md) has source paths for both. The Tauri package is documented for Windows. |
+| macOS and Linux desktop | Outside preview scope | The Tauri package targets Windows. Cross-platform prototype code is in the [archived Python revision](../legacy-python.md). |
 
 ## What remains before a signed Windows release
 

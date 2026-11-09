@@ -175,7 +175,7 @@ export function PreparePage({ prep, enabled, aiReady, review, startPractice, pre
       <button className="primary" onClick={review}>Review your experience <Icon name="arrow" /></button></div>}
     <section className="card setup-card" aria-labelledby="docs-title">
       <h2 id="docs-title">1. Your documents</h2>
-      <p className="subtle">Resume, job description and optional project notes. PDF, DOCX, TXT and Markdown files work. A scanned PDF has no text to read, so paste its text instead.</p>
+      <p className="subtle">Resume, job description and optional project notes. PDF, DOCX, TXT and Markdown files work. For a scanned PDF, paste its text. A legacy profile JSON imports its saved documents together.</p>
       {data?.sources.length ? <ul className="plain-list">{data.sources.map(source => <li key={source.id} className="list-row">
         <div><strong>{source.name}</strong> <span className="soft-label">{KIND_LABEL[source.kind]}</span>
           <p className="subtle">{source.chars.toLocaleString()} characters{source.warnings.length ? " · " + source.warnings.join(" ") : ""}</p>
@@ -189,7 +189,7 @@ export function PreparePage({ prep, enabled, aiReady, review, startPractice, pre
           <option value="resume">Resume</option><option value="job_description">Job description</option><option value="project_note">Project notes</option>
         </select>
         <label htmlFor="doc-file">Choose a file</label>
-        <input id="doc-file" type="file" accept=".txt,.md,.markdown,.docx,.pdf" onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0] ?? null)} />
+        <input id="doc-file" type="file" accept=".txt,.md,.markdown,.docx,.pdf,.json" onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0] ?? null)} />
         <label htmlFor="doc-paste">Or paste the text</label>
         <textarea id="doc-paste" rows={4} maxLength={400000} value={paste} onChange={event => setPaste(event.target.value)} placeholder="Paste your resume or the job description…" />
         <button className="primary" type="submit" disabled={!enabled || !!prep.busy || (!file && paste.trim().length < 20)}>Add document</button>

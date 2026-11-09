@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][int]$AppPid,
     [ValidateSet('Hidden', 'Visible', 'Overlay', 'Close', 'Shortcut')][string]$Check = 'Hidden',
-    [switch]$RestoreOverlay
+    [switch]$RestoreOverlay,
+    [uint32]$CaptureAffinity
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,6 +29,9 @@ public static class CopilotWindowProbe {
 
     [DllImport("user32.dll")]
     public static extern bool IsWindowVisible(IntPtr hwnd);
+
+    [DllImport("user32.dll", SetLastError=true)]
+    public static extern bool GetWindowDisplayAffinity(IntPtr hwnd, out uint affinity);
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
@@ -132,6 +136,18 @@ while (!(Test-Visibility) -and $clock.ElapsedMilliseconds -lt 3000) {
 }
 if (!(Test-Visibility)) {
     throw "Companion did not reach the expected $Check state."
+}
+if ($PSBoundParameters.ContainsKey('CaptureAffinity')) {
+    # A hidden window can report no affinity while retaining its setting on reveal.
+    $handle = if ($showOverlay) { $focus } elseif ($showMain) { $main } else { throw 'Show a window before testing capture affinity.' }
+    $actual = [uint32]0
+    if (![CopilotWindowProbe]::GetWindowDisplayAffinity($handle, [ref]$actual)) {
+        throw [System.ComponentModel.Win32Exception]::new([Runtime.InteropServices.Marshal]::GetLastWin32Error())
+    }
+    if ($actual -ne $CaptureAffinity) {
+        throw ('{0} window has capture affinity 0x{1:X}, expected 0x{2:X}.' -f $Check, $actual, $CaptureAffinity)
+    }
+    '{0} window capture affinity 0x{1:X} verified.' -f $Check, $CaptureAffinity
 }
 if ($Check -ne 'Shortcut') {
     "Companion $Check state, both tool-window styles and overlay topmost flag verified."

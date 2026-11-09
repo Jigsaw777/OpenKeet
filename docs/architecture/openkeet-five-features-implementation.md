@@ -14,7 +14,7 @@ This maps InstantPrep, Anticipate, TrueStory, Challenge Mode and Community Packs
 | Local data | `history.rs`: SQLite (`rusqlite`, bundled), `user_version` migrations | Separate `sessions.sqlite3`. Not changed. |
 | CLI | `apps/cli` | Hosts contributor and benchmark commands. |
 
-Legacy Python (`app.py` and friends) is a separate prototype and was not touched.
+The [archived Python prototype](../legacy-python.md) predates these features.
 
 ## New module boundaries
 

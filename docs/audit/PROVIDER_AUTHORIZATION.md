@@ -1,6 +1,6 @@
 # Provider authorization audit
 
-The Windows preview configures answer providers under **Settings**, then **Answers**. Typed and detected questions use the selected provider. The legacy Python prototype uses separate CLI workflows. [Desktop provider guide](../ai-providers.md) · [Legacy adapter](../../providers.py)
+The Windows preview configures answer providers under **Settings**, then **Answers**. Typed and detected questions and the opt-in local bridge use the selected provider. The archived Python prototype used separate CLI workflows. [Desktop provider guide](../ai-providers.md) · [Bridge setup](../legacy-python.md#run-the-text-bridge)
 
 | Route | Verified documentation | Integration boundary |
 | --- | --- | --- |

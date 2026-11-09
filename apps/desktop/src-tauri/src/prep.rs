@@ -10,18 +10,15 @@ use std::{
 };
 
 use base64::Engine;
-use copilot_core::{
-    AnswerKey, AnswerMode, AnswerRequest, Source, Span,
-    prep::{
-        Approval, ConflictStatus, DocKind, Length, PackSettings, Story, Workspace, answer_id,
-        community::{self, InstalledPack},
-        compile::{JobSummary, parse_job},
-        practice::AI_REVIEW_SYSTEM,
-        practice::{InputMode, PracticeSetup, Recommendation},
-        resolve::{Resolution, Resolver},
-        short_hash,
-        story::Decision,
-    },
+use copilot_core::prep::{
+    Approval, ConflictStatus, DocKind, Length, PackSettings, Story, Workspace, answer_id,
+    community::{self, InstalledPack},
+    compile::{JobSummary, parse_job},
+    practice::AI_REVIEW_SYSTEM,
+    practice::{InputMode, PracticeSetup, Recommendation},
+    resolve::{Resolution, Resolver},
+    short_hash,
+    story::Decision,
 };
 use rusqlite::{Connection, TransactionBehavior};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -29,7 +26,7 @@ use tauri::{AppHandle, Manager, State, async_runtime::spawn_blocking, ipc::Respo
 use tauri_plugin_dialog::DialogExt;
 
 use crate::{
-    providers::{ProviderHub, Selection},
+    providers::{ProviderHub, Selection, one_off},
     workspace::Shared,
 };
 
@@ -823,6 +820,58 @@ fn file_text(name: &str, data: &str) -> Result<(String, &'static str), String> {
     }
 }
 
+fn import_legacy_profile(ws: &mut Workspace, data: &str, now: u64) -> Result<(), String> {
+    #[derive(Default, Deserialize)]
+    #[serde(default)]
+    struct LegacyProfile {
+        resume: String,
+        job: String,
+        notes: String,
+    }
+
+    // The prototype bounded its saved fields. Allow space for UTF-8 and JSON escapes.
+    if data.len() > 512_000 {
+        return Err("Choose a smaller legacy profile JSON file.".into());
+    }
+    let profile = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<LegacyProfile>(&bytes).ok())
+        .ok_or("Choose a readable profile JSON file from the Python prototype.")?;
+    let fields = [
+        (
+            DocKind::Resume,
+            "Resume from legacy profile",
+            profile.resume,
+        ),
+        (
+            DocKind::JobDescription,
+            "Job description from legacy profile",
+            profile.job,
+        ),
+        (
+            DocKind::ProjectNote,
+            "Project notes from legacy profile",
+            profile.notes,
+        ),
+    ];
+    if fields.iter().all(|(_, _, text)| text.trim().is_empty()) {
+        return Err("This profile has no saved resume, job description or notes.".into());
+    }
+    for (kind, name, text) in fields {
+        if !text.trim().is_empty() {
+            ws.import_source(
+                kind,
+                name,
+                &format!("{name}\n\n{text}"),
+                "legacy-profile/1",
+                now,
+            )?;
+        }
+    }
+    Ok(())
+}
+
 /// Page text from a PDF, pages separated by form feeds so facts keep their page. Scripts,
 /// forms and attachments are never run; image-only pages have no text and are reported.
 fn pdf_text(bytes: Vec<u8>) -> Result<String, String> {
@@ -937,8 +986,13 @@ fn apply(
             ws.import_source(kind, &name, &text, "text/1", now)?;
         }
         Action::ImportFile { kind, name, data } => {
-            let (text, parser) = file_text(&name, &data)?;
-            ws.import_source(kind, &name, &text, parser, now)?;
+            if name.to_ascii_lowercase().ends_with(".json") {
+                import_legacy_profile(ws, &data, now)?;
+                message = Some("Legacy profile documents imported.".into());
+            } else {
+                let (text, parser) = file_text(&name, &data)?;
+                ws.import_source(kind, &name, &text, parser, now)?;
+            }
         }
         Action::DeleteSource { id } => ws.delete_source(&id)?,
         Action::Review { id, decision } => {
@@ -1306,21 +1360,6 @@ pub async fn prep_draft_with_ai(
     })
     .await
     .map_err(|_| "Interview prep worker failed.")?
-}
-
-fn one_off(question: String) -> AnswerRequest {
-    AnswerRequest {
-        key: AnswerKey {
-            session_id: 0,
-            question_id: 0,
-            revision: 1,
-            mode: AnswerMode::Checked,
-        },
-        question,
-        source: Source::TYPED,
-        span: Span::at(0),
-        follow_up: None,
-    }
 }
 
 #[derive(Deserialize)]

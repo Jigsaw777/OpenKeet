@@ -92,6 +92,41 @@ pub fn open_browser(_: &str) -> Result<(), String> {
 }
 
 #[cfg(windows)]
+pub fn set_capture_exclusion(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowDisplayAffinity, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+        WINDOW_DISPLAY_AFFINITY,
+    };
+
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    let requested = if enabled {
+        WDA_EXCLUDEFROMCAPTURE
+    } else {
+        WDA_NONE
+    };
+    let mut previous = 0;
+    // This is a live top-level OpenKeet window, and the output variables are writable.
+    unsafe { GetWindowDisplayAffinity(hwnd, &mut previous) }
+        .map_err(|error| format!("Windows could not read screen-share privacy. {error}"))?;
+    // A hidden window can report WDA_NONE while retaining its affinity on reveal.
+    unsafe { SetWindowDisplayAffinity(hwnd, requested) }
+        .map_err(|error| format!("Windows rejected screen-share privacy. {error}"))?;
+    let mut actual = 0;
+    if unsafe { GetWindowDisplayAffinity(hwnd, &mut actual) }.is_ok() && actual == requested.0 {
+        return Ok(());
+    }
+    unsafe { SetWindowDisplayAffinity(hwnd, WINDOW_DISPLAY_AFFINITY(previous)) }.map_err(
+        |error| format!("Windows could not confirm or restore screen-share privacy. {error}"),
+    )?;
+    Err("Windows did not confirm the requested screen-share privacy setting.".into())
+}
+
+#[cfg(not(windows))]
+pub fn set_capture_exclusion(_: &tauri::WebviewWindow, _: bool) -> Result<(), String> {
+    Err("Screen-share privacy is available on Windows.".into())
+}
+
+#[cfg(windows)]
 pub fn configure_tool_window(window: &tauri::WebviewWindow) -> Result<(), String> {
     use windows::Win32::{
         UI::Shell::SetWindowSubclass,

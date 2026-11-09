@@ -13,16 +13,22 @@ const executable = process.env.COPILOT_DESKTOP_EXE || fileURLToPath(new URL("../
 const output = fileURLToPath(new URL("../../../target/ui-smoke/", import.meta.url));
 await mkdir(output, { recursive: true });
 const profile = await mkdtemp(join(output, "webview-"));
-const server = createServer();
-server.listen(0, "127.0.0.1");
-await once(server, "listening");
-const { port } = server.address();
-await new Promise(resolve => server.close(resolve));
+async function localPort() {
+  const server = createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address();
+  await new Promise(resolve => server.close(resolve));
+  return port;
+}
+const port = await localPort();
+const bridgePort = process.env.COPILOT_TEST_PROVIDER_FIXTURE === "1" ? await localPort() : null;
+const bridge = bridgePort ? `http://127.0.0.1:${bridgePort}` : null;
 const launchOptions = {
   env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`, WEBVIEW2_USER_DATA_FOLDER: profile, COPILOT_DATA_DIR: join(profile, "application") },
   stdio: "ignore", windowsHide: true,
 };
-const child = spawn(executable, [], launchOptions);
+const child = spawn(executable, bridgePort ? ["--text-bridge", String(bridgePort)] : [], launchOptions);
 let spawnError;
 child.on("error", error => { spawnError = error; });
 
@@ -78,11 +84,12 @@ async function fixtureAnswer(req, res) {
   res.end('{"done":true}\n');
 }
 
-async function checkWindow(check, restoreOverlay = false) {
+async function checkWindow(check, restoreOverlay = false, captureAffinity) {
   if (process.env.COPILOT_TEST_WINDOWS_SHELL !== "1") return;
   const script = fileURLToPath(new URL("./window-smoke.ps1", import.meta.url));
   const probe = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
-    "-AppPid", String(child.pid), "-Check", check, ...(restoreOverlay ? ["-RestoreOverlay"] : [])],
+    "-AppPid", String(child.pid), "-Check", check, ...(restoreOverlay ? ["-RestoreOverlay"] : []),
+    ...(captureAffinity === undefined ? [] : ["-CaptureAffinity", String(captureAffinity)])],
   { windowsHide: true, stdio: "inherit" });
   const [code] = await once(probe, "exit");
   assert.equal(code, 0, `Native Windows check failed for ${check}.`);
@@ -122,6 +129,10 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   await page.getByRole("heading", { name: "Finish setup", exact: true }).waitFor();
   await page.getByRole("status").filter({ hasText: /^Not listening$/ }).waitFor();
+  if (bridge) {
+    assert.deepEqual(await fetch(`${bridge}/api/tags`).then(response => response.json()), { models: [] });
+    assert.equal((await fetch(`${bridge}/api/tags`, { headers: { Origin: "https://other.example" } })).status, 403);
+  }
   const workspace = page.getByRole("navigation", { name: "Workspace" });
   assert.deepEqual(await workspace.getByRole("button").allTextContents(), [
     "Prepare", "My experience", "Practice", "Session", "Community", "Settings", "History",
@@ -157,6 +168,14 @@ try {
   await page.screenshot({ path: join(output, "providers.png"), fullPage: true, animations: "disabled" });
   await audioSettings();
   assert.equal(await page.getByRole("checkbox", { name: "Short follow-up mode" }).isChecked(), false);
+  const capturePrivacy = page.getByRole("checkbox", { name: "Screen-share privacy" });
+  if (process.platform === "win32") {
+    assert.equal(await capturePrivacy.isChecked(), false, "Screen-share privacy starts off.");
+    if (fixture) {
+      await capturePrivacy.click();
+      await capturePrivacy.and(page.locator(":checked")).waitFor();
+    }
+  }
   await page.screenshot({ path: join(output, "audio-setup.png"), animations: "disabled" });
   const engine = page.getByLabel("Speech engine", { exact: true });
   assert.equal(await engine.inputValue(), "whisper", "Whisper stays the default speech engine.");
@@ -347,18 +366,29 @@ try {
     await shell("rgba(11, 16, 32, 0.7)");
     console.log("Overlay opacity slider runs from 30% to solid while text stays opaque.");
     await focus.screenshot({ path: join(output, "focus.png"), animations: "disabled", omitBackground: true });
-    await checkWindow("Overlay");
+    await checkWindow("Overlay", false, 0x11);
     await focus.getByRole("button", { name: "New session" }).click();
     if (process.env.COPILOT_TEST_WINDOWS_SHELL === "1") {
       await page.getByText("Show with Ctrl+Alt+I", { exact: true }).waitFor();
-      await checkWindow("Visible");
+      await checkWindow("Visible", false, 0x11);
       await checkWindow("Close");
       if (process.env.COPILOT_TEST_WINDOWS_SHORTCUT === "1") {
         await checkWindow("Shortcut");
       } else {
         await relaunch();
       }
-      await checkWindow("Visible");
+      await checkWindow("Visible", false, 0x11);
+    }
+    if (process.platform === "win32") {
+      await audioSettings();
+      assert.equal(await capturePrivacy.isChecked(), true, "Privacy stays on when returning to the workspace.");
+      await capturePrivacy.click();
+      await capturePrivacy.and(page.locator(":not(:checked)")).waitFor();
+      await page.getByRole("button", { name: "Back to session" }).click();
+      await checkWindow("Visible", false, 0);
+      await page.getByRole("button", { name: "Overlay", exact: true }).click();
+      await checkWindow("Overlay", false, 0);
+      await focus.getByRole("button", { name: "New session" }).click();
     }
 
     await page.getByLabel("Session title").fill("Kotlin concurrency practice");
@@ -383,6 +413,25 @@ try {
     await page.getByRole("button", { name: "Confirm delete" }).click();
     await page.getByRole("status").filter({ hasText: "Saved session deleted." }).waitFor();
     console.log("A typed question drove the answer view, overlay, window checks and saved history.");
+
+    const catalog = await fetch(`${bridge}/api/tags`).then(response => response.json());
+    assert.deepEqual(catalog.models.map(model => model.name), [fixtureModel]);
+    const generate = body => fetch(`${bridge}/api/generate`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    assert.equal((await generate({ prompt: "Describe this image", images: ["example"] })).status, 400);
+    assert.equal((await generate({ prompt: "x".repeat(150_000) })).status, 413);
+    const prompt = "What makes an HTTP request idempotent?";
+    const complete = await generate({ prompt, model: fixtureModel });
+    assert.equal(complete.status, 200);
+    assert.deepEqual(await complete.json(), { model: fixtureModel, response: fixtureText, done: true });
+    const streaming = await generate({ prompt, model: fixtureModel, stream: true });
+    assert.equal(streaming.headers.get("content-type"), "application/x-ndjson");
+    const frames = (await streaming.text()).trim().split("\n").map(line => JSON.parse(line));
+    assert.equal(frames.filter(frame => !frame.done).map(frame => frame.response).join(""), fixtureText);
+    assert.equal(frames.at(-1).done, true);
+    assert.equal(requests.at(-1).messages.at(-1).content, prompt);
+    console.log("The Rust text bridge served the selected model, JSON and streaming answers, and rejected invalid requests.");
   }
 
   await audioSettings();
@@ -413,6 +462,23 @@ try {
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Audio setup overflow at ${width} × ${height}, ${scale}%.`);
     }
   }
+  await workspace.getByRole("button", { name: "Prepare", exact: true }).click();
+  const upload = page.getByLabel("Choose a file", { exact: true });
+  await upload.setInputFiles({
+    name: "profile.json", mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      resume: "Experience\nEngineer, Example Co\n- Built a Redis cache for the catalog API",
+      job: "Backend engineer with Redis experience",
+      notes: "Redis",
+      provider: "Claude Code (subscription)",
+    })),
+  });
+  await page.getByRole("button", { name: "Add document", exact: true }).click();
+  await page.getByRole("status").filter({ hasText: "Legacy profile documents imported." }).waitFor();
+  for (const title of ["Resume", "Job description", "Project notes"]) {
+    await page.getByText(`${title} from legacy profile`, { exact: true }).waitFor();
+  }
+  console.log("Legacy profile imported all three local documents, including short notes.");
   assert.deepEqual(errors, []);
   console.log("Native WebView2 smoke passed. Screenshots in target/ui-smoke.");
 } finally {

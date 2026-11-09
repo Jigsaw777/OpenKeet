@@ -1,7 +1,0 @@
-# Optional extras: typed questions and DOCX/TXT/MD imports use Python's standard library.
-# Install these for PDF import and local speech transcription.
-pypdf>=5
-faster-whisper>=1.1
-sounddevice>=0.5
-SoundCard>=0.4
-numpy>=1.26,<2
