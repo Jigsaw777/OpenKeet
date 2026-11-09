@@ -101,6 +101,10 @@ jobs:
             --output $file "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/$env:ARCHIVE"
           $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne $env:SHA256) { throw "Unexpected sherpa-onnx archive checksum: $hash" }
+          # A cached build skips the build script, which normally extracts the DLLs the
+          # desktop bundle config points at; extract them here so both paths have them.
+          tar -xf $file -C $dir
+          if ($LASTEXITCODE) { throw "Could not extract $env:ARCHIVE" }
       - name: Build the frontend the desktop crate embeds
         working-directory: apps/desktop
         run: |
