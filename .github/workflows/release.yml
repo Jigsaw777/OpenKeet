@@ -1,9 +1,9 @@
-name: Release Windows snapshot
+name: Release Windows build
 
-# Each merge to main that changes more than docs publishes the next numbered snapshot,
-# v<app version>-preview.<n>, with the installer, its checksum and generated release notes.
-# setup/README.md links to releases/latest, so no commit to main is needed per release.
-# Bump "version" in apps/desktop/src-tauri/tauri.conf.json to start a new series at preview 1.
+# Each merge to main that changes more than docs publishes the next version, v<major>.<minor>,
+# with the installer, its checksum and notes generated from the merged PRs.
+# A PR title containing [major] bumps the major version and resets the minor to 0; every other
+# merge bumps the minor. setup/README.md links to releases/latest, so no commit to main is needed.
 on:
   push:
     branches: [main]
@@ -28,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0 # tags and PR titles since the last release decide the version
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -55,36 +56,49 @@ jobs:
           if ($hash -ne $env:SHA256) { throw "Unexpected sherpa-onnx archive checksum: $hash" }
           tar -xf $file -C $dir
           if ($LASTEXITCODE) { throw "Could not extract $env:ARCHIVE" }
-      - name: Build the installer
-        working-directory: apps/desktop
-        run: |
-          npm ci --ignore-scripts --no-audit
-          npm run desktop -- build --ci -- --locked
-      - name: Publish the next snapshot
+      - name: Choose the next version
+        id: version
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          $taken = gh api "repos/$env:GITHUB_REPOSITORY/git/matching-refs/tags/v$version-preview." --jq '.[].ref' |
-            ForEach-Object { [int]($_ -split '-preview\.')[-1] }
-          $n = 1 + ($taken | Measure-Object -Maximum).Maximum
-          $tag = "v$version-preview.$n"
-          # Notes list the merged PRs since the newest existing release, preview or not.
+          # The newest release of any kind bounds the merged PRs this release covers.
           $start = gh release list --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName'
-          $range = if ($start) { @('--notes-start-tag', $start) } else { @() }
-
+          $current = git tag --list 'v*' | Where-Object { $_ -match '^v\d+\.\d+$' } |
+            ForEach-Object { [version]$_.Substring(1) } | Sort-Object -Descending | Select-Object -First 1
+          if (-not $current) { $current = [version](Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version }
+          # Squash merges keep the PR title as the commit subject.
+          $titles = @(git log --format=%s $(if ($start) { "$start..HEAD" } else { 'HEAD' }))
+          $next = if ($titles -match '\[major\]') { "$($current.Major + 1).0" } else { "$($current.Major).$($current.Minor + 1)" }
+          "version=$next", "start=$start" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          # Windows packaging needs three parts, so the installer reports <major>.<minor>.0.
+          @{ version = "$next.0" } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP version.json) -Encoding utf8
+      - name: Build the installer
+        working-directory: apps/desktop
+        run: |
+          npm ci --ignore-scripts --no-audit
+          npm run desktop -- build --ci --config "$env:RUNNER_TEMP/version.json" -- --locked
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+          START: ${{ steps.version.outputs.start }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $range = if ($env:START) { @('--notes-start-tag', $env:START) } else { @() }
           # A fixed asset name keeps the releases/latest/download links on the setup page valid.
           $dir = New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP release)
           $installer = Join-Path $dir OpenKeet_x64-setup.exe
-          Copy-Item -LiteralPath "target/release/bundle/nsis/OpenKeet_${version}_x64-setup.exe" -Destination $installer
+          Copy-Item -LiteralPath "target/release/bundle/nsis/OpenKeet_$($env:VERSION).0_x64-setup.exe" -Destination $installer
           $digest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
           "$digest  OpenKeet_x64-setup.exe" | Set-Content -LiteralPath "$installer.sha256" -Encoding ascii
           $notes = Join-Path $dir notes.md
           @'
-          Unsigned preview of OpenKeet {0} for Windows 11 x64, built automatically from {1}.
+          Unsigned build of OpenKeet {0} for Windows 11 x64, published automatically from {1}.
 
           1. Download **OpenKeet_x64-setup.exe** from Assets.
           2. In PowerShell, from the download folder, check the file. It prints `True` when the download is intact:
@@ -93,7 +107,7 @@ jobs:
              ```
           3. Run setup and open **OpenKeet** from Start. Setup downloads Microsoft Edge WebView2 if it is missing. [First run](https://github.com/{3}/blob/main/docs/getting-started.md#download-and-install)
 
-          '@ -f $version, $env:GITHUB_SHA, $digest, $env:GITHUB_REPOSITORY | Set-Content -LiteralPath $notes -Encoding utf8
+          '@ -f $env:VERSION, $env:GITHUB_SHA, $digest, $env:GITHUB_REPOSITORY | Set-Content -LiteralPath $notes -Encoding utf8
 
-          gh release create $tag $installer "$installer.sha256" --target $env:GITHUB_SHA `
-            --title "OpenKeet $version Windows preview $n" --notes-file $notes --generate-notes @range --latest
+          gh release create "v$env:VERSION" $installer "$installer.sha256" --target $env:GITHUB_SHA `
+            --title "OpenKeet $env:VERSION for Windows" --notes-file $notes --generate-notes @range --latest
