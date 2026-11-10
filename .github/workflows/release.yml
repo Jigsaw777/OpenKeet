@@ -1,0 +1,99 @@
+name: Release Windows snapshot
+
+# Each merge to main that changes more than docs publishes the next numbered snapshot,
+# v<app version>-preview.<n>, with the installer, its checksum and generated release notes.
+# setup/README.md links to releases/latest, so no commit to main is needed per release.
+# Bump "version" in apps/desktop/src-tauri/tauri.conf.json to start a new series at preview 1.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write # create the tag and release
+    # No build caches: a published installer must not depend on cache entries other runs wrote.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: rustup toolchain install stable --profile minimal
+      - name: Locate libclang for whisper-rs
+        shell: pwsh
+        run: |
+          $clang = (Get-Command clang.exe -ErrorAction Stop).Source | Split-Path -Parent
+          if (-not (Test-Path (Join-Path $clang 'libclang.dll'))) { throw 'libclang.dll is missing' }
+          "LIBCLANG_PATH=$clang" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # sherpa-onnx-sys downloads this archive with no retry; the bundle also needs its DLLs
+      # extracted before tauri-build copies resources.
+      - name: Fetch the pinned speech runtime
+        shell: pwsh
+        env:
+          ARCHIVE: sherpa-onnx-v2.0.1-win-x64-shared-MT-Release-lib.tar.bz2
+          SHA256: afa4de3ca4ab0afd53bb4aab40d28ee15608364b549ffc0fe0caf6489bfc39a5
+        run: |
+          $dir = New-Item -ItemType Directory -Force -Path target/sherpa-onnx-prebuilt
+          $file = Join-Path $dir $env:ARCHIVE
+          curl.exe --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 10 `
+            --output $file "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/$env:ARCHIVE"
+          $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:SHA256) { throw "Unexpected sherpa-onnx archive checksum: $hash" }
+          tar -xf $file -C $dir
+          if ($LASTEXITCODE) { throw "Could not extract $env:ARCHIVE" }
+      - name: Build the installer
+        working-directory: apps/desktop
+        run: |
+          npm ci --ignore-scripts --no-audit
+          npm run desktop -- build --ci -- --locked
+      - name: Publish the next snapshot
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $taken = gh api "repos/$env:GITHUB_REPOSITORY/git/matching-refs/tags/v$version-preview." --jq '.[].ref' |
+            ForEach-Object { [int]($_ -split '-preview\.')[-1] }
+          $n = 1 + ($taken | Measure-Object -Maximum).Maximum
+          $tag = "v$version-preview.$n"
+          # Notes list the merged PRs since the newest existing release, preview or not.
+          $start = gh release list --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName'
+          $range = if ($start) { @('--notes-start-tag', $start) } else { @() }
+
+          # A fixed asset name keeps the releases/latest/download links on the setup page valid.
+          $dir = New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP release)
+          $installer = Join-Path $dir OpenKeet_x64-setup.exe
+          Copy-Item -LiteralPath "target/release/bundle/nsis/OpenKeet_${version}_x64-setup.exe" -Destination $installer
+          $digest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  OpenKeet_x64-setup.exe" | Set-Content -LiteralPath "$installer.sha256" -Encoding ascii
+          $notes = Join-Path $dir notes.md
+          @'
+          Unsigned preview of OpenKeet {0} for Windows 11 x64, built automatically from {1}.
+
+          1. Download **OpenKeet_x64-setup.exe** from Assets.
+          2. In PowerShell, from the download folder, check the file. It prints `True` when the download is intact:
+             ```powershell
+             (Get-FileHash .\OpenKeet_x64-setup.exe).Hash -eq '{2}'
+             ```
+          3. Run setup and open **OpenKeet** from Start. Setup downloads Microsoft Edge WebView2 if it is missing. [First run](https://github.com/{3}/blob/main/docs/getting-started.md#download-and-install)
+
+          '@ -f $version, $env:GITHUB_SHA, $digest, $env:GITHUB_REPOSITORY | Set-Content -LiteralPath $notes -Encoding utf8
+
+          gh release create $tag $installer "$installer.sha256" --target $env:GITHUB_SHA `
+            --title "OpenKeet $version Windows preview $n" --notes-file $notes --generate-notes @range --latest
