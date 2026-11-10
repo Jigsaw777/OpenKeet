@@ -56,12 +56,18 @@ Secret scanning with push protection, Dependabot alerts and security updates, an
 
 ## Tag, verify, and publish a release
 
-**Release Windows snapshot** runs after each merge to `main` that changes more than Markdown or `docs/`. It builds the installer and publishes `v<version>-preview.<n>`, where `<version>` comes from `tauri.conf.json` and `<n>` is one more than the highest existing snapshot. The release carries the checksum and notes generated from the merged PRs, and is marked Latest so the [setup page](../setup/README.md) links resolve. Snapshots are unsigned and skip the native install smoke. Run `npm run test:native` or **Verify desktop preview** for that. Bump the version to start a new series. Stable and candidate releases follow the steps below.
+Versions have two parts, `vMAJOR.MINOR`. **Release Windows build** runs after each merge to `main` that changes more than Markdown or `docs/`, and publishes the next version:
+
+- A PR title containing `[major]` bumps the major version and resets the minor, for example `v0.4` to `v1.0`.
+- Every other merge, including Dependabot's, bumps the minor, for example `v0.4` to `v0.5`. `[minor]` in the title is optional.
+- A docs-only merge publishes nothing, but its title still counts toward the next release.
+
+The release carries the installer, its checksum and notes generated from the merged PRs, and is marked Latest so the [setup page](../setup/README.md) links resolve. The installer reports `MAJOR.MINOR.0`, because Windows packaging needs three parts. These builds are unsigned and skip the native install smoke. Run `npm run test:native` or **Verify desktop preview** for that. To publish a signed, verified release by hand, follow these steps.
 
 1. Merge the reviewed changes. Use a candidate branch only when stabilization needs to continue separately from `main`.
-2. Choose a [Semantic Versioning](https://semver.org/) tag for the verified commit. Tag approved releases explicitly, for example `vX.Y.Z` for stable or `vX.Y.Z-rc.N` for a candidate.
+2. Tag the verified commit with the next `vMAJOR.MINOR`, or `vMAJOR.MINOR-rc.N` for a candidate. The automatic release continues from the highest `vMAJOR.MINOR` tag.
 3. Build from the tagged source with the locked dependencies. Verify install, launch, teardown, and the supported provider paths. Record the checksums, signing status, and dependency notices.
 4. Prepare a draft GitHub Release using the [release notes template](../.github/RELEASE_TEMPLATE.md). Set **Pre-release** for beta or candidate artifacts. Use stable for builds that cleared the supported Windows checks.
 5. Publish approved artifacts only after the [release checklist](OPEN_SOURCE_RELEASE_CHECKLIST.md) is clear. Check the final download as a new user.
 
-For a hotfix, start from the affected release tag or its maintenance branch when current `main` contains unrelated work. Open a focused PR, run the same checks, and tag the next patch release after verification. Bring the fix to `main` through a second PR. Backport to another supported release only when it has the same defect and the patch has been verified there.
+For a hotfix, start from the affected release tag or its maintenance branch when current `main` contains unrelated work. Open a focused PR, run the same checks, and tag the next minor release after verification. Bring the fix to `main` through a second PR. Backport to another supported release only when it has the same defect and the patch has been verified there.
