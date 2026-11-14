@@ -52,6 +52,30 @@ target\release\copilot.exe bench-asr run --cli target/release/copilot.exe --mode
 - Rust `small.en` returned surrounding words in all three quiet clips but missed the name “WASAPI” in each. All three one-word “Why?” clips decoded as “Y.” It preserved “cash flow” on all three voices. Turbo repeated phrases in several clips and hallucinated a sentence on the tone control. A non-empty result does not imply a correct transcript.
 - The optional hints were `Java, Kotlin, Android, QNX, WASAPI, PostgreSQL, coroutine, idempotency keys, mutex, semaphore, LRU cache, cash flow`. They recovered three more term occurrences and kept cash/cache correct on the corresponding clips. WASAPI still failed as a term, and the tone produced “and.” The run overlapped packaging work and had one additional stable-partial clip. Leave hints opt-in and repeat latency measurements under controlled load before tuning them as a preset.
 
+## Rolling previews on 12 November 2026
+
+Previews now repeat within an utterance: the first after 1.4 s of speech, then each time the speech has doubled (at least 2.5 s later), only while the decoder is idle and only on a loud frame. A Whisper preview is one greedy pass with a token budget, and a preview above five words a second is dropped as a decoder loop. Same PC, same 32 clips and manifest, both CLIs built the same day. `Before` is the unmodified audio crate.
+
+| `small.en` | WER | CER | Terms | Stable partial p50 / p95 | Final p50 / p95 | Process CPU | Peak private commit |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before | 19/252 (7.54%) | 1.85% | 35/42 | 2.157 / 2.255 s | 1.301 / 1.547 s | 236.3 s | 1,305.7 MiB |
+| Rolling previews | 19/252 (7.54%) | 1.85% | 35/42 | 2.154 / 2.251 s | 1.298 / 1.535 s | 236.5 s | 1,306.5 MiB |
+
+- Final text is identical on all 32 clips. Stable partials came from 25 clips instead of 26: one first preview fell in the detector's hold after speech and is no longer sent.
+- These clips are 2 to 8 s long, so most get no second preview. On one synthesized 32 s question spoken as five sentences, three of the five utterances got a second preview 2.7 to 2.8 s after the first, and all five finals arrived within 30 ms of the unmodified build. Three runs gave the same events.
+- Before the token budget, one mid-sentence preview on that question looped: 195 words and a 3.1 s decode. With the budget and the rate check it is dropped and the earlier preview stays on screen.
+- The pause cut after 15 s of unbroken speech is covered by a pipeline unit test with a synthetic voiced signal. No recorded human speech has exercised it yet.
+- A paused desktop session keeps its model for 10 minutes. The CLI reported a 0.75 to 1.02 s model load on this PC, which is the time a resume inside that window saves.
+
+## Microphone lane and reconnect on 13 November 2026
+
+A second lane can transcribe the default microphone beside system audio. It has its own voice detector, shares the one decoder, and its lines carry `you`. The decoder takes the call's speech first. A microphone line decodes like a preview and is retried once if the call's finished speech interrupts it. Sounds under 0.6 s, and sounds that mostly coincide with the call's speech, are dropped.
+
+- Same 32 clips, microphone lane off: final text identical to the unmodified build on all 32, WER 19/252, final latency p50 / p95 1.314 / 1.603 s against 1.301 / 1.547 s, process CPU 247 s against 236 s. A dev server was running during this pass.
+- Real devices, Speaker (Realtek) plus Microphone Array: with a clip playing, the call lane gave the preview and the final "When would you use an LRU cache in Java?" while the microphone lane produced its own labelled lines. A later pass with the speaker muted showed room speech arriving as `you` lines and no call lines. The echo rule has not been checked with speakers on.
+- The driver flags packets as discontinuous with a 0 ms gap when playback starts and stops. The unmodified build reported 6 to 7 of these per 11 s run, each as an audio-gap notice. Zero-length gaps are no longer reported.
+- After a device fault the same endpoint is reopened at 0, 0.5 and 1.5 s, then the default device of that kind. A unit test covers the order. No real device was unplugged.
+
 The Windows hardware smoke uses only a generated clip. Stop unrelated audio first. It refuses to run if the default output has an active audio session. The test plays the fixture through the OS and verifies a nonzero meter and the words “cache” and “Java” in a final transcript for the default and explicitly selected endpoint.
 
 ```powershell

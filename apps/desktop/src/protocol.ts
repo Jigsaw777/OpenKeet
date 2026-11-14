@@ -8,6 +8,8 @@ export type Utterance = {
   span: Span;
   stability: "interim" | "stable" | "final";
   text: string;
+  /** A line from the user's own microphone, heard beside the session's main source. */
+  you?: boolean;
 };
 export type Answer = {
   key: { session_id: number; question_id: number; revision: number; mode: "draft" | "checked" };
@@ -75,7 +77,7 @@ export type MeterUpdate = { update: number; session_id: number; peak: number; fr
 export type ProviderKind = "chatgpt" | "claude" | "ollama";
 export type ProviderSelection = { kind: ProviderKind; model: string };
 export type SpeechEngine = "whisper" | "parakeet";
-export type CaptureConfig = { source: Source; engine: SpeechEngine; model_path: string; vocabulary: string; auto_answer: boolean; short_followups: boolean; consent: boolean };
+export type CaptureConfig = { source: Source; engine: SpeechEngine; model_path: string; vocabulary: string; auto_answer: boolean; short_followups: boolean; consent: boolean; microphone?: string | null };
 
 export const emptyView: DesktopView = {
   update: -1,
@@ -125,7 +127,7 @@ export function meterForView(view: DesktopView, update: MeterUpdate | null): { p
 /** Final speech heard after the current question: what to answer when no question was detected in it. */
 export function unansweredSpeech(session: Session): string {
   const after = session.question?.span.end_ms ?? -1;
-  return session.transcript.filter(line => line.stability === "final" && line.span.start_ms > after)
+  return session.transcript.filter(line => line.stability === "final" && !line.you && line.span.start_ms > after)
     .slice(-3).map(line => line.text.trim()).join(" ").slice(-2_000);
 }
 
@@ -153,7 +155,8 @@ export function providerLabel(provider: ProviderSelection | null): string {
   return provider ? `${{ chatgpt: "ChatGPT / Codex", claude: "Claude", ollama: "Ollama" }[provider.kind]} · ${provider.model}` : "Transcription only";
 }
 
-export type Activity = { title: string; detail: string; tone: "idle" | "live" | "busy" | "done" | "warn" };
+/** `caption` is the line still being heard, shown in place of the detail while it exists. */
+export type Activity = { title: string; detail: string; tone: "idle" | "live" | "busy" | "done" | "warn"; caption?: string };
 
 /** One plain-language answer to "what is the app doing right now?" */
 export function activity(view: DesktopView): Activity {
@@ -167,7 +170,8 @@ export function activity(view: DesktopView): Activity {
   const phase = question?.phase;
   // "ready" means an answer was already requested and is queued.
   if (phase === "ready" || phase === "drafting" || phase === "answering") return { title: view.pack ? "Looking through your prepared answers…" : "Writing answer…", detail: "Putting together a suggested answer.", tone: "busy" };
-  if (speech_active) return { title: "Hearing speech", detail: "Turning speech into text.", tone: "live" };
+  if (speech_active) return { title: "Hearing speech", detail: "Turning speech into text.", tone: "live",
+    caption: view.session.transcript.filter(line => line.stability !== "final").at(-1)?.text.trim() || undefined };
   if (phase === "incomplete") return { title: "The question is still taking shape", tone: "live", detail: "We'll wait for a little more context before suggesting an answer." };
   if (phase === "candidate" || phase === "waiting") return { title: "Question heard", tone: "live",
     detail: !view.provider && !view.pack ? "Connect answers in Settings to get replies."

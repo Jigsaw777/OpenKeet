@@ -131,7 +131,7 @@ function App() {
         source: { kind: selected.kind, endpoint_id: selected.id }, engine: prefs.engine,
         model_path: prefs.model.trim(), vocabulary: prefs.vocabulary.trim(),
         short_followups: prefs.shortFollowups, auto_answer: prefs.autoAnswer && Boolean(view.provider || view.pack),
-        consent: true,
+        consent: true, microphone: prefs.withMicrophone ? audio.microphone?.id ?? null : null,
       } })) {
         setPrompt("");
         setPromptOpen(false);
@@ -246,7 +246,12 @@ function App() {
         <summary>Ask a question</summary>
         <form className="prompt" onSubmit={submit}><label htmlFor="manual-question">Question</label>
           <div className="prompt-row"><textarea id="manual-question" ref={promptInput} rows={2} maxLength={64000} value={prompt}
-            placeholder="Type your question…" onChange={event => setPrompt(event.target.value)} />
+            placeholder="Type your question. Enter asks, Shift+Enter adds a line."
+            onKeyDown={event => {
+              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }} onChange={event => setPrompt(event.target.value)} />
             {answers ? <button className="primary" disabled={!desktop || !prompt.trim()} type="submit">Ask <Icon name="arrow" /></button> :
               <button type="button" onClick={() => setPage("providers")}>Connect answers</button>}</div>
         </form>

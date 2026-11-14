@@ -87,6 +87,7 @@ pub struct Session {
     pending: Option<Pending>,
     dropped_ms: u64,
     notice: Option<String>,
+    side_lines: u64,
 }
 
 impl Session {
@@ -108,6 +109,7 @@ impl Session {
             pending: None,
             dropped_ms: 0,
             notice: None,
+            side_lines: 0,
         }
     }
 
@@ -232,11 +234,7 @@ impl Session {
                 Ok(None)
             } else {
                 let question = self.group(&utterance);
-                if self.transcript.len() == MAX_TRANSCRIPT_ROWS {
-                    self.transcript.pop_front();
-                    self.transcript_truncated = true;
-                }
-                self.transcript.push_back(utterance);
+                self.keep(utterance);
                 question
             }
         } else {
@@ -256,6 +254,42 @@ impl Session {
             },
         );
         question.map(|_| ())
+    }
+
+    /// Adds a finished line from the user's microphone. It is shown and saved, never read as a
+    /// question: only the session's main source opens or continues one.
+    pub fn ingest_side(&mut self, mut utterance: Utterance) {
+        utterance.text = utterance.text.trim().to_owned();
+        if utterance.text.is_empty() || utterance.text.len() > MAX_UTTERANCE_BYTES {
+            return;
+        }
+        self.side_lines += 1;
+        utterance.id = self.side_lines;
+        utterance.revision = 1;
+        utterance.stability = Stability::Final;
+        utterance.you = true;
+        let (id, span) = (utterance.id, utterance.span);
+        self.keep(utterance);
+        self.record(
+            Source {
+                kind: SourceKind::Microphone,
+                endpoint_id: None,
+            },
+            span,
+            None,
+            EventKind::TranscriptChanged {
+                utterance_id: id,
+                stability: Stability::Final,
+            },
+        );
+    }
+
+    fn keep(&mut self, utterance: Utterance) {
+        if self.transcript.len() == MAX_TRANSCRIPT_ROWS {
+            self.transcript.pop_front();
+            self.transcript_truncated = true;
+        }
+        self.transcript.push_back(utterance);
     }
 
     pub fn audio_gap(&mut self, span: Span, dropped_ms: u64, notice: impl Into<String>) {
@@ -306,10 +340,16 @@ impl Session {
         if self.transcript_truncated {
             return Err("Older transcript rows are outside the in-memory session limit.");
         }
+        // With both sides captured, say who spoke each line.
+        let both = self.transcript.iter().any(|row| row.you);
         let text = self
             .transcript
             .iter()
-            .map(|row| row.text.as_str())
+            .map(|row| match (both, row.you) {
+                (false, _) => row.text.clone(),
+                (true, true) => format!("You: {}", row.text),
+                (true, false) => format!("Them: {}", row.text),
+            })
             .collect::<Vec<_>>()
             .join("\n");
         if text.len() > MAX_QUESTION_BYTES {

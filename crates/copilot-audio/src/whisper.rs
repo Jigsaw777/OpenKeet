@@ -1,6 +1,11 @@
 use std::{
+    ffi::c_void,
     io::{self, Read},
     path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use sha2::{Digest, Sha256};
@@ -37,6 +42,13 @@ pub struct LocalWhisper {
     threads: i32,
     vocabulary: String,
     short_followups: bool,
+    final_waiting: Option<Arc<AtomicBool>>,
+}
+
+/// Whisper polls this after the encoder pass and after every decoder step, and stops on true.
+unsafe extern "C" fn final_waiting(flag: *mut c_void) -> bool {
+    // SAFETY: `flag` is the AtomicBool that `LocalWhisper::final_waiting` keeps alive during the decode.
+    unsafe { &*flag.cast::<AtomicBool>() }.load(Ordering::Acquire)
 }
 
 impl LocalWhisper {
@@ -98,6 +110,7 @@ impl LocalWhisper {
             threads,
             vocabulary: vocabulary.to_owned(),
             short_followups: false,
+            final_waiting: None,
         })
     }
 
@@ -142,11 +155,30 @@ impl SpeechRecognizer for LocalWhisper {
         if !self.vocabulary.is_empty() {
             params.set_initial_prompt(&self.vocabulary);
         }
-        self.state.full(params, &signal).map_err(|_| {
-            AudioError::new(
+        let seconds = samples.len() as f32 / SAMPLE_RATE as f32;
+        if !final_result {
+            // A greedy pass over a sentence cut mid-way can loop on one phrase for seconds.
+            // A preview gets one pass with a token budget of about twice normal speech.
+            params.set_single_segment(true);
+            params.set_max_tokens((seconds * 8.0) as i32 + 16);
+        }
+        // A preview gives way at Whisper's next check once a finished utterance needs the decoder.
+        let yields = self.final_waiting.as_ref().filter(|_| !final_result);
+        if let Some(waiting) = yields {
+            // SAFETY: the callback only reads the flag, which `self` owns for the whole call.
+            unsafe {
+                params.set_abort_callback(Some(final_waiting));
+                params.set_abort_callback_user_data(Arc::as_ptr(waiting).cast_mut().cast());
+            }
+        }
+        if self.state.full(params, &signal).is_err() {
+            if yields.is_some_and(|waiting| waiting.load(Ordering::Acquire)) {
+                return Ok(String::new());
+            }
+            return Err(AudioError::new(
                 "Local speech decoding failed. Restart capture or choose another model.",
-            )
-        })?;
+            ));
+        }
         let text = self
             .state
             .as_iter()
@@ -154,6 +186,14 @@ impl SpeechRecognizer for LocalWhisper {
             .filter(|text| !text.is_empty())
             .collect::<Vec<_>>()
             .join(" ");
+        // More than five words a second is a decoder loop, not speech. The last preview stays.
+        if !final_result && text.split_whitespace().count() as f32 > seconds * 5.0 + 5.0 {
+            return Ok(String::new());
+        }
         Ok(text)
+    }
+
+    fn yield_previews_to(&mut self, final_waiting: Arc<AtomicBool>) {
+        self.final_waiting = Some(final_waiting);
     }
 }

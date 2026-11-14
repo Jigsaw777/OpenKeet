@@ -67,9 +67,10 @@ impl ExportFormat {
         for line in &saved.session.transcript {
             let seconds = line.span.start_ms / 1_000;
             text.push_str(&format!(
-                "[{:02}:{:02}] {}\n",
+                "[{:02}:{:02}] {}{}\n",
                 seconds / 60,
                 seconds % 60,
+                if line.you { "You: " } else { "" },
                 line.text
             ));
         }
@@ -139,6 +140,13 @@ impl HistoryStore {
             }
             tx.commit().map_err(database_error)?;
         }
+        // The list reads newest first from this index alone. Without it, every listing walks
+        // each saved transcript to reach the counts stored after it. Older builds ignore it.
+        db.execute_batch(
+            "CREATE INDEX IF NOT EXISTS sessions_recent
+             ON sessions(saved_ms DESC, id DESC, title, lines, answers)",
+        )
+        .map_err(database_error)?;
         Ok(db)
     }
 
@@ -400,6 +408,7 @@ mod tests {
                 span: Span::at(65_000),
                 stability: Stability::Final,
                 text: "How do we invalidate the cache?".into(),
+                you: false,
             })
             .unwrap();
         let initial = session.snapshot();

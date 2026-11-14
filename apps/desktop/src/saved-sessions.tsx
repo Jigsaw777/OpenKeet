@@ -132,7 +132,7 @@ export function SavedSessions({ enabled }: { enabled: boolean }) {
           </> : <button className="stop" disabled={pending} onClick={() => setConfirming(true)}>Delete saved session</button>}
         </div>
         <div className="saved-transcript" tabIndex={0} role="region" aria-label="Saved transcript">
-          {selected.session.transcript.map(line => <p key={line.id}>{line.text}</p>)}
+          {selected.session.transcript.map(line => <p key={`${line.you ? "you" : ""}${line.id}`}>{line.you && <strong>You: </strong>}{line.text}</p>)}
           {selected.session.transcript.length === 0 && <p className="subtle">No recorded transcript in this session.</p>}
         </div>
         {selected.session.history.length > 0 && <details><summary>Checked answers</summary>

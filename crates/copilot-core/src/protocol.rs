@@ -62,6 +62,9 @@ pub struct Utterance {
     pub span: Span,
     pub stability: Stability,
     pub text: String,
+    /// A line from the user's own microphone, heard beside the session's main source.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub you: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

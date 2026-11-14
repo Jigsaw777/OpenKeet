@@ -36,7 +36,7 @@ test("only final speech after the current question can be answered on demand", (
   const line = (id: number, start_ms: number, text: string, stability: "interim" | "final" = "final") =>
     ({ id, revision: 1, span: { start_ms, end_ms: start_ms + 500 }, stability, text });
   const session = { ...emptyView.session, transcript: [line(1, 0, "Why Rust?"), line(2, 2_000, "We use Go here."),
-    line(3, 3_000, "Our team is small."), line(4, 4_000, "half a thought", "interim")] };
+    line(3, 3_000, "Our team is small."), { ...line(1, 3_500, "I like Go too."), you: true }, line(4, 4_000, "half a thought", "interim")] };
   assert.equal(unansweredSpeech(session), "Why Rust? We use Go here. Our team is small.");
   const asked = { ...session, question: { id: 1, revision: 1, phase: "checked" as const, span: { start_ms: 0, end_ms: 500 },
     source: { kind: "system_output" as const, endpoint_id: "out" }, text: "Why Rust?", answer: null } };
@@ -53,6 +53,8 @@ test("activity names each step from silence to a finished answer", () => {
   assert.equal(activity({ ...live, loading: true }).title, "Starting…");
   assert.equal(activity(live).title, "Listening");
   assert.equal(activity({ ...live, session: { ...live.session, speech_active: true } }).title, "Hearing speech");
+  const preview = { id: 1, revision: 2, span: { start_ms: 0, end_ms: 900 }, stability: "interim" as const, text: "So tell me about " };
+  assert.equal(activity({ ...live, session: { ...live.session, speech_active: true, transcript: [preview] } }).caption, "So tell me about");
   assert.equal(activity(asking("candidate")).title, "Question heard");
   assert.equal(activity(asking("candidate")).detail, "Connect answers in Settings to get replies.");
   const connected = { ...asking("candidate"), provider: { kind: "ollama" as const, model: "m" } };

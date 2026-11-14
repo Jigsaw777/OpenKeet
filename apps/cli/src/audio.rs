@@ -64,7 +64,7 @@ fn transcribe(path: &str, args: &[String]) -> Result {
     Ok(())
 }
 
-fn capture(path: &str, route: &str, endpoint: &str, seconds: &str) -> Result {
+fn capture(path: &str, route: &str, endpoint: &str, seconds: &str, mic: bool) -> Result {
     let kind = match route {
         "system" => SourceKind::SystemOutput,
         "mic" => SourceKind::Microphone,
@@ -83,6 +83,11 @@ fn capture(path: &str, route: &str, endpoint: &str, seconds: &str) -> Result {
     copilot_audio::capture(
         model.as_mut(),
         source,
+        // `--mic` also transcribes the default microphone; its lines carry "you".
+        mic.then_some(Source {
+            kind: SourceKind::Microphone,
+            endpoint_id: None,
+        }),
         Instant::now(),
         StreamOptions::default(),
         &stop,
@@ -112,7 +117,10 @@ pub fn run(args: &[String]) -> Option<Result> {
         ),
         [cmd, path, rest @ ..] if cmd == "transcribe" => Some(transcribe(path, rest)),
         [cmd, path, route, endpoint, seconds] if cmd == "capture" => {
-            Some(capture(path, route, endpoint, seconds))
+            Some(capture(path, route, endpoint, seconds, false))
+        }
+        [cmd, path, route, endpoint, seconds, flag] if cmd == "capture" && flag == "--mic" => {
+            Some(capture(path, route, endpoint, seconds, true))
         }
         _ => None,
     }

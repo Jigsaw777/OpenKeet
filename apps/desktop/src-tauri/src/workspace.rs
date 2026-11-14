@@ -6,7 +6,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use copilot_audio::{AudioError, AudioEvent, Engine, Stop, StreamOptions, elapsed_ms};
+use copilot_audio::{
+    AudioError, AudioEvent, Engine, SpeechRecognizer, Stop, StreamOptions, elapsed_ms,
+};
 use copilot_core::{
     AnswerFailure, AnswerKey, CaptureState, MAX_QUESTION_BYTES, Policy, Session, Snapshot, Source,
     SourceKind, Span, Work,
@@ -22,6 +24,10 @@ use tauri::{AppHandle, Emitter};
 use crate::providers::{ANSWER_TIMEOUT_MS, ProviderHub, Selection};
 
 pub type Shared = Arc<Mutex<Desktop>>;
+type Recognizer = Box<dyn SpeechRecognizer + Send>;
+
+/// How long a paused session keeps its speech model in memory for an instant resume.
+const WARM_MODEL: Duration = Duration::from_secs(600);
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -43,6 +49,9 @@ pub struct CaptureConfig {
     short_followups: bool,
     #[serde(default)]
     consent: bool,
+    /// A microphone endpoint to transcribe beside system audio, as the user's own side.
+    #[serde(default)]
+    microphone: Option<String>,
 }
 
 struct AudioRun {
@@ -75,6 +84,7 @@ enum AudioUpdate {
 
 struct Job {
     config: CaptureConfig,
+    model: Option<Recognizer>,
     clock: Instant,
     session: u64,
     first_id: u64,
@@ -144,6 +154,10 @@ pub struct Desktop {
     /// Interpretation the user picked: (question id, revision, family id).
     chosen: Option<(u64, u64, String)>,
     query_vectors: HashMap<String, Vec<f32>>,
+    /// The loaded speech model of a paused session, and when it was parked.
+    warm: Option<(Recognizer, Instant)>,
+    /// Streamed answer text the next tick still has to publish.
+    answer_dirty: bool,
 }
 
 impl Desktop {
@@ -167,6 +181,8 @@ impl Desktop {
             prepared_answers: Vec::new(),
             chosen: None,
             query_vectors: HashMap::new(),
+            warm: None,
+            answer_dirty: false,
         }))
     }
 
@@ -203,6 +219,7 @@ impl Desktop {
 
     fn changed(&mut self) -> View {
         self.update += 1;
+        self.answer_dirty = false;
         self.refresh_anticipation();
         self.view()
     }
@@ -291,6 +308,7 @@ impl Desktop {
         self.session = Session::new(self.serial, source, policy);
         self.mode = mode;
         self.config = None;
+        self.warm = None;
         self.next_utterance = 1;
         self.meter = 0;
         self.audio_metrics = AudioMetrics::default();
@@ -324,6 +342,13 @@ impl Desktop {
             {
                 return Err("Choose a Windows audio endpoint and a local speech model.".into());
             }
+            if config.microphone.as_ref().is_some_and(|id| {
+                config.source.kind != SourceKind::SystemOutput || id.is_empty() || id.len() > 1_024
+            }) {
+                return Err(
+                    "Your microphone can be added only while listening to system audio.".into(),
+                );
+            }
             let policy = Policy {
                 auto_answer: config.auto_answer,
                 ..provider_policy()
@@ -351,6 +376,7 @@ impl Desktop {
         });
         Ok(Job {
             config,
+            model: self.warm.take().map(|(model, _)| model),
             stop,
             clock: self.clock,
             session: self.serial,
@@ -372,6 +398,7 @@ impl Desktop {
             return Err("Start a session before pausing it.".into());
         } else {
             self.config = None;
+            self.warm = None;
             self.session.discard_interim();
             self.session
                 .set_capture(CaptureState::Stopped, elapsed_ms(self.clock));
@@ -459,6 +486,13 @@ impl Desktop {
     }
 
     pub fn tick(&mut self) -> (Option<View>, Option<Generation>) {
+        if self
+            .warm
+            .as_ref()
+            .is_some_and(|(_, parked)| parked.elapsed() >= WARM_MODEL)
+        {
+            self.warm = None;
+        }
         let before = self.session.sequence();
         let now = elapsed_ms(self.clock);
         let mut generation = None;
@@ -496,15 +530,17 @@ impl Desktop {
             }
         }
         (
-            (self.session.sequence() != before).then(|| self.changed()),
+            (self.session.sequence() != before || self.answer_dirty).then(|| self.changed()),
             generation,
         )
     }
 
-    fn answer_delta(&mut self, key: AnswerKey, delta: &str) -> Option<View> {
-        self.session
-            .append_answer(key, delta)
-            .then(|| self.changed())
+    /// Appends streamed answer text. The 50 ms tick publishes it, so a fast stream costs at most
+    /// 20 snapshots a second, not one per token.
+    fn answer_delta(&mut self, key: AnswerKey, delta: &str) -> bool {
+        let accepted = self.session.append_answer(key, delta);
+        self.answer_dirty |= accepted;
+        accepted
     }
 
     fn finish_answer(
@@ -542,10 +578,15 @@ impl Desktop {
                 queue_ms,
                 ..
             } => {
-                self.next_utterance = self.next_utterance.max(utterance.id.saturating_add(1));
-                self.audio_metrics.decode_ms = Some(decode_ms);
-                self.audio_metrics.queue_ms = Some(queue_ms);
-                self.session.ingest(utterance)
+                if utterance.you {
+                    self.session.ingest_side(utterance);
+                    Ok(())
+                } else {
+                    self.next_utterance = self.next_utterance.max(utterance.id.saturating_add(1));
+                    self.audio_metrics.decode_ms = Some(decode_ms);
+                    self.audio_metrics.queue_ms = Some(queue_ms);
+                    self.session.ingest(utterance)
+                }
             }
             AudioEvent::Meter { peak, frames } => {
                 self.audio_metrics.frames = frames;
@@ -565,7 +606,17 @@ impl Desktop {
                 self.session.note_audio_gap(
                     span,
                     dropped_ms,
-                    "Windows reported a short audio gap. Review the affected transcript.",
+                    "Audio was interrupted for a moment. Review the affected transcript.",
+                );
+                Ok(())
+            }
+            AudioEvent::MicrophoneStopped { message } => {
+                self.session.note_audio_gap(
+                    Span::at(now),
+                    0,
+                    format!(
+                        "Your microphone stopped ({message}) The call is still being transcribed."
+                    ),
                 );
                 Ok(())
             }
@@ -578,8 +629,17 @@ impl Desktop {
         Some(AudioUpdate::Snapshot(Box::new(self.changed())))
     }
 
-    fn finish_audio(&mut self, result: Result<(), AudioError>) -> Option<View> {
+    fn finish_audio(
+        &mut self,
+        result: Result<(), AudioError>,
+        model: Option<Recognizer>,
+    ) -> Option<View> {
         let run = self.audio.take()?;
+        // A clean pause parks the loaded model. A failed run reloads it: the model may be why.
+        let paused = result.is_ok() && !run.failed && run.stopping == Some(CaptureState::Paused);
+        self.warm = model
+            .filter(|_| paused)
+            .map(|model| (model, Instant::now()));
         self.meter = 0;
         let now = elapsed_ms(self.clock);
         if let Err(error) = result {
@@ -643,19 +703,8 @@ pub fn run_generation(
             biased;
             () = cancel => return,
             answer = providers.answer(&route, &generation.work.request, |delta| {
-                let view = {
-                    let mut desktop = state.lock().expect("desktop session lock");
-                    if generation.work.is_cancelled() {
-                        return false;
-                    }
-                    desktop.answer_delta(key, delta)
-                };
-                if let Some(view) = view {
-                    emit(&app, &view);
-                    true
-                } else {
-                    false
-                }
+                let mut desktop = state.lock().expect("desktop session lock");
+                !generation.work.is_cancelled() && desktop.answer_delta(key, delta)
             }) => answer,
         };
         let view = {
@@ -741,51 +790,60 @@ pub fn start_audio(
     };
     emit(&app, &view);
     thread::spawn(move || {
+        let mut model = job.model;
         let result = (|| {
             if job.stop.requested() {
                 return Ok(());
             }
-            let model = copilot_audio::load(
-                job.config.engine,
-                Path::new(&job.config.model_path),
-                &job.config.vocabulary,
-                job.config.short_followups,
-            );
+            // A resumed session still holds its model. Anything else loads and verifies it.
+            let loaded = match model.take() {
+                Some(model) => Ok(model),
+                None => copilot_audio::load(
+                    job.config.engine,
+                    Path::new(&job.config.model_path),
+                    &job.config.vocabulary,
+                    job.config.short_followups,
+                ),
+            };
             if job.stop.requested() {
+                model = loaded.ok();
                 return Ok(());
             }
-            model.and_then(|mut model| {
-                copilot_audio::capture(
-                    model.as_mut(),
-                    job.config.source,
-                    job.clock,
-                    StreamOptions {
-                        first_id: job.first_id,
-                        ..StreamOptions::default()
-                    },
-                    &job.stop,
-                    |event| {
-                        let update = {
-                            let mut desktop = state.lock().expect("desktop session lock");
-                            (desktop.serial == job.session)
-                                .then(|| desktop.audio_event(event))
-                                .flatten()
-                        };
-                        match update {
-                            Some(AudioUpdate::Snapshot(view)) => emit(&app, &view),
-                            Some(AudioUpdate::Meter(meter)) => {
-                                let _ = app.emit("copilot-meter", meter);
-                            }
-                            None => {}
+            let recognizer = model.insert(loaded?);
+            copilot_audio::capture(
+                recognizer.as_mut(),
+                job.config.source,
+                job.config.microphone.map(|id| Source {
+                    kind: SourceKind::Microphone,
+                    endpoint_id: Some(id),
+                }),
+                job.clock,
+                StreamOptions {
+                    first_id: job.first_id,
+                    ..StreamOptions::default()
+                },
+                &job.stop,
+                |event| {
+                    let update = {
+                        let mut desktop = state.lock().expect("desktop session lock");
+                        (desktop.serial == job.session)
+                            .then(|| desktop.audio_event(event))
+                            .flatten()
+                    };
+                    match update {
+                        Some(AudioUpdate::Snapshot(view)) => emit(&app, &view),
+                        Some(AudioUpdate::Meter(meter)) => {
+                            let _ = app.emit("copilot-meter", meter);
                         }
-                    },
-                )
-            })
+                        None => {}
+                    }
+                },
+            )
         })();
         let view = state
             .lock()
             .expect("desktop session lock")
-            .finish_audio(result);
+            .finish_audio(result, model);
         if let Some(view) = view {
             emit(&app, &view);
         }
@@ -811,6 +869,7 @@ mod tests {
                 auto_answer: false,
                 short_followups: false,
                 consent: true,
+                microphone: None,
             }))
             .unwrap()
     }
@@ -831,7 +890,7 @@ mod tests {
                 })
                 .is_none()
         );
-        let view = desktop.finish_audio(Ok(())).unwrap();
+        let view = desktop.finish_audio(Ok(()), None).unwrap();
         assert_eq!(view.session.capture, CaptureState::Stopped);
         assert!(!view.stopping);
         assert!(desktop.begin_audio(None).is_err());
@@ -856,16 +915,21 @@ mod tests {
                 },
                 stability: Stability::Final,
                 text: "How does a cache work?".into(),
+                you: false,
             },
             at_ms: 1_002,
             decode_ms: 2,
             queue_ms: 0,
         });
         let view = desktop
-            .finish_audio(Err(AudioError {
-                message: "Device disconnected".into(),
-                dropped_ms: 30,
-            }))
+            .finish_audio(
+                Err(AudioError {
+                    message: "Device disconnected".into(),
+                    dropped_ms: 30,
+                    device: true,
+                }),
+                None,
+            )
             .unwrap();
         assert_eq!(view.session.capture, CaptureState::Recovery);
         assert_eq!(view.session.dropped_ms, 30);
@@ -891,6 +955,7 @@ mod tests {
                     span: Span::at(id * 1_000),
                     stability: Stability::Final,
                     text: "This stable transcript line is already present in the renderer.".into(),
+                    you: false,
                 })
                 .unwrap();
         }
@@ -948,6 +1013,7 @@ mod tests {
                 span: Span::at(200),
                 stability: Stability::Final,
                 text: "Can you explain when to use Redis".into(),
+                you: false,
             },
             at_ms: 300,
             decode_ms: 100,
@@ -986,6 +1052,7 @@ mod tests {
                 span: Span::at(200),
                 stability: Stability::Final,
                 text: "Explain an index.".into(),
+                you: false,
             },
             at_ms: 300,
             decode_ms: 100,
@@ -994,8 +1061,9 @@ mod tests {
         let error = AudioError {
             message: "Device disconnected".into(),
             dropped_ms: 30,
+            device: true,
         };
-        assert!(desktop.finish_audio(Err(error)).unwrap().retryable);
+        assert!(desktop.finish_audio(Err(error), None).unwrap().retryable);
         assert_eq!(desktop.archive().unwrap().2.transcript.len(), 1);
         let retry = desktop.begin_audio(None).unwrap();
         assert_eq!(retry.session, job.session);
@@ -1008,5 +1076,18 @@ mod tests {
         assert!(view.session.notice.is_none());
         assert_eq!(view.session.transcript[0].text, "Explain an index.");
         assert_eq!(view.session.dropped_ms, 30);
+        // A pause parks the loaded model for the next resume. Stop releases it.
+        struct Probe;
+        impl SpeechRecognizer for Probe {
+            fn decode(&mut self, _: &[i16], _: bool) -> Result<String, AudioError> {
+                Ok(String::new())
+            }
+        }
+        desktop.stop(true).unwrap();
+        desktop.finish_audio(Ok(()), Some(Box::new(Probe)));
+        assert!(desktop.begin_audio(None).unwrap().model.is_some());
+        desktop.stop(false).unwrap();
+        desktop.finish_audio(Ok(()), Some(Box::new(Probe)));
+        assert!(desktop.warm.is_none());
     }
 }

@@ -38,7 +38,7 @@ pub fn load(
     path: &Path,
     vocabulary: &str,
     short_followups: bool,
-) -> Result<Box<dyn SpeechRecognizer>, AudioError> {
+) -> Result<Box<dyn SpeechRecognizer + Send>, AudioError> {
     Ok(match engine {
         Engine::Whisper => {
             let mut model = LocalWhisper::load(path, vocabulary)?;
@@ -96,12 +96,18 @@ pub enum AudioEvent {
         span: Span,
         dropped_ms: u64,
     },
+    /// The optional microphone lane ended. The session's main source keeps running.
+    MicrophoneStopped {
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug)]
 pub struct AudioError {
     pub message: String,
     pub dropped_ms: u64,
+    /// The audio device failed. Reopening it can bring capture back.
+    pub device: bool,
 }
 
 impl AudioError {
@@ -109,7 +115,61 @@ impl AudioError {
         Self {
             message: message.into(),
             dropped_ms: 0,
+            device: false,
         }
+    }
+
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn device(message: impl Into<String>) -> Self {
+        Self {
+            device: true,
+            ..Self::new(message)
+        }
+    }
+}
+
+/// Waits before reopening a failed device. After the last one, the default device of the same
+/// kind is tried.
+const REOPEN_MS: [u64; 3] = [0, 500, 1_500];
+
+/// Keeps one capture alive across device faults. `open` runs a capture until it stops or fails
+/// and is told how long audio was lost before it. Only a capture that has delivered audio is
+/// reopened: a device that never worked is the user's to fix.
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn reconnecting(
+    mut source: Source,
+    stop: &Stop,
+    connected: &AtomicBool,
+    mut open: impl FnMut(&Source, Option<u64>) -> Result<(), AudioError>,
+) -> Result<(), AudioError> {
+    let (mut worked, mut tries, mut lost) = (false, 0, None::<Instant>);
+    loop {
+        let result = open(&source, lost.map(|at| at.elapsed().as_millis() as u64));
+        if connected.swap(false, Ordering::AcqRel) {
+            (worked, tries, lost) = (true, 0, None);
+        }
+        let Err(error) = result else {
+            return Ok(());
+        };
+        if !worked || !error.device {
+            return Err(error);
+        }
+        lost.get_or_insert_with(Instant::now);
+        match REOPEN_MS.get(tries) {
+            Some(wait) => {
+                let until = Instant::now() + std::time::Duration::from_millis(*wait);
+                while !stop.requested() && Instant::now() < until {
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+            }
+            // Last resort: the device Windows now uses for this kind of audio.
+            None if source.endpoint_id.is_some() => source.endpoint_id = None,
+            None => return Err(error),
+        }
+        if stop.requested() {
+            return Ok(());
+        }
+        tries += 1;
     }
 }
 
@@ -124,6 +184,10 @@ impl std::error::Error for AudioError {}
 /// Decodes one bounded 16 kHz PCM segment on the inference worker.
 pub trait SpeechRecognizer {
     fn decode(&mut self, samples: &[i16], final_result: bool) -> Result<String, AudioError>;
+
+    /// Receives a flag that is set while a final result waits for the decoder. An engine that
+    /// can cut a preview decode short returns empty text for it. The default keeps decoding.
+    fn yield_previews_to(&mut self, _final_waiting: Arc<AtomicBool>) {}
 }
 
 #[derive(Clone, Default)]
@@ -155,9 +219,12 @@ pub fn endpoints() -> Result<Vec<Endpoint>, AudioError> {
     }
 }
 
+/// Captures `source` until `stop`. With `microphone`, the user's own voice is transcribed beside
+/// it: those lines carry `you` and a microphone failure never ends the capture.
 pub fn capture(
     model: &mut dyn SpeechRecognizer,
     source: Source,
+    microphone: Option<Source>,
     clock: Instant,
     options: StreamOptions,
     stop: &Stop,
@@ -165,13 +232,35 @@ pub fn capture(
 ) -> Result<(), AudioError> {
     #[cfg(windows)]
     {
-        pipeline::run(model, clock, options, stop, &report, |producer| {
-            windows::capture(source, clock, stop, producer, &report)
-        })
+        let report = &report;
+        let connected = &AtomicBool::new(false);
+        let main = &|event: AudioEvent| {
+            if matches!(event, AudioEvent::Ready { .. }) {
+                connected.store(true, Ordering::Release);
+            }
+            report(event)
+        };
+        pipeline::run(
+            model,
+            clock,
+            options,
+            stop,
+            report,
+            |producer| {
+                reconnecting(source, stop, connected, |source, lost_ms| {
+                    windows::capture(source.clone(), clock, stop, producer, main, lost_ms)
+                })
+            },
+            microphone.map(|microphone| -> pipeline::SideFeed<'_> {
+                Box::new(move |producer, halt| {
+                    windows::capture(microphone, clock, halt, producer, &|_| {}, None)
+                })
+            }),
+        )
     }
     #[cfg(not(windows))]
     {
-        let _ = (model, source, clock, options, stop, report);
+        let _ = (model, source, microphone, clock, options, stop, report);
         Err(AudioError::new(
             "Live audio capture is available on Windows.",
         ))
