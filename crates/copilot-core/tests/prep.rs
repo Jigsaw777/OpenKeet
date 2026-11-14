@@ -419,6 +419,7 @@ fn final_text(session: &mut Session, id: u64, start: u64, end: u64, text: &str) 
             },
             stability: Stability::Final,
             text: text.into(),
+            you: false,
         })
         .unwrap();
 }
@@ -516,6 +517,7 @@ fn anticipate_replays_never_surface_an_obsolete_answer() {
                 },
                 stability: Stability::Interim,
                 text: text.into(),
+                you: false,
             })
             .unwrap();
     }
@@ -529,6 +531,7 @@ fn anticipate_replays_never_surface_an_obsolete_answer() {
             },
             stability: Stability::Final,
             text: "How do you handle cache invalidation when the underlying data changes?".into(),
+            you: false,
         })
         .unwrap();
     let q = session.current_question().unwrap().clone();

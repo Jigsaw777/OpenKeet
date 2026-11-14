@@ -87,6 +87,7 @@ fn default_and_explicit_loopback_transcribe_synthetic_playback() {
             let result = copilot_audio::capture(
                 model.as_mut(),
                 source,
+                None,
                 Instant::now(),
                 StreamOptions::default(),
                 &stop,

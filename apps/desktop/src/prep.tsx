@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Empty, Icon } from "./components";
@@ -237,7 +237,13 @@ function JobSummary({ job }: { job: NonNullable<SourceView["job"]> }) {
 
 function PackDetail({ prep, pack, aiReady, startPractice }: { prep: Prep; pack: Pack; aiReady: boolean; startPractice: () => void }) {
   const data = prep.data!;
-  const families = data.families.filter(f => f.pack_id === pack.id);
+  // Indexed once per data change, so typing in this card never rescans every answer per question.
+  const families = useMemo(() => data.families.filter(f => f.pack_id === pack.id), [data.families, pack.id]);
+  const answersOf = useMemo(() => {
+    const index = new Map<string, Answer[]>();
+    for (const answer of data.answers) index.set(answer.family_id, [...index.get(answer.family_id) ?? [], answer]);
+    return index;
+  }, [data.answers]);
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -251,8 +257,16 @@ function PackDetail({ prep, pack, aiReady, startPractice }: { prep: Prep; pack: 
   const [model, setModel] = useState(data.paraphrase_model ?? "");
   const family = families.find(f => f.id === familyId) ?? null;
   // Questions without an answer you approved, wrote or already drafted with AI; community reference answers are kept.
-  const todo = families.filter(f => !f.excluded && f.origin !== "community_pack" &&
-    !data.answers.some(a => a.family_id === f.id && a.length === "standard" && (a.approval === "approved" || a.edited || a.generated_with)));
+  const todo = useMemo(() => families.filter(f => !f.excluded && f.origin !== "community_pack" &&
+    !answersOf.get(f.id)?.some(a => a.length === "standard" && (a.approval === "approved" || a.edited || a.generated_with))), [families, answersOf]);
+  const questions = useMemo(() => families.map(f => {
+    const approved = answersOf.get(f.id)?.some(a => a.approval === "approved");
+    return <button key={f.id} className="library-item" aria-pressed={f.id === familyId} onClick={() => setFamilyId(f.id === familyId ? null : f.id)}>
+      <strong>{f.canonical}</strong>
+      <span>{f.origin === "community_pack" ? "Community" : f.intent === "experience" || f.intent === "behavioral" ? "Your experience" : "Concept"}
+        {approved ? " · Approved answer" : ""}{f.excluded ? " · Excluded" : ""}</span>
+    </button>;
+  }), [families, answersOf, familyId]);
   async function draftAll() {
     stop.current = false;
     for (let i = 0; i < todo.length && !stop.current; i++) {
@@ -301,14 +315,7 @@ function PackDetail({ prep, pack, aiReady, startPractice }: { prep: Prep; pack: 
         <p className="subtle">{topic.parts.map(p => `${p.name} ${Math.round(p.value * 100)}% × ${p.weight}`).join(" · ")}. This orders practice; it is not a hiring score.</p></div></li>)}</ul>
     </details>
     <h3>Questions</h3>
-    <div className="question-list">{families.map(f => {
-      const approved = data.answers.some(a => a.family_id === f.id && a.approval === "approved");
-      return <button key={f.id} className="library-item" aria-pressed={f.id === familyId} onClick={() => setFamilyId(f.id === familyId ? null : f.id)}>
-        <strong>{f.canonical}</strong>
-        <span>{f.origin === "community_pack" ? "Community" : f.intent === "experience" || f.intent === "behavioral" ? "Your experience" : "Concept"}
-          {approved ? " · Approved answer" : ""}{f.excluded ? " · Excluded" : ""}</span>
-      </button>;
-    })}</div>
+    <div className="question-list">{questions}</div>
     {family && <FamilyEditor key={family.id} prep={prep} family={family} aiReady={aiReady} />}
     <details className="advanced-settings"><summary>Manage this pack</summary>
       <div className="field-row"><input aria-label="Pack name" maxLength={120} value={rename} onChange={event => setRename(event.target.value)} />

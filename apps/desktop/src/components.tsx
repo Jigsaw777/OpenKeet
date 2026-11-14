@@ -58,31 +58,33 @@ export function LiveStatus({ view }: { view: DesktopView }) {
   return <div className={`live-status tone-${state.tone}`} role="status">
     <i aria-hidden="true" />
     <div className="live-text"><strong>{state.title}</strong>
-      <span>{quiet ? "No sound from the selected device yet. Check that the call plays through it." : state.detail}</span></div>
+      {state.caption ? <span className="caption" aria-hidden="true"><bdi>{state.caption}</bdi></span>
+        : <span>{quiet ? "No sound from the selected device yet. Check that the call plays through it." : state.detail}</span>}</div>
     {listening && <meter aria-label="Input level" min={0} max={32768} value={peak} />}
   </div>;
 }
 
 export function Transcript({ session, useTranscript, hidden = false }: { session: Session; useTranscript: () => void; hidden?: boolean }) {
   const scroll = useRef<HTMLDivElement>(null);
-  const follow = useRef(true);
-  useLayoutEffect(() => { follow.current = true; }, [session.session_id]);
+  const [following, setFollowing] = useState(true);
+  useLayoutEffect(() => { setFollowing(true); }, [session.session_id]);
   useLayoutEffect(() => {
-    if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [session.transcript]);
+    if (following && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
+  }, [session.transcript, following, hidden]);
   return <section className="card transcript" aria-labelledby="transcript-title" hidden={hidden}>
     <div className="card-head"><div><p className="eyebrow">What was said</p><h2 id="transcript-title">Transcript</h2></div>
       <span className="soft-label">{sourceLabel(session.source.kind)}</span></div>
     <div ref={scroll} tabIndex={0} role="region" aria-label="Transcript timeline" className="transcript-scroll"
-      onScroll={event => { const node = event.currentTarget; follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 24; }}>
+      onScroll={event => { const node = event.currentTarget; setFollowing(node.scrollHeight - node.scrollTop - node.clientHeight < 24); }}>
       {session.transcript_truncated && <p className="subtle">Older rows exceeded the in-memory limit.</p>}
       {session.transcript.length === 0 ? <Empty label="Nothing said yet" detail="Their words appear here as you listen. Live preview lines can still change." /> :
-        session.transcript.map(line => <article className={`line ${line.stability}`} key={`${session.session_id}:${line.id}`}>
-          <div className="line-meta"><time>{formatTime(line.span.start_ms)}</time><span>{line.stability === "final" ? "Final" : "Live preview"}</span></div>
+        session.transcript.map(line => <article className={`line ${line.stability}${line.you ? " you" : ""}`} key={`${session.session_id}:${line.you ? "you" : ""}${line.id}`}>
+          <div className="line-meta"><time>{formatTime(line.span.start_ms)}</time><span>{line.you ? "You" : line.stability === "final" ? "Final" : "Live preview"}</span></div>
           <p>{line.text}</p>
         </article>)}
     </div>
-    <div className="card-foot"><button onClick={useTranscript} disabled={!session.transcript.some(line => line.stability === "final") || session.transcript_truncated}>Use full transcript <Icon name="arrow" /></button></div>
+    <div className="card-foot"><button onClick={useTranscript} disabled={!session.transcript.some(line => line.stability === "final") || session.transcript_truncated}>Use full transcript <Icon name="arrow" /></button>
+      {!following && <button onClick={() => setFollowing(true)}>Jump to latest</button>}</div>
   </section>;
 }
 
@@ -171,9 +173,11 @@ function AnswerText({ text }: { text: string }) {
   });
 }
 
+/** Inline `code` and **bold**, the two marks answer models use inside a line. */
 function InlineCode({ text }: { text: string }) {
-  return text.split(/(`[^`\n]+`)/g).map((part, index): ReactNode =>
-    part.startsWith("`") && part.endsWith("`") ? <code key={index}>{part.slice(1, -1)}</code> : part);
+  return text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g).map((part, index): ReactNode =>
+    part.startsWith("`") && part.endsWith("`") ? <code key={index}>{part.slice(1, -1)}</code>
+      : part.startsWith("**") && part.endsWith("**") && part.length > 4 ? <strong key={index}>{part.slice(2, -2)}</strong> : part);
 }
 
 export function Empty({ label, detail }: { label: string; detail: string }) {

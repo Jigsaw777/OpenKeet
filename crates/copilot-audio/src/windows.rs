@@ -32,7 +32,7 @@ impl Drop for Apartment {
 }
 
 fn unavailable(error: impl std::fmt::Display) -> AudioError {
-    AudioError::new(format!(
+    AudioError::device(format!(
         "Windows audio is unavailable ({error}). Refresh devices and restart capture."
     ))
 }
@@ -109,6 +109,7 @@ pub(crate) fn capture(
     stop: &Stop,
     producer: &Producer,
     report: &impl Fn(AudioEvent),
+    lost_ms: Option<u64>,
 ) -> Result<(), AudioError> {
     let _apartment = Apartment::enter()?;
     let direction = match source.kind {
@@ -125,7 +126,7 @@ pub(crate) fn capture(
     if device.get_direction() != direction
         || device.get_state().map_err(unavailable)? != DeviceState::Active
     {
-        return Err(AudioError::new(
+        return Err(AudioError::device(
             "The selected endpoint is inactive or has a different audio direction.",
         ));
     }
@@ -173,7 +174,8 @@ pub(crate) fn capture(
         data: [0; SAMPLES],
         used: 0,
         start_ms: elapsed_ms(clock),
-        dropped_ms: None,
+        // After a reconnect the first frame reports how long audio was lost.
+        dropped_ms: lost_ms,
     };
     let mut next_check = frames.start_ms + 1_000;
     let mut last_packet = None;
@@ -191,7 +193,7 @@ pub(crate) fn capture(
             if now >= next_check {
                 next_check = now + 1_000;
                 if device.get_state().map_err(unavailable)? != DeviceState::Active {
-                    return Err(AudioError::new(
+                    return Err(AudioError::device(
                         "The selected endpoint disconnected. Refresh devices and restart capture.",
                     ));
                 }
@@ -202,7 +204,7 @@ pub(crate) fn capture(
                         .map_err(unavailable)?
                         != id
                 {
-                    return Err(AudioError::new(
+                    return Err(AudioError::device(
                         "Windows changed the default audio device. Restart capture to use it.",
                     ));
                 }
@@ -237,9 +239,12 @@ pub(crate) fn capture(
                             .filter(|_| timestamp_valid)
                             .map(|end| timestamp.saturating_sub(end) / 10_000);
                         let Some(short) = gap.filter(|ms| *ms <= FRAME_MS) else {
-                            return Err(AudioError { message: "Windows reported an audio discontinuity. Restart capture to resume cleanly.".into(), dropped_ms: gap.unwrap_or(0) });
+                            return Err(AudioError { message: "Windows reported an audio discontinuity. Restart capture to resume cleanly.".into(), dropped_ms: gap.unwrap_or(0), device: true });
                         };
-                        frames.dropped_ms = Some(frames.dropped_ms.unwrap_or(0) + short);
+                        // A flagged packet that follows the last one without a gap lost nothing.
+                        if short > 0 {
+                            frames.dropped_ms = Some(frames.dropped_ms.unwrap_or(0) + short);
+                        }
                         for _ in 0..short * u64::from(SAMPLE_RATE) / 1_000 {
                             frames.push(0)?;
                         }
@@ -253,7 +258,9 @@ pub(crate) fn capture(
                             frames.push(0)?;
                         }
                     } else if data.is_null() {
-                        return Err(AudioError::new("Windows returned an invalid audio buffer."));
+                        return Err(AudioError::device(
+                            "Windows returned an invalid audio buffer.",
+                        ));
                     } else {
                         // SAFETY: a non-silent packet contains count frames in the negotiated PCM format.
                         let bytes = unsafe {
@@ -279,7 +286,7 @@ pub(crate) fn capture(
             // Insert timed silence so the pending utterance can still reach its endpoint.
             if now.saturating_sub(last_packet.unwrap_or(0)) >= 100 {
                 if now.saturating_sub(frames.start_ms) > 2_000 {
-                    return Err(AudioError::new(
+                    return Err(AudioError::device(
                         "Audio clock jumped. Restart capture after waking the device.",
                     ));
                 }

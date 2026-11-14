@@ -39,7 +39,7 @@ function ScreenSharePrivacySetting() {
 }
 
 const audioKey = "copilot-audio-settings";
-const defaults = { endpoint: "", engine: "whisper" as SpeechEngine, model: "", vocabulary: "", shortFollowups: false, autoAnswer: true };
+const defaults = { endpoint: "", engine: "whisper" as SpeechEngine, model: "", vocabulary: "", shortFollowups: false, autoAnswer: true, withMicrophone: false };
 
 function storedAudio(): typeof defaults {
   try {
@@ -51,6 +51,7 @@ function storedAudio(): typeof defaults {
       vocabulary: typeof saved.vocabulary === "string" ? saved.vocabulary : "",
       shortFollowups: saved.shortFollowups === true,
       autoAnswer: saved.autoAnswer !== false,
+      withMicrophone: saved.withMicrophone === true,
     };
   } catch {
     return defaults;
@@ -120,11 +121,14 @@ export function useAudioSetup(enabled: boolean) {
   const selected = endpoints.find(device => device.id === prefs.endpoint)
     ?? endpoints.find(device => device.is_default && device.kind === "system_output")
     ?? endpoints.find(device => device.is_default) ?? endpoints[0];
+  // The user's own side: offered only beside system audio, where the call is the main source.
+  const microphone = selected?.kind === "system_output"
+    ? endpoints.find(device => device.kind === "microphone" && device.is_default) ?? endpoints.find(device => device.kind === "microphone") : undefined;
   const path = prefs.model.trim();
   const checked = checkedModel?.path === path && checkedModel.engine === prefs.engine;
   const modelReady = checked && checkedModel.available;
   const modelRejected = Boolean(path) && checked && !checkedModel.available;
-  return { prefs, change, endpoints, selected, refreshing, refresh, modelReady, modelRejected, chooseModel, downloading, download, error };
+  return { prefs, change, endpoints, selected, microphone, refreshing, refresh, modelReady, modelRejected, chooseModel, downloading, download, error };
 }
 
 export type AudioSettings = ReturnType<typeof useAudioSetup>;
@@ -159,6 +163,11 @@ export function StartCard({ view, audio, enabled, starting, start, connect }: {
           <button disabled={disabled || audio.refreshing} onClick={() => void audio.refresh()}>Refresh</button>
         </div>
         <p className="subtle">Pick the speakers or headphones your call plays through.</p>
+        {audio.microphone && <>
+          <label className="checkbox"><input type="checkbox" checked={prefs.withMicrophone} disabled={disabled} aria-describedby="with-microphone-help"
+            onChange={event => audio.change({ withMicrophone: event.target.checked })} /> Also transcribe my microphone</label>
+          <p id="with-microphone-help" className="subtle">Your side appears as You and is never read as a question. Wear headphones, or the microphone hears the call too.</p>
+        </>}
       </li>
       <li className={modelReady ? "done" : undefined}>
         <span className="step-label">Speech model</span>

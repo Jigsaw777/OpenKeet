@@ -35,6 +35,7 @@ fn transcript(
         },
         stability,
         text: text.to_owned(),
+        you: false,
     }
 }
 
@@ -456,6 +457,16 @@ fn interim_revisions_and_duplicate_finals_do_not_duplicate_transcript() {
     session.ingest(partial).unwrap();
     session.ingest(final_row).unwrap();
     assert_eq!(session.full_transcript().unwrap(), "What is a cache?");
+    // A microphone line is kept and labelled, and never becomes a question.
+    let mine = transcript(9, 1, 800, 1_200, Stability::Final, " Should I use Redis? ");
+    session.ingest_side(mine);
+    let snapshot = session.snapshot();
+    assert!(snapshot.transcript[1].you);
+    assert_eq!(snapshot.question.unwrap().text, "What is a cache?");
+    assert_eq!(
+        session.full_transcript().unwrap(),
+        "Them: What is a cache?\nYou: Should I use Redis?"
+    );
 }
 
 #[test]

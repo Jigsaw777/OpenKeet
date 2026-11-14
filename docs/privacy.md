@@ -4,7 +4,7 @@ This guide covers the Windows desktop preview. See [profile migration](legacy-py
 
 ## When you start listening
 
-You choose one microphone or one Windows playback device. Windows playback capture can include any sounds playing on that device. Use a consented session and stop unrelated playback. Windows microphone permissions apply when you choose a mic.
+You choose one microphone or one Windows playback device. With a playback device you can also turn on your microphone, which is off by default. Windows playback capture can include any sounds playing on that device. Use a consented session and stop unrelated playback. Windows microphone permissions apply when you choose a mic.
 
 A local speech model processes audio in memory. The app keeps a bounded working transcript and answer history for the session. Use **Pause**, **Stop**, or **Clear current session** to control the active workspace.
 
