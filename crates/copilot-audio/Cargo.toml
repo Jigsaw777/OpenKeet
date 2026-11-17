@@ -17,4 +17,4 @@ whisper-rs = "0.16.0"
 
 [target.'cfg(windows)'.dependencies]
 wasapi = "0.26.0"
-windows = { version = "0.62.2", features = ["Win32_Media_Audio"] }
+windows = { version = "0.62.2", features = ["Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com"] }

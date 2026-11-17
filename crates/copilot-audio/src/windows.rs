@@ -4,9 +4,12 @@ use copilot_core::{Source, SourceKind, Span};
 use wasapi::{
     DeviceEnumerator, DeviceState, Direction, SampleType, StreamMode, WasapiError, WaveFormat,
 };
-use windows::Win32::Media::Audio::{
-    AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
-    AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, IAudioCaptureClient,
+use windows::Win32::{
+    Media::Audio::{
+        AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
+        AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, Endpoints::IAudioEndpointVolume, IAudioCaptureClient,
+    },
+    System::Com::CLSCTX_ALL,
 };
 
 use crate::{
@@ -139,6 +142,13 @@ pub(crate) fn capture(
             "The selected endpoint has an unsupported channel layout.",
         ));
     }
+    // A call plays on an output's two front channels, which come first. Averaging all of a
+    // surround device's channels would make it up to four times quieter. A microphone's channels
+    // all carry the same voice, so those are averaged.
+    let mix_over = match direction {
+        Direction::Render => channels.min(2),
+        Direction::Capture => channels,
+    };
     let format = WaveFormat::new(
         16,
         16,
@@ -169,6 +179,29 @@ pub(crate) fn capture(
             ..source
         },
     });
+    // Loopback hears an output as Windows plays it: muted, it can be silence on some PCs.
+    // SAFETY: the device and the interface activated from it stay on this COM thread.
+    let volume: Option<IAudioEndpointVolume> = (direction == Direction::Render)
+        .then(|| unsafe { device.as_immdevice().Activate(CLSCTX_ALL, None) }.ok())
+        .flatten();
+    let silenced = || {
+        volume.as_ref().is_some_and(|volume| {
+            // SAFETY: plain reads of the endpoint's state on its own thread.
+            unsafe { volume.GetMute() }.is_ok_and(|muted| muted.as_bool())
+                || unsafe { volume.GetMasterVolumeLevelScalar() }.is_ok_and(|level| level == 0.0)
+        })
+    };
+    let mut warned = false;
+    let mut warn_if_silenced = || {
+        let now = silenced();
+        if now && !warned {
+            report(AudioEvent::Notice {
+                message: "This output is muted or at zero volume, so OpenKeet may hear nothing. Turn its sound on, or use headphones.".into(),
+            });
+        }
+        warned = now;
+    };
+    warn_if_silenced();
     let mut frames = Frames {
         producer,
         data: [0; SAMPLES],
@@ -192,6 +225,7 @@ pub(crate) fn capture(
             let now = elapsed_ms(clock);
             if now >= next_check {
                 next_check = now + 1_000;
+                warn_if_silenced();
                 if device.get_state().map_err(unavailable)? != DeviceState::Active {
                     return Err(AudioError::device(
                         "The selected endpoint disconnected. Refresh devices and restart capture.",
@@ -241,10 +275,8 @@ pub(crate) fn capture(
                         let Some(short) = gap.filter(|ms| *ms <= FRAME_MS) else {
                             return Err(AudioError { message: "Windows reported an audio discontinuity. Restart capture to resume cleanly.".into(), dropped_ms: gap.unwrap_or(0), device: true });
                         };
-                        // A flagged packet that follows the last one without a gap lost nothing.
-                        if short > 0 {
-                            frames.dropped_ms = Some(frames.dropped_ms.unwrap_or(0) + short);
-                        }
+                        // A gap of up to one frame is filled with silence and not reported: it cannot
+                        // change what is transcribed, and drivers flag one as playback starts.
                         for _ in 0..short * u64::from(SAMPLE_RATE) / 1_000 {
                             frames.push(0)?;
                         }
@@ -271,9 +303,10 @@ pub(crate) fn capture(
                                 .as_chunks::<2>()
                                 .0
                                 .iter()
+                                .take(mix_over)
                                 .map(|s| i32::from(i16::from_le_bytes(*s)))
                                 .sum();
-                            frames.push((sum / channels as i32) as i16)?;
+                            frames.push((sum / mix_over as i32) as i16)?;
                         }
                     }
                     Ok(())

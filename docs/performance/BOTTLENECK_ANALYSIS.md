@@ -6,9 +6,13 @@ On the 25-clip paired subset, changing the minimum encoder context from 192 to 1
 
 Loading the model reads and hashes the full verified buffer before native initialization. Peak private commit includes that buffer and decoder state. Both paths retain the integrity check. Pausing releases the audio device and parks the loaded model for 10 minutes, so a resume in that window skips the load and the hash. After 10 minutes, after Stop, or after a failed run, the model is released and the next start loads and verifies it again. The parked model keeps its memory while paused. GUI startup, model readiness and ASR decoding should be profiled separately.
 
-## Live previews
+## Live previews and sentence parts
 
-An utterance gets a preview after 1.4 s of speech, and again each time the speech has doubled (at least 2.5 s later), but only while the decoder is idle and the current frame is loud. The loudness check skips the detector's hold of about 270 ms after speech stops, where a preview would start just before the final. All previews of one utterance cost about two greedy passes over it. A Whisper preview is one pass with a token budget, and one above five words a second is dropped as a decoder loop. A Whisper preview gives way once a finished utterance waits for the decoder. Whisper checks after the encoder pass and after each decoded token, so a final can wait for at most one preview encoder pass. Parakeet previews run to completion. Past 15 s of unbroken speech an utterance ends at the first pause of about a third of a second, instead of mid-word at the 24 s cap.
+An utterance ends after about half a second of silence. Speakers in an interview rarely stop that long between sentences, so one utterance often runs 15 to 24 s. Before, its lasting text came from one decode of all of it after it ended: the words on screen trailed the speaker by 7 s on average, up to 20 s.
+
+Now, at a pause of about 360 ms after 2 s of speech, the speech so far is decoded as a part. Its text stays on screen and the final only decodes what came after the last part. A few words after the last pause are decoded together with the part before them, because Whisper invents text more often on a short clip on its own.
+
+Each part gets previews after 1.4 s of its speech, and again each time that speech has doubled (at least 2.5 s later), but only while the decoder is idle and the current frame is loud. The loudness check skips the detector's hold of about 270 ms after speech stops. A Whisper preview is one pass with a token budget, and one above five words a second is dropped as a decoder loop. A Whisper preview gives way once a part or final waits for the decoder. Whisper checks after the encoder pass and after each decoded token, so lasting text can wait for at most one preview encoder pass. Parakeet previews run to completion. Past 15 s of unbroken speech an utterance ends at the first pause of about a third of a second, instead of mid-word at the 24 s cap.
 
 ## Streamed answers
 

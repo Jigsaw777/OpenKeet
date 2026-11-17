@@ -610,6 +610,10 @@ impl Desktop {
                 );
                 Ok(())
             }
+            AudioEvent::Notice { message } => {
+                self.session.note_audio_gap(Span::at(now), 0, message);
+                Ok(())
+            }
             AudioEvent::MicrophoneStopped { message } => {
                 self.session.note_audio_gap(
                     Span::at(now),

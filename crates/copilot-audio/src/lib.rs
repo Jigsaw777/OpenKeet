@@ -100,6 +100,10 @@ pub enum AudioEvent {
     MicrophoneStopped {
         message: String,
     },
+    /// Something the user should fix for capture to work, such as a muted output.
+    Notice {
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug)]

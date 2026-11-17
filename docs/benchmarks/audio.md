@@ -76,6 +76,32 @@ A second lane can transcribe the default microphone beside system audio. It has 
 - The driver flags packets as discontinuous with a 0 ms gap when playback starts and stops. The unmodified build reported 6 to 7 of these per 11 s run, each as an audio-gap notice. Zero-length gaps are no longer reported.
 - After a device fault the same endpoint is reopened at 0, 0.5 and 1.5 s, then the default device of that kind. A unit test covers the order. No real device was unplugged.
 
+## Sentence parts on 17 November 2026
+
+An utterance ends after about half a second of silence, and interview speech rarely pauses that long, so one utterance often ran 15 to 24 s and its lasting text came from a single decode after it ended. Now the speech is decoded in parts at each pause of about 360 ms after 2 s of speech. Same PC and model, both CLIs built the same day; `Before` is current `main`.
+
+Two synthesized interviews were added for this: 100 s and 82 s, three voices each, questions and answers with the long synthesizer pauses shortened to human lengths. Each word's start time was recorded, so the delay from a word being spoken to it showing on screen can be measured.
+
+| Two interviews, `small.en` | Words on screen trail the speaker, mean | Max | Final after speech ends, p50 | Word errors |
+| --- | ---: | ---: | ---: | ---: |
+| Before | 7.4 s and 6.7 s | 20.2 s | 6.4 s and 6.4 s | 0/302 and 3/258 |
+| Sentence parts | 2.3 s and 2.8 s | 11.0 s | 1.6 s and 1.6 s | 1/302 and 3/258 |
+
+| 32 clips, `small.en` | WER | Final p50 / p95 | Stable partial p50 / p95 |
+| --- | ---: | ---: | ---: |
+| Before | 19/252 (7.54%) | 1.536 / 2.222 s | 2.277 / 2.472 s |
+| Sentence parts | 19/252 (7.54%) | 0.991 / 1.285 s | 2.169 / 2.281 s |
+
+- Timings vary between runs of the same build on this laptop. An earlier run of the same settings gave 2.7 and 3.6 s mean trail, 2.0 and 1.9 s finals, and 1.239 / 1.683 s on the 32 clips. Word errors and final text did not change.
+- Final text is identical on all 32 clips. A part ends after four quiet frames, the same 120 ms of closing silence a final keeps, so a one-sentence utterance decodes exactly the audio it did before. Its final arrives sooner because the part decode starts about 400 ms before the utterance ends.
+- A three-frame pause did as well on the interviews but changed 12 of the 32 finals, with three more word errors. Feeding the decoder the text before each part fixed one word and once made Whisper return nothing for 8 s of speech, so it was left out.
+- On shorter clips Whisper sometimes decoded the last sentence twice, as a second segment. A segment that repeats the end of the one before it is now dropped. Before that filter, one setting reached 32 word errors on the 258-word interview.
+- Music, a hum, clicks and noise came out as "♪", "...", "GONG!", "F F F F F", "The End" and "We'll see you next time!", in both builds. A segment with no word, one word repeated, or at most six tokens Whisper rates below -1.5 average log-probability is now dropped. Real speech in the clips and interviews never scored below -1.3. Six of seven 3.5 s noise sounds now give no text. Quiet music still came out as "We'll see you next time!".
+- A muted or zero-volume output gave silent loopback audio on this PC with no warning. Capture now says so when it starts and when the output is muted later.
+- Loopback audio is now the average of an output's two front channels. Averaging all channels of a 5.1 or 7.1 device made a call up to four times quieter. No surround device was tested.
+- Driver gaps of up to 30 ms are filled with silence as before, but no longer raise an "audio was interrupted" notice. This driver flags one as playback starts.
+- The live loopback check of the new build could not run here because the output was muted. Human speech has not been measured.
+
 The Windows hardware smoke uses only a generated clip. Stop unrelated audio first. It refuses to run if the default output has an active audio session. The test plays the fixture through the OS and verifies a nonzero meter and the words “cache” and “Java” in a final transcript for the default and explicitly selected endpoint.
 
 ```powershell
