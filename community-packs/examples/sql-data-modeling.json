@@ -1,0 +1,99 @@
+{
+  "format": "openkeet.community-pack",
+  "schemaVersion": "1.0.0",
+  "id": "org.openkeet.examples.sql-data-modeling",
+  "version": "1.0.0",
+  "title": "SQL and Data Modeling Interview Pack",
+  "description": "Practice relational modeling, SQL queries and PostgreSQL performance with small synthetic examples.",
+  "authors": [{ "name": "OpenKeet contributors" }],
+  "license": "CC0-1.0",
+  "language": "en",
+  "tags": ["sql", "data-modeling", "databases", "postgresql"],
+  "minimumAppVersion": "0.1.0",
+  "skills": [
+    { "id": "databases", "name": "Databases and SQL" },
+    { "id": "postgresql", "name": "PostgreSQL" }
+  ],
+  "questions": [
+    {
+      "id": "q-enrollment-table",
+      "skillIds": ["databases"],
+      "question": "How would you model enrollment when each student can take several courses and each course can have several students?",
+      "paraphrases": ["Design a relational schema for students and courses without duplicate enrollments."],
+      "intent": "design",
+      "difficulty": 2,
+      "answerOutline": [
+        "Put students and courses in separate tables with their own primary keys.",
+        "Reference both from an enrollment table and make their pair unique.",
+        "Store properties of an enrollment, such as the enrollment date, in that table.",
+        "Model a course offering or term separately if a student can repeat a course."
+      ],
+      "followupIds": ["q-left-join-filter"],
+      "references": [{ "title": "PostgreSQL: Constraints", "url": "https://www.postgresql.org/docs/18/ddl-constraints.html" }]
+    },
+    {
+      "id": "q-left-join-filter",
+      "skillIds": ["databases"],
+      "question": "A report must list every course with a count of active enrollments, including zero. Why did adding a WHERE filter on enrollment status remove some courses?",
+      "paraphrases": ["How do you count matching children while keeping parents that have no match?"],
+      "intent": "debug",
+      "difficulty": 3,
+      "answerOutline": [
+        "A left join fills unmatched enrollment columns with NULL.",
+        "Filtering by enrollment status in WHERE drops those rows.",
+        "Move the status predicate into the join or count conditionally while keeping the left join.",
+        "Count a non-null enrollment column when the join filter is used so the placeholder row contributes zero."
+      ],
+      "followupIds": ["q-window-ties"],
+      "references": [{ "title": "PostgreSQL: Table expressions", "url": "https://www.postgresql.org/docs/18/queries-table-expressions.html" }]
+    },
+    {
+      "id": "q-window-ties",
+      "skillIds": ["databases"],
+      "question": "How would you return exactly one most recent enrollment per student when two enrollments can share a timestamp?",
+      "paraphrases": ["What makes a latest-row-per-group query deterministic when the ordering column ties?"],
+      "intent": "design",
+      "difficulty": 3,
+      "answerOutline": [
+        "Partition rows by student, ordering by enrollment time descending.",
+        "Add a stable unique tie-breaker and explain what it means for tied rows.",
+        "Use ROW_NUMBER and select row one in an outer query.",
+        "Account for missing timestamps explicitly if the column permits NULL."
+      ],
+      "followupIds": [],
+      "references": [{ "title": "PostgreSQL: Window functions", "url": "https://www.postgresql.org/docs/18/tutorial-window.html" }]
+    },
+    {
+      "id": "q-concurrent-enrollment-limit",
+      "skillIds": ["databases", "postgresql"],
+      "question": "Two transactions each see one seat left in a course and insert an enrollment. How would you preserve the seat limit?",
+      "paraphrases": ["How would you prevent concurrent bookings from exceeding a capacity constraint?"],
+      "intent": "design",
+      "difficulty": 4,
+      "answerOutline": [
+        "A count followed by an insert can race when both transactions see the same available seat.",
+        "One design locks the shared course row before reading availability and inserting in the same transaction.",
+        "Another uses serializable transactions and retries the entire transaction on a serialization failure.",
+        "Require all enrollment paths to use the same rule and test with overlapping transactions."
+      ],
+      "followupIds": ["q-enrollment-table"],
+      "references": [{ "title": "PostgreSQL: Transaction isolation", "url": "https://www.postgresql.org/docs/18/transaction-iso.html" }, { "title": "PostgreSQL: Explicit locking", "url": "https://www.postgresql.org/docs/18/explicit-locking.html" }]
+    },
+    {
+      "id": "q-sequential-scan",
+      "skillIds": ["postgresql"],
+      "question": "A PostgreSQL report reads most rows in a large table. Why might a sequential scan be cheaper even when its filter column is indexed?",
+      "paraphrases": ["Why might PostgreSQL choose a sequential scan for a query with a usable index?"],
+      "intent": "explain",
+      "difficulty": 3,
+      "answerOutline": [
+        "An index lookup can still require fetching table rows.",
+        "For many matches, reading the table in order can cost less than scattered lookups.",
+        "Compare estimated and actual row counts on representative data.",
+        "Consider cache state, selectivity, and whether an index-only scan can supply all needed columns."
+      ],
+      "followupIds": [],
+      "references": [{ "title": "PostgreSQL: Using EXPLAIN", "url": "https://www.postgresql.org/docs/18/using-explain.html" }]
+    }
+  ]
+}
